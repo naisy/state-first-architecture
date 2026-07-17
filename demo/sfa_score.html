@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SFA Score - Classical Notation Engine</title>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0d0d16;
+            color: #ced4da;
+            font-family: 'M PLUS 1 Code', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #00ffcc;
+            box-shadow: 0 0 25px rgba(0, 255, 204, 0.3);
+            background-color: #fff; /* 楽譜らしく背景は白、または譜面テイストに */
+        }
+        canvas {
+            display: block;
+        }
+        #instructions {
+            margin-top: 15px;
+            width: 720px;
+            font-size: 13px;
+            color: #888;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .highlight {
+            color: #00ffcc;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="720" height="400"></canvas>
+    </div>
+    
+    <div id="instructions">
+        <span class="highlight">[Enter]</span>: Toggle Play / Stop Mode <br>
+        <span class="highlight">[Space]</span>: Place / Remove Note at Cursor <br>
+        <span class="highlight">[← / →]</span>: Change Time Step (1-16) | <span class="highlight">[↑ / ↓]</span>: Move Pitch Cursor (On Lines/Spaces) <br>
+        <span class="highlight">[1 / 2 / 3]</span>: Select Instrument (1: Square / 2: Triangle / 3: Sine) <br>
+        <p style="font-size: 11px; color: #555;">SFA Score Engine rendering strict grand staff musical notation with Web Audio API synthesis.</p>
+    </div>
+
+<script>
+// ==========================================
+// 1. SFA 状態遷移定義 (SSOT)
+// ==========================================
+const SFA_DEFINITIONS = {
+  FE_EDIT_MODE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MOVE_UP",    action: "cursor_up",    target_state: "FE_EDIT_MODE" },
+      { event: "MOVE_DOWN",  action: "cursor_down",  target_state: "FE_EDIT_MODE" },
+      { event: "MOVE_LEFT",  action: "cursor_left",  target_state: "FE_EDIT_MODE" },
+      { event: "MOVE_RIGHT", action: "cursor_right", target_state: "FE_EDIT_MODE" },
+      { event: "TOGGLE_NOTE",action: "execute_toggle_note", target_state: "FE_EDIT_MODE" },
+      { event: "CHANGE_INST",action: "execute_change_inst", target_state: "FE_EDIT_MODE" },
+      
+      { event: "TOGGLE_PLAY",action: "init_playback", target_state: "FE_PLAY_MODE" }
+    ]
+  },
+  FE_PLAY_MODE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "TOGGLE_PLAY",action: "stop_audio", target_state: "FE_EDIT_MODE" },
+      { event: "TICK", guard: "is_track_finished", action: "stop_audio", target_state: "FE_EDIT_MODE" },
+      { event: "TICK", action: "advance_playback_pipeline", target_state: "FE_PLAY_MODE" }
+    ]
+  }
+};
+
+// ==========================================
+// 2. ゲームコンテキスト（大譜表の音階マッピング情報）
+// ==========================================
+// 縦のカーソル位置（0〜22）を実際の楽譜の音階・周波数・所属記号にマッピング
+// 0が一番上の音（ト音記号の上のラ）、22が一番下の音（ヘ音記号の下のファ）
+const PITCH_REGISTRY = [
+  { name: "A5", freq: 880.00, staff: "treble", lineIndex: -2 }, // 上加線
+  { name: "G5", freq: 783.99, staff: "treble", lineIndex: -1.5 },
+  { name: "F5", freq: 698.46, staff: "treble", lineIndex: -1 },   // 5線譜の一番上
+  { name: "E5", freq: 659.25, staff: "treble", lineIndex: -0.5 },
+  { name: "D5", freq: 587.33, staff: "treble", lineIndex: 0 },
+  { name: "C5", freq: 523.25, staff: "treble", lineIndex: 0.5 },
+  { name: "B4", freq: 493.88, staff: "treble", lineIndex: 1 },
+  { name: "A4", freq: 440.00, staff: "treble", lineIndex: 1.5 },
+  { name: "G4", freq: 392.00, staff: "treble", lineIndex: 2 },
+  { name: "F4", freq: 349.23, staff: "treble", lineIndex: 2.5 },
+  { name: "E4", freq: 329.63, staff: "treble", lineIndex: 3 },    // 5線譜の一番下
+  { name: "D4", freq: 293.66, staff: "treble", lineIndex: 3.5 },
+  { name: "C4", freq: 261.63, staff: "middle", lineIndex: 5 },    // 中央のド（下加線）
+  { name: "B3", freq: 246.94, staff: "bass",   lineIndex: 6.5 },
+  { name: "A3", freq: 220.00, staff: "bass",   lineIndex: 7 },    // 5線譜の一番上
+  { name: "G3", freq: 196.00, staff: "bass",   lineIndex: 7.5 },
+  { name: "F3", freq: 174.61, staff: "bass",   lineIndex: 8 },
+  { name: "E3", freq: 164.81, staff: "bass",   lineIndex: 8.5 },
+  { name: "D3", freq: 146.83, staff: "bass",   lineIndex: 9 },
+  { name: "C3", freq: 130.81, staff: "bass",   lineIndex: 9.5 },
+  { name: "B2", freq: 123.47, staff: "bass",   lineIndex: 10 },
+  { name: "A2", freq: 110.00, staff: "bass",   lineIndex: 10.5 },
+  { name: "G2", freq: 98.00,  staff: "bass",   lineIndex: 11 },   // 5線譜の一番下
+  { name: "F2", freq: 87.31,  staff: "bass",   lineIndex: 11.5 }
+];
+
+const MAX_STEPS = 16; // 16コラム分（4/4拍子の16分音符刻み）
+
+const context = {
+  cursor: { step: 0, pitchIndex: 12 }, // 初期位置は中央のC4 (ド)
+  scoreData: Array(MAX_STEPS).fill(null).map(() => []), // 各ステップに格納される音符インデックスの配列
+  instrument: "square", // square (ファミコン), triangle (ベース), sine (純音)
+  playStep: 0,
+  tickCounter: 0,
+  audioCtx: null,
+  selectedInstNumber: 1
+};
+
+// ==========================================
+// 3. ガード（判定純粋関数群）
+// ==========================================
+const guards = {
+  is_track_finished: (ctx) => ctx.playStep >= MAX_STEPS
+};
+
+// ==========================================
+// 4. アクション（副作用・シンセサイザー制御関数群）
+// ==========================================
+function playTone(ctxData, freq) {
+    if (!ctxData.audioCtx) {
+        ctxData.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const osc = ctxData.audioCtx.createOscillator();
+    const gain = ctxData.audioCtx.createGain();
+    
+    osc.type = ctxData.instrument;
+    osc.frequency.setValueAtTime(freq, ctxData.audioCtx.currentTime);
+    
+    // 綺麗なエンベロープ（音のプチプチ切れノイズ防止）
+    gain.gain.setValueAtTime(0.15, ctxData.audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctxData.audioCtx.currentTime + 0.25);
+    
+    osc.connect(gain);
+    gain.connect(ctxData.audioCtx.destination);
+    
+    osc.start();
+    osc.stop(ctxData.audioCtx.currentTime + 0.25);
+}
+
+const actions = {
+  cursor_up:    (ctx) => { ctx.cursor.pitchIndex = Math.max(0, ctx.cursor.pitchIndex - 1); },
+  cursor_down:  (ctx) => { ctx.cursor.pitchIndex = Math.min(PITCH_REGISTRY.length - 1, ctx.cursor.pitchIndex + 1); },
+  cursor_left:  (ctx) => { ctx.cursor.step = Math.max(0, ctx.cursor.step - 1); },
+  cursor_right: (ctx) => { ctx.cursor.step = Math.min(MAX_STEPS - 1, ctx.cursor.step + 1); },
+  
+  execute_toggle_note: (ctx) => {
+    const currentList = ctx.scoreData[ctx.cursor.step];
+    const idx = ctx.cursor.pitchIndex;
+    
+    if (currentList.includes(idx)) {
+        // 既に音符があれば削除
+        ctx.scoreData[ctx.cursor.step] = currentList.filter(item => item !== idx);
+    } else {
+        // 音符を追加し、試し打ちの音を鳴らす
+        currentList.push(idx);
+        playTone(ctx, PITCH_REGISTRY[idx].freq);
+    }
+  },
+  
+  execute_change_inst: (ctx) => {
+    if (ctx.selectedInstNumber === 1) ctx.instrument = "square";
+    if (ctx.selectedInstNumber === 2) ctx.instrument = "triangle";
+    if (ctx.selectedInstNumber === 3) ctx.instrument = "sine";
+  },
+  
+  init_playback: (ctx) => {
+    ctx.playStep = 0;
+    ctx.tickCounter = 0;
+  },
+  
+  stop_audio: (ctx) => {
+    // 再生停止時のクリーンアップ処理（必要に応じて）
+  },
+  
+  advance_playback_pipeline: (ctx) => {
+    // 15フレーム（約0.25秒）ごとに1ステップ進むテンポ制御
+    ctx.tickCounter++;
+    if (ctx.tickCounter >= 15) {
+        ctx.tickCounter = 0;
+        
+        // 現在のステップにあるすべての音符をアトミックに同時発音（和音対応）
+        const notes = ctx.scoreData[ctx.playStep];
+        notes.forEach(noteIdx => {
+            playTone(ctx, PITCH_REGISTRY[noteIdx].freq);
+        });
+        
+        ctx.playStep++;
+    }
+  }
+};
+
+// ==========================================
+// 5. SFA ステートマシンエンジン
+// ==========================================
+class SFAEngine {
+  constructor(definitions, initialState, context, guards, actions, onTransitioned) {
+    this.definitions = definitions;
+    this.currentState = initialState;
+    this.context = context;
+    this.guards = guards;
+    this.actions = actions;
+    this.onTransitioned = onTransitioned;
+    this.onTransitioned(this.currentState, this.context);
+  }
+
+  transition(event) {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const matchedTransitions = stateDef.next_transitions.filter(t => t.event === event);
+
+    for (const trans of matchedTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+
+        this.handleAutoTransition();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  handleAutoTransition() {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const autoTransitions = stateDef.next_transitions.filter(t => t.event === "AUTO");
+
+    for (const trans of autoTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+        
+        this.handleAutoTransition();
+        return; 
+      }
+    }
+  }
+}
+
+// ==========================================
+// 6. UI Canvas 伝統楽譜レンダラー
+// ==========================================
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// 楽譜幾何学位置の定数
+const NOTE_START_X = 140;
+const STEP_WIDTH = 34;
+const LINE_SPACING = 10; // 5線譜の線の間隔 (ピクセル)
+const TREBLE_TOP_Y = 80;  // ト音記号の一番上の線のY座標
+const BASS_TOP_Y = 220;   // ヘ音記号の一番上の線のY座標
+
+function getPitchY(pitchIndex) {
+    // PITCH_REGISTRY の lineIndex から正確な幾何学Y座標を算出する
+    const p = PITCH_REGISTRY[pitchIndex];
+    if (p.staff === "treble") {
+        return TREBLE_TOP_Y + (p.lineIndex + 1) * LINE_SPACING * 2;
+    } else if (p.staff === "middle") {
+        return TREBLE_TOP_Y + 6 * LINE_SPACING * 2; // 中央のドのライン
+    } else {
+        return BASS_TOP_Y + (p.lineIndex - 7) * LINE_SPACING * 2;
+    }
+}
+
+function render(state, ctxGame) {
+    // 楽譜のベース背景（クラシックなホワイトペーパー調）
+    ctx.fillStyle = "#faf9f5";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // --- 1. 5線譜（ト音記号側 ＆ ヘ音記号側）の描画 ---
+    ctx.strokeStyle = "#222222";
+    ctx.lineWidth = 1;
+
+    // ト音記号の5本線
+    for (let i = 0; i < 5; i++) {
+        let y = TREBLE_TOP_Y + i * LINE_SPACING * 2;
+        ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(canvas.width - 20, y); ctx.stroke();
+    }
+    // ヘ音記号の5本線
+    for (let i = 0; i < 5; i++) {
+        let y = BASS_TOP_Y + i * LINE_SPACING * 2;
+        ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(canvas.width - 20, y); ctx.stroke();
+    }
+
+    // 楽譜の左端と右端を閉じる縦線
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(40, TREBLE_TOP_Y); ctx.lineTo(40, BASS_TOP_Y + 8 * LINE_SPACING); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(canvas.width - 20, TREBLE_TOP_Y); ctx.lineTo(canvas.width - 20, BASS_TOP_Y + 8 * LINE_SPACING); ctx.stroke();
+
+    // --- 2. ト音記号・ヘ音記号テキストシンボルのマッピング ---
+    ctx.fillStyle = "#111111";
+    ctx.font = "54px 'M PLUS 1 Code', sans-serif";
+    ctx.fillText("𝄞", 50, TREBLE_TOP_Y + LINE_SPACING * 6); // ト音記号のUnicode
+    ctx.fillText("𝄢", 55, BASS_TOP_Y + LINE_SPACING * 3.5);  // ヘ音記号のUnicode
+
+    // 拍子記号 (4/4拍子)
+    ctx.font = "bold 28px 'M PLUS 1 Code', monospace";
+    ctx.fillText("４", 105, TREBLE_TOP_Y + LINE_SPACING * 3);
+    ctx.fillText("４", 105, TREBLE_TOP_Y + LINE_SPACING * 7);
+    ctx.fillText("４", 105, BASS_TOP_Y + LINE_SPACING * 3);
+    ctx.fillText("４", 105, BASS_TOP_Y + LINE_SPACING * 7);
+
+    // --- 3. 配置された全ての音符（♩）の描画 ---
+    for (let s = 0; s < MAX_STEPS; s++) {
+        const x = NOTE_START_X + s * STEP_WIDTH;
+        const notes = ctxGame.scoreData[s];
+
+        notes.forEach(pitchIdx => {
+            const y = getPitchY(pitchIdx);
+
+            // 加線（5線譜をはみ出た音符のための補助横線）の動的計算
+            ctx.strokeStyle = "#222222";
+            ctx.lineWidth = 1;
+            if (pitchIdx === 12) { // 中央のC4 (ド)
+                ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.lineTo(x + 18, y); ctx.stroke();
+            } else if (pitchIdx === 0) { // 上のはみ出たA5
+                ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.lineTo(x + 18, y); ctx.stroke();
+            }
+
+            // 音符の「玉（ノートヘッド）」を描画（少し斜めに傾いた楕円）
+            ctx.fillStyle = "#111111";
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(-0.2);
+            ctx.beginPath();
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // 音符の「棒（ステム）」を描画（音階が中央より高ければ下向き、低ければ上向きにする伝統ルール）
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            if (pitchIdx < 12) {
+                // ト音記号側：上向きの棒
+                ctx.moveTo(x + 5, y);
+                ctx.lineTo(x + 5, y - 26);
+            } else {
+                // ヘ音記号側：下向きの棒
+                ctx.moveTo(x - 5, y);
+                ctx.lineTo(x - 5, y + 26);
+            }
+            ctx.stroke();
+        });
+    }
+
+    // --- 4. モード別のシチュエーション・レイヤー ---
+    if (state === "FE_EDIT_MODE") {
+        // 編集カーソルの描画（現在の選択位置を半透明の赤い音符型ターゲットでプレビュー）
+        const cx = NOTE_START_X + ctxGame.cursor.step * STEP_WIDTH;
+        const cy = getPitchY(ctxGame.cursor.pitchIndex);
+
+        ctx.fillStyle = "rgba(255, 0, 50, 0.4)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        // カーソル位置のガイド縦線
+        ctx.strokeStyle = "rgba(255, 0, 50, 0.2)";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(cx, TREBLE_TOP_Y - 20); ctx.lineTo(cx, BASS_TOP_Y + LINE_SPACING * 10); ctx.stroke();
+
+        // 左上ステータス表示
+        ctx.fillStyle = "#ff0055";
+        ctx.font = "bold 12px 'M PLUS 1 Code', monospace";
+        ctx.fillText(`EDIT MODE | INST: ${ctxGame.instrument.toUpperCase()} | NOTE: ${PITCH_REGISTRY[ctxGame.cursor.pitchIndex].name}`, 20, 30);
+
+    } else if (state === "FE_PLAY_MODE") {
+        // 再生位置を示すシアンのシークバーライン
+        const px = NOTE_START_X + ctxGame.playStep * STEP_WIDTH;
+        ctx.strokeStyle = "#00ffcc";
+        ctx.lineWidth = 3;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = "#00ffcc";
+        ctx.beginPath(); 
+        ctx.moveTo(px, TREBLE_TOP_Y - 20); 
+        ctx.lineTo(px, BASS_TOP_Y + LINE_SPACING * 10); 
+        ctx.stroke();
+        ctx.shadowBlur = 0; // リセット
+
+        ctx.fillStyle = "#00cc99";
+        ctx.font = "bold 12px 'M PLUS 1 Code', monospace";
+        ctx.fillText(`PLAYING... STEP: ${ctxGame.playStep + 1}/${MAX_STEPS}`, 20, 30);
+    }
+}
+
+// ==========================================
+// 7. キーマッピングと 60Hz 進行制御
+// ==========================================
+const ctxGame = context;
+const engine = new SFAEngine(SFA_DEFINITIONS, "FE_EDIT_MODE", ctxGame, guards, actions, (state, c) => render(state, c));
+
+document.addEventListener("keydown", (e) => {
+    let sfaEvent = null;
+    const state = engine.currentState;
+
+    if (state === "FE_EDIT_MODE") {
+        if (e.key === "ArrowUp")    sfaEvent = "MOVE_UP";
+        if (e.key === "ArrowDown")  sfaEvent = "MOVE_DOWN";
+        if (e.key === "ArrowLeft")  sfaEvent = "MOVE_LEFT";
+        if (e.key === "ArrowRight") sfaEvent = "MOVE_RIGHT";
+        if (e.key === " ")          sfaEvent = "TOGGLE_NOTE";
+        if (e.key === "Enter")      sfaEvent = "TOGGLE_PLAY";
+        
+        // 楽器選択ショートカットキー
+        if (e.key === "1" || e.key === "2" || e.key === "3") {
+            ctxGame.selectedInstNumber = parseInt(e.key);
+            sfaEvent = "CHANGE_INST";
+        }
+    } else if (state === "FE_PLAY_MODE") {
+        if (e.key === "Enter") sfaEvent = "TOGGLE_PLAY"; // 再生中はEnterで停止
+    }
+
+    if (sfaEvent) {
+        e.preventDefault();
+        engine.transition(sfaEvent);
+    }
+});
+
+function loop() {
+    engine.transition("TICK");
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>

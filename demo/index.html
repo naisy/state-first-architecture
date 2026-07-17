@@ -140,13 +140,13 @@ const SFA_GAMES_REGISTRY = [
         title: "SFA Freeway",
         url: "sfa_freeway.html",
         description: "A 60fps pseudo-3D driving game managing realtime loops, crashes, and global state escapes.",
-        theme: "theme-green" // レースゲームっぽくグリーンにシフト
+        theme: "theme-green"
     },
     {
         title: "SFA Rogue",
         url: "sfa_rogue.html",
         description: "A turn-based hack & slash RPG orchestrating multi-phase turn pipelines, isolated facility menu states, and dynamic environmental day-night cycles.",
-        theme: "theme-yellow" // クラシック端末風にイエローにシフト
+        theme: "theme-yellow"
     },
     {
         title: "SFA Defense",
@@ -159,6 +159,12 @@ const SFA_GAMES_REGISTRY = [
         url: "sfa_bomber.html",
         description: "A 60Hz arena action game featuring a 1-frame atomic chain reaction explosion pipeline and strict zombie-state elimination.",
         theme: "theme-magenta"
+    },
+    {
+        title: "SFA Score",
+        url: "sfa_score.html",
+        description: "A classical musical notation engine featuring strict grand staff rendering, Web Audio API synthesis, and rigid edit/play mode separation.",
+        theme: "theme-orange"
     }
 ];
 
@@ -169,9 +175,7 @@ function generateGameGrid(gamesList) {
     const container = document.getElementById("menu-container");
     if (!container) return;
 
-    // 高速・安全にHTML文字列をマップ結合して流し込み
     container.innerHTML = gamesList.map(game => {
-        // テーマ未指定時のフォールバック保護
         const themeClass = game.theme || "theme-cyan"; 
         
         return `
@@ -188,3 +192,5 @@ document.addEventListener("DOMContentLoaded", () => {
     generateGameGrid(SFA_GAMES_REGISTRY);
 });
 </script>
+</body>
+</html>
