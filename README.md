@@ -6,7 +6,7 @@
 > A software design philosophy that completely eliminates implicit state-control flags and if/else spaghetti from your application logic.
 
 👉 [日本語のREADMEはこちら (Japanese README)](./README.ja.md)  
-🎮 [**Live Demo: Play SFA Tetris in Your Browser!**](https://naisy.github.io/state-first-architecture/demo/)
+🎮 [**Live Demo: Play SFA Games in Your Browser!**](https://naisy.github.io/state-first-architecture/demo/)
 
 ---
 
@@ -46,17 +46,29 @@ Game development is one of the most challenging fields for state and async manag
 
 ### 🌐 Play Online (No Installation Required)
 👉 [**naisy.github.io/state-first-architecture/demo/**](https://naisy.github.io/state-first-architecture/demo/)
+*Opening this link will take you to the Game Selection Portal.*
 
 ### 💻 Run Locally
 1. Clone or download this repository.
-2. Open `demo/index.html` directly in any web browser (no build steps, Node.js, or external libraries required!).
+2. Open `demo/index.html` directly in any web browser to open the Game Selection Portal.
 
-### Controls
+---
+
+### 🎮 Game Controls
+
+#### 🕹️ SFA Tetris
 * `Enter`: Start / Restart Game
 * `←` / `→`: Move Tetromino Left / Right
 * `↑`: Rotate Clockwise
 * `↓`: Rotate Counter-Clockwise
 * `Space`: Soft Drop (Increase fall speed)
+
+#### 🏎️ SFA Freeway
+* `Enter`: Start / Restart Game
+* `Esc`: Return to Title Screen at any time (State Escape)
+* `←` / `→`: Steer Left / Right
+* `↑`: Shift Up (High Gear)
+* `↓`: Shift Down (Low Gear)
 
 ---
 

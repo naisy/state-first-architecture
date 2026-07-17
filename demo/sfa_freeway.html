@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SFA Freeway - MS-DOS Edition</title>
+    <!-- Import monospace font -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #050510;
+            color: #00ffcc;
+            font-family: 'M PLUS 1 Code', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            border: 6px double #00ffcc;
+            box-shadow: 0 0 20px #00ffcc44;
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+        #instructions {
+            margin-top: 15px;
+            width: 640px;
+            font-size: 13px;
+            color: #888;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .highlight {
+            color: #ff00ff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="640" height="480"></canvas>
+    </div>
+    
+    <div id="instructions">
+        <span class="highlight">[Enter]</span>: Start / Restart | <span class="highlight">[Esc]</span>: Return to Title <br>
+        <span class="highlight">[← / →]</span>: Steer Left / Right <br>
+        <span class="highlight">[↑]</span>: Shift Up (High Gear) | <span class="highlight">[↓]</span>: Shift Down (Low Gear) <br>
+        <p style="font-size: 11px; color: #555;">SFA Engine driving infinite pseudo-3D perspective road logic.</p>
+    </div>
+
+<script>
+// ==========================================
+// 1. SFA State Definitions (SSOT)
+// ==========================================
+const SFA_DEFINITIONS = {
+  FE_TITLE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "START", action: "start_countdown_timer", target_state: "FE_COUNTDOWN" }
+    ]
+  },
+  FE_COUNTDOWN: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" }, 
+      { event: "TICK", guard: "countdown_not_finished", action: "decrement_countdown", target_state: "FE_COUNTDOWN" },
+      { event: "TICK", guard: "countdown_finished", target_state: "FE_DRIVING_LOW" }
+    ]
+  },
+  FE_DRIVING_LOW: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" }, 
+      { event: "TICK", guard: "is_time_up", target_state: "FE_GAMEOVER" },
+      { event: "TICK", guard: "has_collided", action: "trigger_crash", target_state: "FE_CRASHING" },
+      { event: "TICK", action: "update_physics_low", target_state: "FE_DRIVING_LOW" },
+
+      { event: "STEER_LEFT",  action: "steer_left",  target_state: "FE_DRIVING_LOW" },
+      { event: "STEER_RIGHT", action: "steer_right", target_state: "FE_DRIVING_LOW" },
+      { event: "SHIFT_UP",    action: "shift_up",    target_state: "FE_DRIVING_HIGH" }
+    ]
+  },
+  FE_DRIVING_HIGH: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" }, 
+      { event: "TICK", guard: "is_time_up", target_state: "FE_GAMEOVER" },
+      { event: "TICK", guard: "has_collided", action: "trigger_crash", target_state: "FE_CRASHING" },
+      { event: "TICK", action: "update_physics_high", target_state: "FE_DRIVING_HIGH" },
+
+      { event: "STEER_LEFT",  action: "steer_left",  target_state: "FE_DRIVING_HIGH" },
+      { event: "STEER_RIGHT", action: "steer_right", target_state: "FE_DRIVING_HIGH" },
+      { event: "SHIFT_DOWN",  action: "shift_down",  target_state: "FE_DRIVING_LOW" }
+    ]
+  },
+  FE_CRASHING: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" }, 
+      { event: "TICK", guard: "is_time_up", target_state: "FE_GAMEOVER" },
+      { event: "TICK", guard: "crash_finished", action: "recover_from_crash", target_state: "FE_DRIVING_LOW" },
+      { event: "TICK", action: "update_crash_spin", target_state: "FE_CRASHING" }
+    ]
+  },
+  FE_GAMEOVER: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" }, 
+      { event: "START", action: "start_countdown_timer", target_state: "FE_COUNTDOWN" }
+    ]
+  }
+};
+
+// ==========================================
+// 2. Constants & Road Segment Generation
+// ==========================================
+const CANVAS_WIDTH = 640;
+const CANVAS_HEIGHT = 480;
+const ROAD_WIDTH = 2000;
+const SEGMENT_LENGTH = 200;
+const CAMERA_DEPTH = 0.8;
+const CAMERA_HEIGHT = 1000;
+const DRAW_DISTANCE = 60; 
+
+const road = [];
+function createRoad() {
+    let accumX = 0;
+    for (let i = 0; i < 1500; i++) {
+        let curve = 0;
+        if (i > 80 && i < 200) curve = 1.5;   
+        if (i > 300 && i < 500) curve = -2.0; 
+        if (i > 600 && i < 750) curve = 3.0;  
+        if (i > 900 && i < 1100) curve = -1.0;
+        if (i > 1200 && i < 1400) curve = 2.5;
+
+        accumX += curve * 15; 
+
+        road.push({
+            index: i,
+            p1: { x: accumX - (curve * 15), y: 0, z: i * SEGMENT_LENGTH },
+            p2: { x: accumX, y: 0, z: (i + 1) * SEGMENT_LENGTH },
+            curve: curve,
+            color: (Math.floor(i / 4) % 2 === 0) ? 'dark' : 'light',
+            obstacle: null
+        });
+    }
+
+    for (let i = 100; i < 1400; i += 20) {
+        if (Math.random() < 0.6) {
+            road[i].obstacle = {
+                x: (Math.random() * 2 - 1) * 0.7, 
+                type: Math.random() > 0.4 ? 'enemy_car' : 'rock',
+                color: ['#ff0055', '#00ff55', '#ffff00', '#ff00ff'][Math.floor(Math.random() * 4)]
+            };
+        }
+    }
+}
+createRoad();
+
+// ==========================================
+// 3. Game Context (State Data)
+// ==========================================
+const context = {
+    playerX: 0,       
+    speed: 0,         
+    camZ: 0,          
+    timeLeft: 40,     
+    score: 0,         
+    countdown: 3,     
+    crashTimer: 0,    
+    frameCounter: 0,  
+    lastPassedCheckpoint: -1 
+};
+
+// ==========================================
+// 4. Guards (Pure Functions)
+// ==========================================
+const guards = {
+    countdown_not_finished: (ctx) => ctx.countdown > 0,
+    countdown_finished:     (ctx) => ctx.countdown <= 0,
+    is_time_up:             (ctx) => ctx.timeLeft <= 0,
+    crash_finished:         (ctx) => ctx.crashTimer <= 0,
+    
+    has_collided: (ctx) => {
+        const playerSegIndex = Math.floor(ctx.camZ / SEGMENT_LENGTH);
+        for (let i = playerSegIndex; i <= playerSegIndex + 1; i++) {
+            const seg = road[i % road.length];
+            if (seg.obstacle) {
+                const distance = Math.abs(ctx.playerX - seg.obstacle.x);
+                if (distance < 0.35) {
+                    return true;
+                }
+            }
+        }
+        if (Math.abs(ctx.playerX) > 1.3) {
+            return true;
+        }
+        return false;
+    }
+};
+
+// ==========================================
+// 5. Actions (Mutations & Side Effects)
+// ==========================================
+const actions = {
+    start_countdown_timer: (ctx) => {
+        ctx.countdown = 3;
+        ctx.timeLeft = 40;
+        ctx.camZ = 0;
+        ctx.playerX = 0;
+        ctx.speed = 0;
+        ctx.score = 0;
+        ctx.lastPassedCheckpoint = -1;
+    },
+    decrement_countdown: (ctx) => {
+        ctx.countdown -= 1/60; 
+    },
+    update_physics_low: (ctx) => {
+        ctx.speed = Math.min(ctx.speed + 2, 100); 
+        ctx.camZ += ctx.speed;
+        ctx.timeLeft -= 1/60;
+        ctx.score += Math.floor(ctx.speed / 10);
+        updateCheckpoints(ctx);
+        swayEnemyCars(ctx);
+    },
+    update_physics_high: (ctx) => {
+        ctx.speed = Math.min(ctx.speed + 4, 200); 
+        ctx.camZ += ctx.speed;
+        ctx.timeLeft -= 1/60;
+        ctx.score += Math.floor(ctx.speed / 8);
+        updateCheckpoints(ctx);
+        swayEnemyCars(ctx);
+    },
+    steer_left: (ctx) => {
+        const factor = ctx.speed > 10 ? 0.04 : 0.01;
+        ctx.playerX = Math.max(ctx.playerX - factor, -1.5);
+    },
+    steer_right: (ctx) => {
+        const factor = ctx.speed > 10 ? 0.04 : 0.01;
+        ctx.playerX = Math.min(ctx.playerX + factor, 1.5);
+    },
+    shift_up: (ctx) => {},
+    shift_down: (ctx) => {
+        ctx.speed = Math.min(ctx.speed, 100); 
+    },
+    trigger_crash: (ctx) => {
+        ctx.crashTimer = 80; 
+        ctx.speed = 0;
+    },
+    update_crash_spin: (ctx) => {
+        ctx.crashTimer--;
+        ctx.timeLeft -= 1/60;
+    },
+    recover_from_crash: (ctx) => {
+        ctx.playerX = 0; 
+        ctx.camZ += SEGMENT_LENGTH * 3; 
+    }
+};
+
+function updateCheckpoints(ctx) {
+    const currentChunk = Math.floor(ctx.camZ / (SEGMENT_LENGTH * 150));
+    if (currentChunk > ctx.lastPassedCheckpoint && currentChunk > 0) {
+        ctx.timeLeft += 15; 
+        ctx.lastPassedCheckpoint = currentChunk;
+    }
+}
+
+function swayEnemyCars(ctx) {
+    ctx.frameCounter++;
+    const playerSegIndex = Math.floor(ctx.camZ / SEGMENT_LENGTH);
+    for (let i = playerSegIndex; i < playerSegIndex + DRAW_DISTANCE; i++) {
+        const seg = road[i % road.length];
+        if (seg.obstacle && seg.obstacle.type === 'enemy_car') {
+            seg.obstacle.x += Math.sin((ctx.frameCounter + i * 10) * 0.03) * 0.01;
+            seg.obstacle.x = Math.max(-0.7, Math.min(0.7, seg.obstacle.x));
+        }
+    }
+}
+
+// ==========================================
+// 6. SFA State Machine Engine
+// ==========================================
+class SFAEngine {
+  constructor(definitions, initialState, context, guards, actions, onTransitioned) {
+    this.definitions = definitions;
+    this.currentState = initialState;
+    this.context = context;
+    this.guards = guards;
+    this.actions = actions;
+    this.onTransitioned = onTransitioned;
+    this.onTransitioned(this.currentState, this.context);
+  }
+
+  transition(event) {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const matchedTransitions = stateDef.next_transitions.filter(t => t.event === event);
+
+    for (const trans of matchedTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+
+        this.handleAutoTransition();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  handleAutoTransition() {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const autoTransitions = stateDef.next_transitions.filter(t => t.event === "AUTO");
+
+    for (const trans of autoTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+        
+        this.handleAutoTransition();
+        return; 
+      }
+    }
+  }
+}
+
+// ==========================================
+// 7. Pseudo-3D Perspective Projection & Canvas Renderer
+// ==========================================
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+function project(point, camX, camY, camZ) {
+    const transX = point.x - camX;
+    const transY = point.y - camY;
+    const transZ = point.z - camZ;
+
+    if (transZ <= 0) return null;
+
+    const scale = CAMERA_DEPTH / transZ;
+    const screenX = Math.round((CANVAS_WIDTH / 2) + (scale * transX * CANVAS_WIDTH / 2));
+    const screenY = Math.round((CANVAS_HEIGHT / 2) - (scale * transY * CANVAS_HEIGHT / 2));
+    const screenW = Math.round(scale * ROAD_WIDTH * CANVAS_WIDTH / 2);
+
+    return { x: screenX, y: screenY, w: screenW, scale: scale };
+}
+
+function render(state, ctx2d, ctxGame) {
+    ctx2d.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // 1. Background Mountains
+    ctx2d.fillStyle = '#060618';
+    ctx2d.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx2d.fillStyle = '#0e0e30';
+    ctx2d.beginPath();
+    const hillOffset = Math.floor(ctxGame.camZ * 0.02) % CANVAS_WIDTH;
+    for (let i = -1; i <= 2; i++) {
+        let startX = i * CANVAS_WIDTH - hillOffset;
+        ctx2d.moveTo(startX, CANVAS_HEIGHT / 2);
+        ctx2d.lineTo(startX + CANVAS_WIDTH * 0.3, CANVAS_HEIGHT / 2 - 50);
+        ctx2d.lineTo(startX + CANVAS_WIDTH * 0.6, CANVAS_HEIGHT / 2);
+        ctx2d.lineTo(startX + CANVAS_WIDTH * 0.8, CANVAS_HEIGHT / 2 - 70);
+        ctx2d.lineTo(startX + CANVAS_WIDTH, CANVAS_HEIGHT / 2);
+    }
+    ctx2d.closePath();
+    ctx2d.fill();
+
+    // Context Coordinates Calculations
+    const startSegIndex = Math.floor(ctxGame.camZ / SEGMENT_LENGTH);
+    const currentPercent = (ctxGame.camZ % SEGMENT_LENGTH) / SEGMENT_LENGTH;
+
+    const baseSegment = road[startSegIndex % road.length];
+    const nextSegment = road[(startSegIndex + 1) % road.length];
+    const interpolRoadX = baseSegment.p1.x + (nextSegment.p1.x - baseSegment.p1.x) * currentPercent;
+
+    const camX = interpolRoadX + ctxGame.playerX * ROAD_WIDTH;
+    const camY = CAMERA_HEIGHT;
+    const camZ = ctxGame.camZ;
+
+    // 2. Pass A: Render the Road Floor Polygons
+    for (let j = DRAW_DISTANCE; j >= 0; j--) {
+        const segIdx = (startSegIndex + j) % road.length;
+        const segment = road[segIdx];
+        
+        const loopOffset = Math.floor((startSegIndex + j) / road.length) * road.length * SEGMENT_LENGTH;
+        const p1_virtual = { x: segment.p1.x, y: segment.p1.y, z: segment.p1.z + loopOffset };
+        const p2_virtual = { x: segment.p2.x, y: segment.p2.y, z: segment.p2.z + loopOffset };
+
+        const s1 = project(p1_virtual, camX, camY, camZ);
+        const s2 = project(p2_virtual, camX, camY, camZ);
+
+        if (!s1 || !s2 || s1.y >= CANVAS_HEIGHT || s2.y >= CANVAS_HEIGHT || s1.y <= s2.y) continue;
+
+        let colorGrass, colorRoad, colorRumble;
+        if (segment.color === 'dark') {
+            colorGrass = '#084d08'; colorRoad = '#2f2f35'; colorRumble = '#cc0000';
+        } else {
+            colorGrass = '#0e6d0e'; colorRoad = '#3e3e44'; colorRumble = '#ffffff';
+        }
+
+        // Grass Fields
+        ctx2d.fillStyle = colorGrass;
+        ctx2d.fillRect(0, s2.y, CANVAS_WIDTH, s1.y - s2.y);
+
+        // Asphalt Main Road
+        ctx2d.fillStyle = colorRoad;
+        ctx2d.beginPath();
+        ctx2d.moveTo(s1.x - s1.w, s1.y);
+        ctx2d.lineTo(s2.x - s2.w, s2.y);
+        ctx2d.lineTo(s2.x + s2.w, s2.y);
+        ctx2d.lineTo(s1.x + s1.w, s1.y);
+        ctx2d.closePath();
+        ctx2d.fill();
+
+        // Rumble Strips
+        const r1 = s1.w * 0.1;
+        const r2 = s2.w * 0.1;
+        ctx2d.fillStyle = colorRumble;
+        ctx2d.beginPath();
+        ctx2d.moveTo(s1.x - s1.w, s1.y);
+        ctx2d.lineTo(s1.x - s1.w + r1, s1.y);
+        ctx2d.lineTo(s2.x - s2.w + r2, s2.y);
+        ctx2d.lineTo(s2.x - s2.w, s2.y);
+        ctx2d.closePath(); ctx2d.fill();
+
+        ctx2d.beginPath();
+        ctx2d.moveTo(s1.x + s1.w, s1.y);
+        ctx2d.lineTo(s1.x + s1.w - r1, s1.y);
+        ctx2d.lineTo(s2.x + s2.w - r2, s2.y);
+        ctx2d.lineTo(s2.x + s2.w, s2.y);
+        ctx2d.closePath(); ctx2d.fill();
+
+        // Center Separation Lines
+        if (segment.color === 'light') {
+            const lw1 = s1.w * 0.02;
+            const lw2 = s2.w * 0.02;
+            ctx2d.fillStyle = '#ffffff';
+            ctx2d.beginPath();
+            ctx2d.moveTo(s1.x, s1.y);
+            ctx2d.lineTo(s1.x - lw1, s1.y);
+            ctx2d.lineTo(s2.x - lw2, s2.y);
+            ctx2d.lineTo(s2.x + lw2, s2.y);
+            ctx2d.lineTo(s1.x + lw1, s1.y);
+            ctx2d.closePath(); ctx2d.fill();
+        }
+    }
+
+    // 3. Pass B: Overlay Sprites (Signs, Obstacles, Competitors)
+    for (let j = DRAW_DISTANCE; j >= 0; j--) {
+        const segIdx = (startSegIndex + j) % road.length;
+        const segment = road[segIdx];
+        
+        const loopOffset = Math.floor((startSegIndex + j) / road.length) * road.length * SEGMENT_LENGTH;
+        const p1_virtual = { x: segment.p1.x, y: segment.p1.y, z: segment.p1.z + loopOffset };
+
+        const s1 = project(p1_virtual, camX, camY, camZ);
+        if (!s1 || s1.y >= CANVAS_HEIGHT) continue;
+
+        // Checkpoint Banner
+        if (segment.index % 150 === 0 && segment.index > 0) {
+            const bannerW = s1.w * 2.2;
+            const bannerH = s1.w * 0.4;
+            const drawX = s1.x - bannerW / 2;
+            const drawY = s1.y - s1.w * 1.5;
+
+            ctx2d.fillStyle = '#666';
+            ctx2d.fillRect(drawX, drawY, s1.w * 0.1, s1.w * 1.5);
+            ctx2d.fillRect(drawX + bannerW - s1.w * 0.1, drawY, s1.w * 0.1, s1.w * 1.5);
+            ctx2d.fillStyle = '#111';
+            ctx2d.fillRect(drawX, drawY, bannerW, bannerH);
+            ctx2d.strokeStyle = '#00ffcc';
+            ctx2d.lineWidth = Math.max(1, s1.w * 0.03);
+            ctx2d.strokeRect(drawX, drawY, bannerW, bannerH);
+            ctx2d.fillStyle = '#ffff00';
+            ctx2d.font = `bold ${Math.max(10, Math.floor(s1.w * 0.16))}px 'M PLUS 1 Code', monospace`;
+            ctx2d.textAlign = 'center';
+            ctx2d.fillText("CHECKPOINT", s1.x, drawY + bannerH / 2 + s1.w * 0.06);
+        }
+
+        // Road Hazards
+        if (segment.obstacle) {
+            const obs = segment.obstacle;
+            const obsWorldX = segment.p1.x + obs.x * ROAD_WIDTH;
+            const pObs = project({ x: obsWorldX, y: 0, z: segment.p1.z + loopOffset }, camX, camY, camZ);
+            
+            if (pObs) {
+                const wSprite = pObs.w * 0.45;
+                const hSprite = wSprite * 0.6;
+                const drawX = pObs.x - wSprite / 2;
+                const drawY = pObs.y - hSprite;
+
+                if (obs.type === 'rock') {
+                    ctx2d.fillStyle = '#777788';
+                    ctx2d.beginPath();
+                    ctx2d.moveTo(drawX, pObs.y);
+                    ctx2d.lineTo(drawX + wSprite * 0.2, drawY);
+                    ctx2d.lineTo(drawX + wSprite * 0.8, drawY);
+                    ctx2d.lineTo(drawX + wSprite, pObs.y);
+                    ctx2d.closePath(); ctx2d.fill();
+                    ctx2d.fillStyle = '#555566';
+                    ctx2d.beginPath();
+                    ctx2d.moveTo(drawX + wSprite * 0.5, pObs.y);
+                    ctx2d.lineTo(drawX + wSprite * 0.8, drawY);
+                    ctx2d.lineTo(drawX + wSprite, pObs.y);
+                    ctx2d.closePath(); ctx2d.fill();
+                } else if (obs.type === 'enemy_car') {
+                    ctx2d.fillStyle = obs.color;
+                    ctx2d.fillRect(drawX, drawY, wSprite, hSprite * 0.75);
+                    ctx2d.fillStyle = '#111122';
+                    ctx2d.fillRect(drawX + wSprite * 0.2, drawY - hSprite * 0.35, wSprite * 0.6, hSprite * 0.35);
+                    ctx2d.fillStyle = '#000000';
+                    ctx2d.fillRect(drawX + wSprite * 0.05, pObs.y - hSprite * 0.2, wSprite * 0.15, hSprite * 0.2);
+                    ctx2d.fillRect(drawX + wSprite * 0.8, pObs.y - hSprite * 0.2, wSprite * 0.15, hSprite * 0.2);
+                    ctx2d.fillStyle = '#ff2200';
+                    ctx2d.fillRect(drawX + wSprite * 0.1, drawY + hSprite * 0.15, wSprite * 0.2, hSprite * 0.18);
+                    ctx2d.fillRect(drawX + wSprite * 0.7, drawY + hSprite * 0.15, wSprite * 0.2, hSprite * 0.18);
+                }
+            }
+        }
+    }
+
+    // Render Foreground Layer Elements
+    drawPlayerCar(ctx2d, state, ctxGame);
+    drawHUD(ctx2d, state, ctxGame);
+    drawOverlays(ctx2d, state, ctxGame);
+}
+
+function drawPlayerCar(ctx2d, state, ctxGame) {
+    const carW = 160;
+    const carH = 75;
+    const carX = CANVAS_WIDTH / 2 - carW / 2;
+    const carY = CANVAS_HEIGHT - 35;
+
+    if (state === 'FE_CRASHING') {
+        ctx2d.save();
+        ctx2d.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT - 35 - carH/2);
+        const rotationAngle = (ctxGame.crashTimer / 80) * Math.PI * 6;
+        ctx2d.rotate(rotationAngle);
+        drawCarSprite(ctx2d, -carW/2, -carH/2, carW, carH, '#ff6600');
+        ctx2d.restore();
+    } else {
+        let shakeX = 0, shakeY = 0;
+        if (state === 'FE_DRIVING_HIGH') {
+            shakeX = (Math.random() - 0.5) * 3;
+            shakeY = (Math.random() - 0.5) * 2;
+        }
+        drawCarSprite(ctx2d, carX + shakeX, carY - carH + shakeY, carW, carH, '#00ffcc');
+    }
+}
+
+function drawCarSprite(ctx2d, x, y, w, h, bodyColor) {
+    ctx2d.fillStyle = bodyColor;
+    ctx2d.fillRect(x, y + h * 0.35, w, h * 0.5);
+    ctx2d.fillStyle = '#0a0d14';
+    ctx2d.fillRect(x + w * 0.22, y + h * 0.05, w * 0.56, h * 0.35);
+    ctx2d.fillStyle = '#111';
+    ctx2d.fillRect(x + w * 0.05, y - 6, w * 0.9, 12);
+    ctx2d.fillRect(x + w * 0.05, y, 10, h * 0.35);
+    ctx2d.fillRect(x + w * 0.84, y, 10, h * 0.35);
+    ctx2d.fillStyle = '#000000';
+    ctx2d.fillRect(x + w * 0.08, y + h * 0.6, w * 0.16, h * 0.3);
+    ctx2d.fillRect(x + w * 0.76, y + h * 0.6, w * 0.16, h * 0.3);
+    ctx2d.fillStyle = '#ff00aa';
+    ctx2d.fillRect(x + w * 0.35, y + h * 0.75, w * 0.3, h * 0.1);
+    ctx2d.fillStyle = '#ff0033';
+    ctx2d.fillRect(x + w * 0.12, y + h * 0.42, w * 0.18, h * 0.15);
+    ctx2d.fillRect(x + w * 0.7, y + h * 0.42, w * 0.18, h * 0.15);
+    ctx2d.fillStyle = '#ffffff';
+    ctx2d.font = "bold 9px 'M PLUS 1 Code', monospace";
+    ctx2d.fillRect(x + w * 0.42, y + h * 0.55, w * 0.16, h * 0.15);
+    ctx2d.fillStyle = '#000';
+    ctx2d.textAlign = 'center';
+    ctx2d.fillText("SFA", x + w * 0.5, y + h * 0.66);
+}
+
+function drawHUD(ctx2d, state, ctxGame) {
+    ctx2d.fillStyle = 'rgba(5, 5, 15, 0.6)';
+    ctx2d.fillRect(15, 15, 170, 55);
+    ctx2d.fillRect(CANVAS_WIDTH - 155, 15, 140, 55);
+
+    ctx2d.fillStyle = '#00ffcc';
+    ctx2d.font = "13px 'M PLUS 1 Code', monospace";
+    ctx2d.textAlign = 'left';
+    ctx2d.fillText(`SCORE: ${ctxGame.score}`, 25, 35);
+    ctx2d.fillText(`DIST : ${Math.floor(ctxGame.camZ / 10)}m`, 25, 55);
+
+    ctx2d.textAlign = 'right';
+    const blinkingTimer = (ctxGame.timeLeft < 10 && Math.floor(ctxGame.frameCounter / 15) % 2 === 0);
+    ctx2d.fillStyle = blinkingTimer ? '#ff0033' : '#ffff00';
+    ctx2d.font = "bold 26px 'M PLUS 1 Code', monospace";
+    ctx2d.fillText(`${Math.max(0, Math.ceil(ctxGame.timeLeft))}s`, CANVAS_WIDTH - 25, 53);
+
+    ctx2d.fillStyle = 'rgba(5, 5, 15, 0.6)';
+    ctx2d.fillRect(15, CANVAS_HEIGHT - 70, 210, 55);
+    ctx2d.textAlign = 'left';
+    ctx2d.fillStyle = '#ffffff';
+    ctx2d.font = "12px 'M PLUS 1 Code', monospace";
+    ctx2d.fillText("SPEEDOMETER", 25, CANVAS_HEIGHT - 52);
+
+    const activeColor = state === 'FE_DRIVING_HIGH' ? '#ff00ff' : '#00ffff';
+    ctx2d.fillStyle = activeColor;
+    ctx2d.font = "bold 20px 'M PLUS 1 Code', monospace";
+    ctx2d.fillText(`${Math.floor(ctxGame.speed)} MPH`, 25, CANVAS_HEIGHT - 25);
+
+    ctx2d.fillStyle = '#888';
+    ctx2d.font = "10px 'M PLUS 1 Code', monospace";
+    ctx2d.fillText(state === 'FE_DRIVING_HIGH' ? "[GEAR: HIGH]" : "[GEAR: LOW]", 125, CANVAS_HEIGHT - 25);
+}
+
+function drawOverlays(ctx2d, state, ctxGame) {
+    if (state === 'FE_TITLE') {
+        ctx2d.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx2d.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        ctx2d.fillStyle = '#00ffcc';
+        ctx2d.font = "bold 46px 'M PLUS 1 Code', monospace";
+        ctx2d.textAlign = 'center';
+        ctx2d.fillText("SFA FREEWAY", CANVAS_WIDTH / 2, 180);
+
+        ctx2d.fillStyle = '#ff00ff';
+        ctx2d.font = "15px 'M PLUS 1 Code', monospace";
+        ctx2d.fillText("STATE-FIRST ARCHITECTURE DEMO", CANVAS_WIDTH / 2, 220);
+
+        if (Math.floor(Date.now() / 400) % 2 === 0) {
+            ctx2d.fillStyle = '#ffffff';
+            ctx2d.font = "18px 'M PLUS 1 Code', monospace";
+            ctx2d.fillText("PRESS [ENTER] TO START", CANVAS_WIDTH / 2, 320);
+        }
+    } else if (state === 'FE_COUNTDOWN') {
+        ctx2d.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx2d.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        ctx2d.fillStyle = '#ffff00';
+        ctx2d.font = "bold 80px 'M PLUS 1 Code', monospace";
+        ctx2d.textAlign = 'center';
+        ctx2d.fillText(Math.ceil(ctxGame.countdown), CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 20);
+    } else if (state === 'FE_GAMEOVER') {
+        ctx2d.fillStyle = 'rgba(10, 0, 10, 0.85)';
+        ctx2d.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        ctx2d.fillStyle = '#ff0033';
+        ctx2d.font = "bold 48px 'M PLUS 1 Code', monospace";
+        ctx2d.textAlign = 'center';
+        ctx2d.fillText("GAME OVER", CANVAS_WIDTH / 2, 180);
+
+        ctx2d.fillStyle = '#ffffff';
+        ctx2d.font = "18px 'M PLUS 1 Code', monospace";
+        ctx2d.fillText(`FINAL SCORE: ${ctxGame.score}`, CANVAS_WIDTH / 2, 240);
+        ctx2d.fillText(`TOTAL DIST : ${Math.floor(ctxGame.camZ / 10)}m`, CANVAS_WIDTH / 2, 270);
+
+        if (Math.floor(Date.now() / 400) % 2 === 0) {
+            ctx2d.fillStyle = '#00ffcc';
+            ctx2d.fillText("PRESS [ENTER] TO RESTART", CANVAS_WIDTH / 2, 360);
+        }
+    }
+}
+
+// ==========================================
+// 8. Event Bindings & Main Loop Initialization
+// ==========================================
+const engine = new SFAEngine(
+    SFA_DEFINITIONS, 
+    "FE_TITLE", 
+    context, 
+    guards, 
+    actions, 
+    (state, ctxGame) => render(state, ctx, ctxGame)
+);
+
+const activeKeys = {};
+
+document.addEventListener("keydown", (e) => {
+    activeKeys[e.key] = true;
+    
+    if (e.key === "Enter")     engine.transition("START");
+    if (e.key === "ArrowUp")   engine.transition("SHIFT_UP");
+    if (e.key === "ArrowDown") engine.transition("SHIFT_DOWN");
+    if (e.key === "Escape")    engine.transition("ESCAPE"); 
+});
+
+document.addEventListener("keyup", (e) => {
+    activeKeys[e.key] = false;
+});
+
+function loop() {
+    if (activeKeys["ArrowLeft"])  engine.transition("STEER_LEFT");
+    if (activeKeys["ArrowRight"]) engine.transition("STEER_RIGHT");
+
+    engine.transition("TICK");
+
+    requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>
