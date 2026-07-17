@@ -5,7 +5,8 @@
 > **"Resolve all control, asynchronous complexity, and user interactions solely through 'State Transition Rules'."**  
 > A software design philosophy that completely eliminates implicit state-control flags and if/else spaghetti from your application logic.
 
-👉 [日本語のREADMEはこちら (Japanese README)](./README.ja.md)
+👉 [日本語のREADMEはこちら (Japanese README)](./README.ja.md)  
+🎮 [**Live Demo: Play SFA Tetris in Your Browser!**](https://naisy.github.io/state-first-architecture/demo/)
 
 ---
 
@@ -43,6 +44,10 @@ Game development is one of the most challenging fields for state and async manag
 
 ## 🚀 How to Run the Demo
 
+### 🌐 Play Online (No Installation Required)
+👉 [**naisy.github.io/state-first-architecture/demo/**](https://naisy.github.io/state-first-architecture/demo/)
+
+### 💻 Run Locally
 1. Clone or download this repository.
 2. Open `demo/index.html` directly in any web browser (no build steps, Node.js, or external libraries required!).
 
