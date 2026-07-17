@@ -10,7 +10,7 @@
             background-color: #1a1a1a;
             color: #00ff00;
             /* 読み込んだ日本語等幅フォントを最優先で適用 */
-            font-family: 'M PLUS 1 Code', 'Osaka-mono', monospace;
+            font-family: 'M PLUS 1 Code', monospace;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -24,12 +24,28 @@
             padding: 10px;
             background-color: #000;
         }
+        /* CSS Grid を使い、1文字1マスを物理的に強制固定するスタイル */
         #board {
-            font-size: 20px;
-            line-height: 1.1;
+            display: grid;
+            /* 横：左壁1 + 盤面10 + 右壁1 = 12列。各22pxに固定 */
+            grid-template-columns: repeat(12, 22px);
+            /* 縦：20行。各22pxに固定 */
+            grid-template-rows: repeat(20, 22px);
+            gap: 0;
+            width: 264px;  /* 12列 * 22px */
+            height: 440px; /* 20行 * 22px */
             margin: 0;
-            /* 文字と文字の隙間（カーニング）をゼロにしてズレを完全防止 */
-            letter-spacing: 0px;
+            font-size: 18px;
+            line-height: 22px;
+            text-align: center;
+        }
+        /* 各文字をマスの中心に完全にロックする */
+        #board span {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
         }
         #overlay {
             position: absolute;
@@ -53,7 +69,8 @@
 <body>
 
     <div id="game-container">
-        <pre id="board"></pre>
+        <!-- 修正：preタグから、CSS Grid用のdivタグに変更 -->
+        <div id="board"></div>
         <div id="overlay"></div>
     </div>
     
@@ -477,7 +494,7 @@ class SFAEngine {
 }
 
 // ==========================================
-// 6. UIレンダラー (美しい日本語フルブロック・等幅Webフォント仕様)
+// 6. UIレンダラー (CSS Grid による 100% 物理固定仕様)
 // ==========================================
 function render(state, ctx) {
   const displayBoard = ctx.board.map(row => [...row]);
@@ -493,20 +510,21 @@ function render(state, ctx) {
     }
   }
 
-  // 100%等幅が保証されたフォント「M PLUS 1 Code」により、
-  // 全角文字の「■」「□」「・」「｜」がどのOSでも完璧に整列します。
+  // 修正：すべての文字を<span>タグで囲み、CSS Gridの1セル（22px * 22px）に閉じ込めます。
+  // これにより、文字幅のコンマ数ピクセルの誤差が一切影響しなくなります。
   let boardHtml = "";
   for (let r = 0; r < 20; r++) {
-    boardHtml += "｜"; 
+    boardHtml += "<span>｜</span>"; 
     for (let c = 0; c < 10; c++) {
-      if (displayBoard[r][c] === 1) boardHtml += "■";      // 固定ブロック
-      else if (displayBoard[r][c] === 2) boardHtml += "□"; // 操作中ブロック
-      else boardHtml += "・";                               // 空きマス
+      if (displayBoard[r][c] === 1) boardHtml += "<span>■</span>";      // 固定ブロック
+      else if (displayBoard[r][c] === 2) boardHtml += "<span>□</span>"; // 操作中ブロック
+      else boardHtml += "<span>・</span>";                               // 空きマス
     }
-    boardHtml += "｜\n"; 
+    boardHtml += "<span>｜</span>"; 
   }
 
-  document.getElementById("board").textContent = boardHtml;
+  // 修正：innerHTML で流し込みます
+  document.getElementById("board").innerHTML = boardHtml;
   document.getElementById("state").textContent = `State: ${state}`;
   document.getElementById("score").textContent = `Score: ${ctx.score}`;
 
