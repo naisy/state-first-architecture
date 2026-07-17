@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SFA Rogue - Hack & Slash Edition</title>
+    <!-- Import Japanese monospace font officially hosted by Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0d0d13;
+            color: #ced4da;
+            font-family: 'M PLUS 1 Code', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            transition: background-color 0.8s ease; /* 時間変化の背景色グラデーション用 */
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #3b3b4f;
+            padding: 12px;
+            background-color: #050508;
+            box-shadow: 0 0 25px rgba(0,0,0,0.8);
+        }
+        /* Lock 1 character per cell using CSS Grid (15x15 Map) */
+        #board {
+            display: grid;
+            grid-template-columns: repeat(15, 24px);
+            grid-template-rows: repeat(15, 24px);
+            gap: 0;
+            width: 360px;  
+            height: 360px; 
+            margin: 0;
+            font-size: 20px;
+            line-height: 24px;
+            text-align: center;
+        }
+        #board span {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+        }
+        /* Character specific styling for authentic terminal look */
+        .wall { color: #5a5a7a; }
+        .floor { color: #2e2e3e; }
+        .town-floor { color: #3b4f3b; }
+        .player { color: #ffff00; font-weight: bold; text-shadow: 0 0 8px #ffff00aa; }
+        .enemy { color: #ff3333; font-weight: bold; }
+        .boss { color: #ff00ff; font-weight: bold; text-shadow: 0 0 10px #ff00ff; }
+        .item { color: #33ff33; font-weight: bold; }
+        .tile-inn { color: #ff9933; font-weight: bold; }
+        .tile-shop { color: #3399ff; font-weight: bold; }
+        .tile-bar { color: #cc66ff; font-weight: bold; }
+        .tile-stairs { color: #ffffff; font-weight: bold; underline: true; }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(5,5,8,0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        #hud-top {
+            width: 360px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #ff00ff;
+            margin-bottom: 4px;
+        }
+        #hud {
+            width: 360px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #00ffcc;
+            border-bottom: 1px solid #3b3b4f;
+            padding-bottom: 6px;
+        }
+        #log-window {
+            margin-top: 8px;
+            width: 360px;
+            height: 72px;
+            font-size: 11px;
+            color: #a5a5b5;
+            line-height: 1.4;
+            overflow: hidden;
+        }
+        .new-log { color: #ffffff; }
+        
+        /* Menu internal styles */
+        .menu-title { color: #00ffcc; font-size: 18px; margin-bottom: 15px; font-weight: bold; }
+        .menu-item { font-size: 13px; margin: 6px 0; width: 100%; text-align: left; padding-left: 40px; box-sizing: border-box;}
+        .selected { color: #ffff00; font-weight: bold; }
+        .selected::before { content: "> "; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="board"></div>
+        <div id="overlay"></div>
+    </div>
+    
+    <div>
+        <div id="hud-top">
+            <span id="location">LOCATION: Town</span>
+            <span id="timephase">TIME: Morning</span>
+        </div>
+        <div id="hud">
+            <span id="hp">HP: 100/100</span>
+            <span id="gold">GOLD: 50g</span>
+            <span id="player-lvl">LV: 1 (0/20)</span>
+        </div>
+        <div id="log-window"></div>
+        <p style="font-size: 11px; color: #666; text-align: center; margin-top: 10px;">
+            [Enter]: Select / Action | [Esc]: Title / Exit Menu <br>
+            [←/→/↑/↓]: Move & Attack | [Space]: Pass 1 Turn
+        </p>
+    </div>
+
+<script>
+// ==========================================
+// 1. SFA 状態遷移定義 (SFA-SSOT: 信頼できる唯一の情報源)
+// ==========================================
+const SFA_DEFINITIONS = {
+  FE_TITLE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "START", action: "init_game_data", target_state: "FE_GENERATE_MAP" }
+    ]
+  },
+  FE_GENERATE_MAP: {
+    role: "frontend",
+    on_enter: "execute_map_generation", 
+    next_transitions: [
+      { event: "AUTO", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_PLAYER_TURN: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "MOVE_UP",    action: "player_move_up",    target_state: "FE_RESOLVE_PLAYER" },
+      { event: "MOVE_DOWN",  action: "player_move_down",  target_state: "FE_RESOLVE_PLAYER" },
+      { event: "MOVE_LEFT",  action: "player_move_left",  target_state: "FE_RESOLVE_PLAYER" },
+      { event: "MOVE_RIGHT", action: "player_move_right", target_state: "FE_RESOLVE_PLAYER" },
+      { event: "PASS",       action: "player_pass_turn",  target_state: "FE_RESOLVE_PLAYER" },
+
+      // 環境要素へのインタラクション遷移（特定のタイルの上でのみ発火可能）
+      { event: "INTERACT", guard: "is_on_stairs",    action: "trigger_stairs",    target_state: "FE_GENERATE_MAP" },
+      { event: "INTERACT", guard: "is_on_shop_tile", action: "generate_shop_stock", target_state: "FE_SHOP_MENU" },
+      { event: "INTERACT", guard: "is_on_inn_tile",  target_state: "FE_INN_MENU" },
+      { event: "INTERACT", guard: "is_on_bar_tile",  action: "gather_bar_rumor",  target_state: "FE_BAR_MENU" }
+    ]
+  },
+  FE_RESOLVE_PLAYER: {
+    role: "frontend",
+    next_transitions: [
+      { event: "AUTO", target_state: "FE_ENEMY_TURN" }
+    ]
+  },
+  FE_ENEMY_TURN: {
+    role: "frontend",
+    next_transitions: [
+      { event: "AUTO", guard: "should_enemies_act", action: "execute_enemy_ai", target_state: "FE_TURN_END" },
+      { event: "AUTO", guard: "should_enemies_sleep", target_state: "FE_TURN_END" }
+    ]
+  },
+  FE_TURN_END: {
+    role: "frontend",
+    next_transitions: [
+      { event: "AUTO", guard: "is_player_dead", target_state: "FE_GAMEOVER" },
+      { event: "AUTO", guard: "is_player_won",  target_state: "FE_VICTORY" },
+      { event: "AUTO", guard: "is_player_alive", action: "process_turn_lifecycle", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  // --- 施設メニュー状態群 ---
+  FE_SHOP_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP",   action: "shop_cursor_up",   target_state: "FE_SHOP_MENU" },
+      { event: "MENU_DOWN", action: "shop_cursor_down", target_state: "FE_SHOP_MENU" },
+      { event: "SELECT",    guard: "can_afford_shop_item", action: "execute_buy", target_state: "FE_SHOP_MENU" },
+      { event: "ESCAPE",    target_state: "FE_PLAYER_TURN" } // 操作不能ロックを完全に分離
+    ]
+  },
+  FE_INN_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "SELECT", guard: "can_afford_inn", action: "execute_inn_rest", target_state: "FE_PLAYER_TURN" },
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_BAR_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" },
+      { event: "SELECT", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_GAMEOVER: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START", action: "init_game_data", target_state: "FE_GENERATE_MAP" }
+    ]
+  },
+  FE_VICTORY: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START", action: "init_game_data", target_state: "FE_GENERATE_MAP" }
+    ]
+  }
+};
+
+// ==========================================
+// 2. ゲームコンテキスト (状態データ構造)
+// ==========================================
+const context = {
+  currentMapType: "town", 
+  depth: 0,               
+  timePhase: 0,           // 0:Morning, 1:Noon, 2:Evening, 3:Night, 4:Midnight, 5:Dawn
+  turnCount: 0,           
+  grid: Array(15).fill(null).map(() => Array(15).fill(1)), 
+  tiles: {},              // 特別マスマップ {"x,y": "shop"など}
+  player: {
+    x: 0, y: 0, hp: 100, maxHp: 100, hunger: 100, gold: 60,
+    level: 1, exp: 0, nextExp: 20,
+    weapon: { name: "Rusty Sword", atk: 4, rank: "E" },
+    armor: { name: "Ragged Cloth", def: 1, rank: "E" }
+  },
+  enemies: [],            
+  items: [],              
+  shopInventory: [],      
+  shopSelectedIndex: 0,   
+  barMessage: "",         
+  logs: [],
+  bossKilled: false
+};
+
+const TIME_NAMES = ["Morning", "Noon", "Evening", "Night", "Midnight", "Dawn"];
+const TIME_BG_COLORS = ["#121226", "#1a2634", "#2c1a12", "#070714", "#03030a", "#10101c"];
+
+function addLog(ctx, msg) {
+  ctx.logs.push(msg);
+  if (ctx.logs.length > 4) ctx.logs.shift();
+}
+
+function getEmptyFloorPos(ctx) {
+  while (true) {
+    const x = Math.floor(Math.random() * 13) + 1;
+    const y = Math.floor(Math.random() * 13) + 1;
+    if (ctx.grid[y][x] === 0) {
+      if (ctx.player.x === x && ctx.player.y === y) continue;
+      if (ctx.enemies.some(e => e.x === x && e.y === y)) continue;
+      if (ctx.items.some(i => i.x === x && i.y === y)) continue;
+      if (ctx.grid[y][x] in ctx.tiles) continue;
+      return { x, y };
+    }
+  }
+}
+
+// ハクスラ用：武器・防具のランダム生成エンジン
+function generateRandomEquipment(depth, type) {
+  const prefixes = ["Bronze", "Iron", "Steel", "Chitin", "Mithril", "Demonic"];
+  const ranks = ["E", "D", "C", "B", "A", "S"];
+  
+  // 階層(depth)をベースにランダムな揺らぎを与える
+  const roll = Math.min(5, Math.max(0, Math.floor(depth - 1 + Math.random() * 2)));
+  const prefix = prefixes[roll];
+  const rank = ranks[roll];
+  
+  const bonus = Math.floor(Math.random() * (depth + 1));
+  const name = `${prefix} ${type === 'weapon' ? 'Sword' : 'Shield'} +${bonus}`;
+  const power = (roll + 1) * 4 + bonus * 2;
+  const value = (roll + 1) * 25 + bonus * 10;
+
+  return type === 'weapon' 
+    ? { name, type, atk: power, rank, value } 
+    : { name, type, def: power, rank, value };
+}
+
+// ==========================================
+// 3. ガード（判定純粋関数群）
+// ==========================================
+const guards = {
+  is_player_dead:    (ctx) => ctx.player.hp <= 0,
+  is_player_won:     (ctx) => ctx.bossKilled && ctx.depth === 0, // ボスを倒して町に無事帰還
+  is_player_alive:   (ctx) => ctx.player.hp > 0 && !(ctx.bossKilled && ctx.depth === 0),
+  
+  is_on_stairs:      (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs",
+  is_on_shop_tile:   (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "shop",
+  is_on_inn_tile:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "inn",
+  is_on_bar_tile:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "bar",
+
+  should_enemies_act: (ctx) => {
+    // ダンジョン内、または夜間(Phase 3,4,5)の町なら敵が行動
+    return ctx.currentMapType === "dungeon" || (ctx.currentMapType === "town" && ctx.timePhase >= 3);
+  },
+  should_enemies_sleep: (ctx) => {
+    return ctx.currentMapType === "town" && ctx.timePhase < 3;
+  },
+
+  can_afford_shop_item: (ctx) => {
+    const item = ctx.shopInventory[ctx.shopSelectedIndex];
+    return item && ctx.player.gold >= item.value;
+  },
+  can_afford_inn: (ctx) => ctx.player.gold >= 20
+};
+
+// ==========================================
+// 4. アクション（副作用・データ書き換え関数群）
+// ==========================================
+const actions = {
+  init_game_data: (ctx) => {
+    ctx.player = {
+      x: 7, y: 12, hp: 100, maxHp: 100, hunger: 100, gold: 60,
+      level: 1, exp: 0, nextExp: 20,
+      weapon: { name: "Rusty Sword", atk: 4, rank: "E" },
+      armor: { name: "Ragged Cloth", def: 1, rank: "E" }
+    };
+    ctx.currentMapType = "town";
+    ctx.depth = 0;
+    ctx.timePhase = 0;
+    ctx.turnCount = 0;
+    ctx.bossKilled = false;
+    ctx.logs = [];
+    addLog(ctx, "Welcome to SFA Freeway Sequel: SFA Rogue!");
+  },
+
+  execute_map_generation: (ctx) => {
+    ctx.grid = Array(15).fill(null).map(() => Array(15).fill(0));
+    ctx.tiles = {};
+    ctx.enemies = [];
+    ctx.items = [];
+
+    // 外周を壁にする
+    for(let i=0; i<15; i++) {
+        ctx.grid[0][i] = 1; ctx.grid[14][i] = 1;
+        ctx.grid[i][0] = 1; ctx.grid[i][14] = 1;
+    }
+
+    if (ctx.currentMapType === "town") {
+        // --- 町のマップ構成 ---
+        ctx.player.x = 7; ctx.player.y = 12;
+        // 各種施設タイルの設置
+        ctx.tiles["3,3"] = "inn";    ctx.grid[3][3] = 0;
+        ctx.tiles["11,3"] = "shop";  ctx.grid[3][11] = 0;
+        ctx.tiles["3,11"] = "bar";   ctx.grid[11][3] = 0;
+        ctx.tiles["11,11"] = "stairs"; ctx.grid[11][11] = 0; // ダンジョンへの階段
+
+        // 飾り用の内壁（町並み）
+        for(let x=5; x<=9; x++) ctx.grid[6][x] = 1;
+
+        // 夜間の場合は町にも徘徊ゾンビをスポーン
+        if (ctx.timePhase >= 3) {
+            for(let i=0; i<3; i++) {
+                const pos = getEmptyFloorPos(ctx);
+                ctx.enemies.push({ id: i, name: "Town Ghoul", x: pos.x, y: pos.y, hp: 15, maxHp: 15, atk: 5, exp: 4 });
+            }
+            addLog(ctx, "Be careful. Ghouls roam the town at night!");
+        }
+    } else {
+        // --- ダンジョンのマップ構成 ---
+        ctx.player.x = 2; ctx.player.y = 2;
+        // ランダムに内壁を配置
+        for (let r = 1; r < 14; r++) {
+            for (let c = 1; c < 14; c++) {
+                if ((r !== 2 || c !== 2) && Math.random() < 0.18) {
+                    ctx.grid[r][c] = 1;
+                }
+            }
+        }
+        // 下層（または街へ戻る）階段の設置
+        ctx.tiles["12,12"] = "stairs"; ctx.grid[12][12] = 0;
+
+        if (ctx.depth === 5) {
+            // 最深階：ボスフロア
+            ctx.enemies.push({ 
+                id: 999, name: "SFA OVERLORD [BOSS]", 
+                x: 8, y: 8, hp: 120, maxHp: 120, atk: 15, exp: 100, isBoss: true 
+            });
+            ctx.grid[8][8] = 0;
+            addLog(ctx, "Alert: The Overlord resides on this floor!");
+        } else {
+            // 通常階層：深さに応じてスケールされた敵のスポーン
+            const enemyCount = 2 + ctx.depth;
+            for(let i=0; i<enemyCount; i++) {
+                const pos = getEmptyFloorPos(ctx);
+                const hpBoost = ctx.depth * 8;
+                const atkBoost = ctx.depth * 2;
+                ctx.enemies.push({ 
+                    id: i, name: `Dungeon Fiend Lvl.${ctx.depth}`, 
+                    x: pos.x, y: pos.y, hp: 20 + hpBoost, maxHp: 20 + hpBoost, atk: 4 + atkBoost, exp: 5 * ctx.depth 
+                });
+            }
+            // ハクスラ戦利品のランダムドロップ配置
+            for(let i=0; i<2; i++) {
+                const pos = getEmptyFloorPos(ctx);
+                const isPotion = Math.random() > 0.5;
+                if (isPotion) {
+                    ctx.items.push({ x: pos.x, y: pos.y, name: "Ration Potion", type: "potion" });
+                } else {
+                    const eqType = Math.random() > 0.5 ? 'weapon' : 'armor';
+                    const eq = generateRandomEquipment(ctx.depth, eqType);
+                    ctx.items.push({ x: pos.x, y: pos.y, ...eq });
+                }
+            }
+        }
+    }
+  },
+
+  trigger_stairs: (ctx) => {
+    if (ctx.currentMapType === "town") {
+        ctx.currentMapType = "dungeon";
+        ctx.depth = 1;
+        addLog(ctx, "You entered the dark Underworld...");
+    } else {
+        if (ctx.depth === 5 || ctx.bossKilled) {
+            ctx.currentMapType = "town";
+            ctx.depth = 0;
+            addLog(ctx, "You escaped back to the safety of the town!");
+        } else {
+            ctx.depth++;
+            addLog(ctx, `Descended deeper into Floor B${ctx.depth}.`);
+        }
+    }
+  },
+
+  increment_depth: (ctx) => { /* 遷移定義側の補完用 */ },
+
+  player_move_up:    (ctx) => { resolvePlayerMovement(ctx,  0, -1); },
+  player_move_down:  (ctx) => { resolvePlayerMovement(ctx,  0,  1); },
+  player_move_left:  (ctx) => { resolvePlayerMovement(ctx, -1,  0); },
+  player_move_right: (ctx) => { resolvePlayerMovement(ctx,  1,  0); },
+  player_pass_turn:  (ctx) => { addLog(ctx, "You wait and brace yourself."); },
+
+  execute_enemy_ai: (ctx) => {
+    ctx.enemies.forEach(enemy => {
+        const dx = Math.sign(ctx.player.x - enemy.x);
+        const dy = Math.sign(ctx.player.y - enemy.y);
+        const isAdjacent = Math.abs(ctx.player.x - enemy.x) + Math.abs(ctx.player.y - enemy.y) === 1;
+
+        if (isAdjacent) {
+            // プレイヤーへの攻撃（防御力補正のハクスラ計算）
+            const rawDmg = enemy.atk;
+            const finalDmg = Math.max(1, rawDmg - ctx.player.armor.def);
+            ctx.player.hp = Math.max(0, ctx.player.hp - finalDmg);
+            addLog(ctx, `${enemy.name} strikes you for ${finalDmg} damage!`);
+        } else {
+            // プレイヤーへの単純な追従アプローチ
+            let nx = enemy.x + dx;
+            let ny = enemy.y;
+            if (ctx.grid[ny][nx] === 1 || ctx.enemies.some(e => e.x === nx && e.y === ny)) {
+                nx = enemy.x; ny = enemy.y + dy;
+            }
+            if (ctx.grid[ny][nx] === 0 && !(ctx.player.x === nx && ctx.player.y === ny) && !ctx.enemies.some(e => e.x === nx && e.y === ny)) {
+                enemy.x = nx; enemy.y = ny;
+            }
+        }
+    });
+  },
+
+  process_turn_lifecycle: (ctx) => {
+    ctx.turnCount++;
+    // 12ターン毎に朝・昼・夕・夜がシフト変化する
+    if (ctx.turnCount % 12 === 0) {
+        ctx.timePhase = (ctx.timePhase + 1) % 6;
+        addLog(ctx, `The environment shifts into [${TIME_NAMES[ctx.timePhase]}].`);
+        
+        // 夜になった瞬間、もし町にいたらゾンビを急襲スポーンさせるためのマップ動的再構築
+        if (ctx.currentMapType === "town" && ctx.timePhase === 3) {
+            for(let i=0; i<3; i++) {
+                const pos = getEmptyFloorPos(ctx);
+                ctx.enemies.push({ id: i, name: "Town Ghoul", x: pos.x, y: pos.y, hp: 15, maxHp: 15, atk: 5, exp: 4 });
+            }
+            addLog(ctx, "Night falls. Dark entities manifest around town!");
+        }
+    }
+
+    // 空腹度(Hunger)のスリップダメージ処理
+    ctx.player.hunger = Math.max(0, ctx.player.hunger - 1);
+    if (ctx.player.hunger === 0) {
+        ctx.player.hp = Math.max(0, ctx.player.hp - 5);
+        addLog(ctx, "You are starving to death! HP decreased.");
+    }
+  },
+
+  // --- ショップロジック群 ---
+  generate_shop_stock: (ctx) => {
+    ctx.shopSelectedIndex = 0;
+    // プレイヤーのレベルに基づき、ランダム補正をかけた商品カタログの生成
+    ctx.shopInventory = [
+        { name: "Sustenance Potion", type: "potion", value: 15 },
+        generateRandomEquipment(ctx.player.level, "weapon"),
+        generateRandomEquipment(ctx.player.level, "armor")
+    ];
+  },
+  shop_cursor_up:   (ctx) => { ctx.shopSelectedIndex = Math.max(0, ctx.shopSelectedIndex - 1); },
+  shop_cursor_down: (ctx) => { ctx.shopSelectedIndex = Math.min(ctx.shopInventory.length - 1, ctx.shopSelectedIndex + 1); },
+  execute_buy: (ctx) => {
+    const item = ctx.shopInventory[ctx.shopSelectedIndex];
+    ctx.player.gold -= item.value;
+    if (item.type === "potion") {
+        ctx.player.hunger = Math.min(100, ctx.player.hunger + 50);
+        ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + 30);
+        addLog(ctx, "Bought and consumed Potion!");
+    } else if (item.type === "weapon") {
+        ctx.player.weapon = item;
+        addLog(ctx, `Equipped new weapon: ${item.name}!`);
+    } else if (item.type === "armor") {
+        ctx.player.armor = item;
+        addLog(ctx, `Equipped new armor: ${item.name}!`);
+    }
+    // 購入したスロットを「売り切れ」としてダミー化
+    ctx.shopInventory[ctx.shopSelectedIndex] = { name: "[ Sold Out ]", type: "none", value: 9999 };
+  },
+
+  // --- 宿屋・酒場ロジック ---
+  execute_inn_rest: (ctx) => {
+    ctx.player.gold -= 20;
+    ctx.player.hp = ctx.player.maxHp;
+    ctx.player.hunger = 100;
+    ctx.timePhase = 0; // 強制的に安全な「朝」に戻す
+    ctx.enemies = []; // 町の夜襲ゾンビを完全消去して安全確保
+    addLog(ctx, "You rested well at the Inn. Morning has come.");
+  },
+  gather_bar_rumor: (ctx) => {
+    if (!ctx.bossKilled) {
+        ctx.barMessage = `"Listen closely traveler. On the deepest B5 floor, the SFA Overlord hoards legendary randomized artifacts. Defeat him and return here to secure victory!"`;
+    } else {
+        ctx.barMessage = `"Unbelievable! You actually felled the Overlord! Quickly, step out into the town square to claim your absolute historical victory!"`;
+    }
+  }
+};
+
+// 移動及び戦闘の統合アトミックチェッカー
+function resolvePlayerMovement(ctx, dx, dy) {
+    const nx = ctx.player.x + dx;
+    const ny = ctx.player.y + dy;
+
+    // 1. 壁の衝突判定
+    if (ctx.grid[ny][nx] === 1) {
+        addLog(ctx, "Ouch! You hit a rigid stone structure.");
+        return;
+    }
+
+    // 2. 敵との接触（戦闘解決フェーズ）
+    const target = ctx.enemies.find(e => e.x === nx && e.y === ny);
+    if (target) {
+        const playerAtk = ctx.player.level * 2 + ctx.player.weapon.atk;
+        target.hp -= playerAtk;
+        addLog(ctx, `You slash ${target.name} for ${playerAtk} damage!`);
+        
+        if (target.hp <= 0) {
+            addLog(ctx, `Defeated ${target.name}! Gained +${target.exp} EXP.`);
+            ctx.player.gold += Math.floor(Math.random() * 10) + ctx.depth * 5;
+            ctx.player.exp += target.exp;
+            ctx.enemies = ctx.enemies.filter(e => e.id !== target.id);
+            
+            if (target.isBoss) {
+                ctx.bossKilled = true;
+                addLog(ctx, "The Overlord has fallen! Escape back to the Town!");
+            }
+            
+            // レベルアップの判定処理
+            if (ctx.player.exp >= ctx.player.nextExp) {
+                ctx.player.level++;
+                ctx.player.exp -= ctx.player.nextExp;
+                ctx.player.maxHp += 15;
+                ctx.player.hp = ctx.player.maxHp;
+                ctx.player.nextExp = ctx.player.level * 25;
+                addLog(ctx, `LEVEL UP! Reached Level ${ctx.player.level}!`);
+            }
+        }
+        return; 
+    }
+
+    // 3. 通常床の移動
+    ctx.player.x = nx;
+    ctx.player.y = ny;
+
+    // 4. ハクスラ戦利品床アイテムの回収
+    const itemIdx = ctx.items.findIndex(i => i.x === nx && i.y === ny);
+    if (itemIdx !== -1) {
+        const item = ctx.items[itemIdx];
+        if (item.type === "potion") {
+            ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + 20);
+            ctx.player.hunger = Math.min(100, ctx.player.hunger + 30);
+            addLog(ctx, `Found a Ration Potion! Recovered vitals.`);
+        } else if (item.type === "weapon") {
+            if (item.atk > ctx.player.weapon.atk) {
+                ctx.player.weapon = item;
+                addLog(ctx, `Looted & Auto-Equipped: ${item.name}! (ATK:${item.atk})`);
+            } else {
+                ctx.player.gold += Math.floor(item.value / 2);
+                addLog(ctx, `Found ${item.name}. Converted to ${Math.floor(item.value/2)} gold.`);
+            }
+        } else if (item.type === "armor") {
+            if (item.def > ctx.player.armor.def) {
+                ctx.player.armor = item;
+                addLog(ctx, `Looted & Auto-Equipped: ${item.name}! (DEF:${item.def})`);
+            } else {
+                ctx.player.gold += Math.floor(item.value / 2);
+                addLog(ctx, `Found ${item.name}. Converted to ${Math.floor(item.value/2)} gold.`);
+            }
+        }
+        ctx.items.splice(itemIdx, 1);
+    }
+}
+
+// ==========================================
+// 5. SFA ステートマシンエンジン
+// ==========================================
+class SFAEngine {
+  constructor(definitions, initialState, context, guards, actions, onTransitioned) {
+    this.definitions = definitions;
+    this.currentState = initialState;
+    this.context = context;
+    this.guards = guards;
+    this.actions = actions;
+    this.onTransitioned = onTransitioned;
+    this.onTransitioned(this.currentState, this.context);
+  }
+
+  async transition(event) {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const matchedTransitions = stateDef.next_transitions.filter(t => t.event === event);
+
+    for (const trans of matchedTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+
+        await this.handleAutoTransition();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async handleAutoTransition() {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const autoTransitions = stateDef.next_transitions.filter(t => t.event === "AUTO");
+
+    for (const trans of autoTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+        
+        await this.handleAutoTransition();
+        return; 
+      }
+    }
+  }
+}
+
+// ==========================================
+// 6. UI レンダラー (等幅グリッド ＆ モード別メニューオーバレイ描画)
+// ==========================================
+function render(state, ctxGame) {
+  // 時間帯に応じてブラウザ全体の背景色(グラデーション)を変え、夜の深さを情緒的に演出
+  document.body.style.backgroundColor = TIME_BG_COLORS[ctxGame.timePhase];
+
+  let boardHtml = "";
+  const isTown = ctxGame.currentMapType === "town";
+
+  for (let r = 0; r < 15; r++) {
+    for (let c = 0; c < 15; c++) {
+      // 1. ベースマスの決定
+      let symbol = ctxGame.grid[r][c] === 1 ? "＃" : "・";
+      let className = ctxGame.grid[r][c] === 1 ? "wall" : (isTown ? "town-floor" : "floor");
+
+      // 特別な環境施設の配置・マッピング
+      const tileKey = `${c},${r}`;
+      if (ctxGame.tiles[tileKey] === "inn")     { symbol = "Ｈ"; className = "tile-inn"; }
+      if (ctxGame.tiles[tileKey] === "shop")    { symbol = "Ｓ"; className = "tile-shop"; }
+      if (ctxGame.tiles[tileKey] === "bar")     { symbol = "Ｂ"; className = "tile-bar"; }
+      if (ctxGame.tiles[tileKey] === "stairs")  { symbol = "＞"; className = "tile-stairs"; }
+
+      // 2. 動的エンティティの上書き配置（ペインターレイヤー法）
+      const item = ctxGame.items.find(i => i.x === c && i.y === r);
+      if (item) {
+         symbol = item.type === "potion" ? "Ｐ" : (item.type === "weapon" ? "Ｗ" : "Ａ");
+         className = "item";
+      }
+
+      const enemy = ctxGame.enemies.find(e => e.x === c && e.y === r);
+      if (enemy) { 
+         symbol = enemy.isBoss ? "👹" : "Ｅ"; 
+         className = enemy.isBoss ? "boss" : "enemy"; 
+      }
+
+      if (ctxGame.player.x === c && ctxGame.player.y === r) {
+        symbol = "＠"; className = "player";
+      }
+
+      boardHtml += `<span class="${className}">${symbol}</span>`;
+    }
+  }
+  document.getElementById("board").innerHTML = boardHtml;
+  
+  // HUD文字列の更新
+  document.getElementById("location").textContent = isTown ? "LOCATION: Town square" : `LOCATION: Dungeon B${ctxGame.depth}F`;
+  document.getElementById("timephase").textContent = `TIME: ${TIME_NAMES[ctxGame.timePhase]} (Turn ${ctxGame.turnCount})`;
+  document.getElementById("hp").textContent = `HP: ${ctxGame.player.hp}/${ctxGame.player.maxHp} (Hng:${ctxGame.player.hunger})`;
+  document.getElementById("gold").textContent = `GOLD: ${ctxGame.player.gold}g`;
+  document.getElementById("player-lvl").textContent = `LV: ${ctxGame.player.level} (${ctxGame.player.exp}/${ctxGame.player.nextExp})`;
+
+  // ログウィンドウの更新
+  document.getElementById("log-window").innerHTML = ctxGame.logs
+    .map((log, idx) => `<div class="${idx === ctxGame.logs.length - 1 ? 'new-log' : ''}">> ${log}</div>`)
+    .join("");
+
+  // 3. メニューオーバレイ制御（状態に応じて画面を完全ロック・上書きUIを宣言的に構築）
+  const overlay = document.getElementById("overlay");
+  if (state === "FE_TITLE") {
+    overlay.style.display = "flex";
+    overlay.innerHTML = `<h1 style='color:#00ffcc; font-size:36px; margin:0;'>SFA FREEWAY II</h1><h2 style='color:#ff00ff; font-size:18px; margin:0 0 20px 0;'>- SFA ROGUE -</h2><p style='font-size:12px; color:#aaa; line-height:1.6;'>Weapon Hack & Slash / Day-Night Cycles<br>Engine Core Powered by SFA Architecture</p><p style='font-size:14px; color:#fff; margin-top:30px; animation: blink 1s infinite;'>Press [ENTER] to Venture</p>`;
+  } else if (state === "FE_SHOP_MENU") {
+    overlay.style.display = "flex";
+    let menuItemsHtml = ctxGame.shopInventory.map((item, idx) => {
+        return `<div class="menu-item ${idx === ctxGame.shopSelectedIndex ? 'selected' : ''}">${item.name} (${item.value}g)</div>`;
+    }).join("");
+    overlay.innerHTML = `<div class="menu-title">MERCHANT SHOP</div><div style='width:100%; margin-bottom:20px;'>${menuItemsHtml}</div><p style='font-size:10px; color:#888;'>[↑/↓]: Cursor | [Enter]: Purchase | [Esc]: Exit</p>`;
+  } else if (state === "FE_INN_MENU") {
+    overlay.style.display = "flex";
+    overlay.innerHTML = `<div class="menu-title">TOWN INN</div><p style='font-size:13px; margin-bottom:20px;'>Stay overnight for <span style='color:#ffff00;'>20 gold</span>?<br>(Fully restores HP/Hunger and resets to Morning)</p><div class="menu-item selected">Rest and Sleep</div><p style='font-size:10px; color:#888; margin-top:20px;'>[Enter]: Pay & Stay | [Esc]: Exit</p>`;
+  } else if (state === "FE_BAR_MENU") {
+    overlay.style.display = "flex";
+    overlay.innerHTML = `<div class="menu-title">TAVERN RUMORS</div><p style='font-size:12px; color:#e0e0f0; line-height:1.6; padding: 0 10px;'>${ctxGame.barMessage}</p><p style='font-size:11px; color:#ff00ff; margin-top:30px;'>[Esc/Enter]: Close Discussion</p>`;
+  } else if (state === "FE_GAMEOVER") {
+    overlay.style.display = "flex";
+    overlay.innerHTML = `<h1 style='color:#ff3333; font-size:32px;'>YOU PERISHED</h1><p style='font-size:12px; color:#aaa;'>The Abyss claimed your soul.</p><p style='font-size:14px; color:#00ffcc; margin-top:30px;'>Press [ENTER] to Retry</p>`;
+  } else if (state === "FE_VICTORY") {
+    overlay.style.display = "flex";
+    overlay.innerHTML = `<h1 style='color:#ffff00; font-size:32px; text-shadow:0 0 10px #ffff00;'>VICTORY CONCLUDED</h1><p style='font-size:13px; color:#33ff33;'>You successfully slayed the Overlord<br>and returned alive to the Town!</p><p style='font-size:14px; color:#00ffcc; margin-top:30px;'>Press [ESC] to Return to Main Title</p>`;
+  } else {
+    overlay.style.display = "none";
+  }
+}
+
+// ==========================================
+// 7. エントリポイント ＆ キーボードマッピング
+// ==========================================
+const engine = new SFAEngine(SFA_DEFINITIONS, "FE_TITLE", context, guards, actions, render);
+
+document.addEventListener("keydown", (e) => {
+  let sfaEvent = null;
+  const state = engine.currentState;
+
+  // 各種メニュー状態と通常ターン状態でのキーコンフィグ分離をエンジン経由で安全に紐付け
+  if (state === "FE_SHOP_MENU") {
+      if (e.key === "ArrowUp")    sfaEvent = "MENU_UP";
+      if (e.key === "ArrowDown")  sfaEvent = "MENU_DOWN";
+      if (e.key === "Enter")      sfaEvent = "SELECT";
+      if (e.key === "Escape")     sfaEvent = "ESCAPE";
+  } else if (state === "FE_INN_MENU" || state === "FE_BAR_MENU") {
+      if (e.key === "Enter")      sfaEvent = "SELECT";
+      if (e.key === "Escape")     sfaEvent = "ESCAPE";
+  } else {
+      // 通常歩行時
+      if (e.key === "ArrowUp")    sfaEvent = "MOVE_UP";
+      if (e.key === "ArrowDown")  sfaEvent = "MOVE_DOWN";
+      if (e.key === "ArrowLeft")  sfaEvent = "MOVE_LEFT";
+      if (e.key === "ArrowRight") sfaEvent = "MOVE_RIGHT";
+      if (e.key === " ")          sfaEvent = "PASS";
+      if (e.key === "Enter")      sfaEvent = "INTERACT"; // 施設マスの上で決定キーを押すと侵入
+      if (e.key === "Escape")     sfaEvent = "ESCAPE";
+  }
+
+  // タイトル等でのグローバルスタート
+  if (e.key === "Enter" && (state === "FE_TITLE" || state === "FE_GAMEOVER" || state === "FE_VICTORY")) {
+      sfaEvent = "START";
+  }
+  if (e.key === "Escape" && (state === "FE_GAMEOVER" || state === "FE_VICTORY")) {
+      sfaEvent = "ESCAPE";
+  }
+
+  if (sfaEvent) {
+    e.preventDefault(); 
+    engine.transition(sfaEvent);
+  }
+});
+</script>
+</body>
+</html>
