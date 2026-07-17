@@ -31,25 +31,23 @@
         .menu-container {
             display: flex;
             gap: 30px;
-            flex-wrap: wrap; /* ★4枚のネオンカードが画面幅に合わせて綺麗に収まるよう折り返しを許可 */
+            flex-wrap: wrap; 
             justify-content: center;
-            max-width: 1100px;
+            max-width: 1300px;
         }
+
+        /* --- 1. ベースとなるネオンカード共通デザイン --- */
         .menu-card {
-            border: 2px solid #00ffcc;
             background-color: #000;
             padding: 25px;
             width: 220px;
             text-align: center;
             text-decoration: none;
-            color: #00ffcc;
             transition: all 0.2s ease;
-            box-shadow: 0 0 10px #00ffcc22;
+            transform: translateY(0);
         }
         .menu-card:hover {
-            background-color: #00ffcc;
-            color: #000;
-            box-shadow: 0 0 20px #00ffcc88;
+            color: #000 !important;
             transform: translateY(-5px);
         }
         .menu-card h2 {
@@ -61,6 +59,62 @@
             line-height: 1.5;
             opacity: 0.8;
         }
+
+        /* --- 2. 拡張可能なカラーバリエーション・パイプライン --- */
+        /* Cyan (Default) */
+        .menu-card.theme-cyan {
+            border: 2px solid #00ffcc;
+            color: #00ffcc;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+        }
+        .menu-card.theme-cyan:hover {
+            background-color: #00ffcc;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.8);
+        }
+
+        /* Magenta */
+        .menu-card.theme-magenta {
+            border: 2px solid #ff00ff;
+            color: #ff00ff;
+            box-shadow: 0 0 10px rgba(255, 0, 255, 0.2);
+        }
+        .menu-card.theme-magenta:hover {
+            background-color: #ff00ff;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
+        }
+
+        /* Yellow */
+        .menu-card.theme-yellow {
+            border: 2px solid #ffff00;
+            color: #ffff00;
+            box-shadow: 0 0 10px rgba(255, 255, 0, 0.2);
+        }
+        .menu-card.theme-yellow:hover {
+            background-color: #ffff00;
+            box-shadow: 0 0 20px rgba(255, 255, 0, 0.8);
+        }
+
+        /* Green */
+        .menu-card.theme-green {
+            border: 2px solid #00ff66;
+            color: #00ff66;
+            box-shadow: 0 0 10px rgba(0, 255, 102, 0.2);
+        }
+        .menu-card.theme-green:hover {
+            background-color: #00ff66;
+            box-shadow: 0 0 20px rgba(0, 255, 102, 0.8);
+        }
+
+        /* Orange */
+        .menu-card.theme-orange {
+            border: 2px solid #ffaa00;
+            color: #ffaa00;
+            box-shadow: 0 0 10px rgba(255, 170, 0, 0.2);
+        }
+        .menu-card.theme-orange:hover {
+            background-color: #ffaa00;
+            box-shadow: 0 0 20px rgba(255, 170, 0, 0.8);
+        }
     </style>
 </head>
 <body>
@@ -68,31 +122,69 @@
     <h1>SFA GAME DEMOS</h1>
     <div class="subtitle">State-First Architecture Proof of Concepts</div>
 
-    <div class="menu-container">
-        <!-- Link to Tetris -->
-        <a href="sfa_tetris.html" class="menu-card">
-            <h2>SFA Tetris</h2>
-            <p>A pure JS Tetris demonstrating deterministic fallback SRS rules and input spams suppression.</p>
-        </a>
+    <!-- JavaScriptによって自動ビルドされるコンテナ領域 -->
+    <div id="menu-container" class="menu-container"></div>
 
-        <!-- Link to Freeway -->
-        <a href="sfa_freeway.html" class="menu-card">
-            <h2>SFA Freeway</h2>
-            <p>A 60fps pseudo-3D driving game managing realtime loops, crashes, and global state escapes.</p>
-        </a>
+<script>
+// ==========================================
+// 1. 信頼できる唯一の情報源 (ゲームメタデータ・レジストリ)
+// ==========================================
+const SFA_GAMES_REGISTRY = [
+    {
+        title: "SFA Tetris",
+        url: "sfa_tetris.html",
+        description: "A pure JS Tetris demonstrating deterministic fallback SRS rules and input spams suppression.",
+        theme: "theme-cyan"
+    },
+    {
+        title: "SFA Freeway",
+        url: "sfa_freeway.html",
+        description: "A 60fps pseudo-3D driving game managing realtime loops, crashes, and global state escapes.",
+        theme: "theme-green" // レースゲームっぽくグリーンにシフト
+    },
+    {
+        title: "SFA Rogue",
+        url: "sfa_rogue.html",
+        description: "A turn-based hack & slash RPG orchestrating multi-phase turn pipelines, isolated facility menu states, and dynamic environmental day-night cycles.",
+        theme: "theme-yellow" // クラシック端末風にイエローにシフト
+    },
+    {
+        title: "SFA Defense",
+        url: "sfa_defense.html",
+        description: "A 60Hz real-time strategy defense game demonstrating structural input separation during combat and multi-agent laser tracking pipelines.",
+        theme: "theme-cyan"
+    },
+    {
+        title: "SFA Bomber",
+        url: "sfa_bomber.html",
+        description: "A 60Hz arena action game featuring a 1-frame atomic chain reaction explosion pipeline and strict zombie-state elimination.",
+        theme: "theme-magenta"
+    }
+];
 
-        <!-- Link to Rogue -->
-        <a href="sfa_rogue.html" class="menu-card">
-            <h2>SFA Rogue</h2>
-            <p>A turn-based hack & slash RPG orchestrating multi-phase turn pipelines, isolated facility menu states, and dynamic environmental day-night cycles.</p>
-        </a>
+// ==========================================
+// 2. グリッドジェネレーターコア（決定論的DOMファクトリ）
+// ==========================================
+function generateGameGrid(gamesList) {
+    const container = document.getElementById("menu-container");
+    if (!container) return;
 
-        <!-- Link to Defense -->
-        <a href="sfa_defense.html" class="menu-card">
-            <h2>SFA Defense</h2>
-            <p>A 60Hz real-time strategy defense game demonstrating structural input separation during combat and multi-agent laser tracking pipelines.</p>
-        </a>
-    </div>
+    // 高速・安全にHTML文字列をマップ結合して流し込み
+    container.innerHTML = gamesList.map(game => {
+        // テーマ未指定時のフォールバック保護
+        const themeClass = game.theme || "theme-cyan"; 
+        
+        return `
+            <a href="${game.url}" class="menu-card ${themeClass}">
+                <h2>${game.title}</h2>
+                <p>${game.description}</p>
+            </a>
+        `.trim();
+    }).join("");
+}
 
-</body>
-</html>
+// DOM読み込み完了時に自動ビルドを実行
+document.addEventListener("DOMContentLoaded", () => {
+    generateGameGrid(SFA_GAMES_REGISTRY);
+});
+</script>

@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SFA Bomber - Neon Cascade Edition</title>
+    <!-- Google Fonts から等幅フォント「M PLUS 1 Code」をインポート -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0b0b16;
+            color: #ced4da;
+            font-family: 'M PLUS 1 Code', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #ff00ff;
+            box-shadow: 0 0 25px rgba(255, 0, 255, 0.3);
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+        #instructions {
+            margin-top: 15px;
+            width: 520px;
+            font-size: 13px;
+            color: #888;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .highlight {
+            color: #00ffcc;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="520" height="440"></canvas>
+    </div>
+    
+    <div id="instructions">
+        <span class="highlight">[Enter]</span>: Start Game / Restart <br>
+        <span class="highlight">[Space]</span>: Place Bomb (Max Bombs: 2 / Power: 2) <br>
+        <span class="highlight">[← / → / ↑ / ↓]</span>: Move Player (Atomic grid movement) <br>
+        <span class="highlight">[Esc]</span>: Safe Escape to Title Screen <br>
+        <p style="font-size: 11px; color: #555;">SFA Engine driving 1-frame atomic chain reaction explosion pipeline.</p>
+    </div>
+
+<script>
+// ==========================================
+// 1. SFA 状態遷移定義 (SFA-SSOT: 信頼できる唯一の情報源)
+// ==========================================
+const SFA_DEFINITIONS = {
+  FE_TITLE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "START", action: "reset_game_data", target_state: "FE_GENERATE_MAP" }
+    ]
+  },
+  FE_GENERATE_MAP: {
+    role: "frontend",
+    on_enter: "execute_map_generation",
+    next_transitions: [
+      { event: "AUTO", target_state: "FE_ROUND_PLAY" }
+    ]
+  },
+  FE_ROUND_PLAY: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "MOVE_UP",    guard: "can_move_up",    action: "player_up",    target_state: "FE_ROUND_PLAY" },
+      { event: "MOVE_DOWN",  guard: "can_move_down",  action: "player_down",  target_state: "FE_ROUND_PLAY" },
+      { event: "MOVE_LEFT",  guard: "can_move_left",  action: "player_left",  target_state: "FE_ROUND_PLAY" },
+      { event: "MOVE_RIGHT", guard: "can_move_right", action: "player_right", target_state: "FE_ROUND_PLAY" },
+      { event: "PLACE_BOMB", guard: "can_place_bomb",  action: "execute_place_bomb", target_state: "FE_ROUND_PLAY" },
+      
+      { event: "TICK", guard: "is_player_dead",    target_state: "FE_GAMEOVER" },
+      { event: "TICK", guard: "is_enemies_cleared", target_state: "FE_VICTORY" },
+      { event: "TICK", guard: "has_any_bomb_exploded", target_state: "FE_BOMB_DETONATION" },
+      { event: "TICK", action: "update_round_loop", target_state: "FE_ROUND_PLAY" }
+    ]
+  },
+  FE_BOMB_DETONATION: {
+    role: "frontend",
+    on_enter: "process_chain_explosion",
+    next_transitions: [
+      { event: "AUTO", target_state: "FE_ROUND_PLAY" }
+    ]
+  },
+  FE_GAMEOVER: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START", action: "reset_game_data", target_state: "FE_GENERATE_MAP" }
+    ]
+  },
+  FE_VICTORY: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START", action: "reset_game_data", target_state: "FE_GENERATE_MAP" }
+    ]
+  }
+};
+
+// ==========================================
+// 2. ゲームコンテキスト (13x11のレトロなアリーナ)
+// ==========================================
+const CELL_SIZE = 40;
+const COLS = 13;
+const ROWS = 11;
+
+const context = {
+  grid: [],      // 0: Empty, 1: Indestructible, 2: Destructible
+  bombs: [],     
+  flames: [],    
+  enemies: [],   
+  player: { x: 1, y: 1, lives: 1, maxBombs: 2, bombPower: 2 },
+  score: 0
+};
+
+function isWalkable(ctxData, x, y) {
+    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
+    if (ctxData.grid[y][x] !== 0) return false;
+    if (ctxData.bombs.some(b => b.x === x && b.y === y)) return false;
+    return true;
+}
+
+function checkFlamesCollision(ctxData) {
+    if (ctxData.flames.some(f => f.x === ctxData.player.x && f.y === ctxData.player.y)) {
+        ctxData.player.lives = 0;
+    }
+    ctxData.enemies.forEach(e => {
+        if (ctxData.flames.some(f => f.x === e.x && f.y === e.y)) {
+            e.isDead = true;
+            ctxData.score += 100;
+        }
+    });
+    ctxData.enemies = ctxData.enemies.filter(e => !e.isDead);
+}
+
+// ==========================================
+// 3. ガード（判定純粋関数群）
+// ==========================================
+const guards = {
+  is_player_dead:       (ctx) => ctx.player.lives <= 0,
+  is_enemies_cleared:   (ctx) => ctx.enemies.length === 0,
+  has_any_bomb_exploded:(ctx) => ctx.bombs.some(b => b.timer <= 0 || b.triggered),
+
+  can_move_up:    (ctx) => isWalkable(ctx, ctx.player.x, ctx.player.y - 1),
+  can_move_down:  (ctx) => isWalkable(ctx, ctx.player.x, ctx.player.y + 1),
+  can_move_left:  (ctx) => isWalkable(ctx, ctx.player.x - 1, ctx.player.y),
+  can_move_right: (ctx) => isWalkable(ctx, ctx.player.x + 1, ctx.player.y),
+
+  can_place_bomb: (ctx) => {
+    const activeBombsCount = ctx.bombs.length;
+    const hasBombAtFoot = ctx.bombs.some(b => b.x === ctx.player.x && b.y === ctx.player.y);
+    return activeBombsCount < ctx.player.maxBombs && !hasBombAtFoot;
+  }
+};
+
+// ==========================================
+// 4. アクション（副作用・データ変更関数群）
+// ==========================================
+const actions = {
+  reset_game_data: (ctx) => {
+    ctx.score = 0;
+    ctx.bombs = [];
+    ctx.flames = [];
+    ctx.enemies = [];
+    ctx.player = { x: 1, y: 1, lives: 1, maxBombs: 2, bombPower: 2 };
+  },
+
+  execute_map_generation: (ctx) => {
+    ctx.grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+    
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1) {
+                ctx.grid[r][c] = 1; 
+            } else if (r % 2 === 0 && c % 2 === 0) {
+                ctx.grid[r][c] = 1; 
+            } else {
+                if (Math.random() < 0.40) {
+                    ctx.grid[r][c] = 2;
+                }
+            }
+        }
+    }
+    ctx.grid[1][1] = 0;
+    ctx.grid[1][2] = 0;
+    ctx.grid[2][1] = 0;
+
+    ctx.enemies = [
+        { x: COLS - 2, y: ROWS - 2, moveTimer: 0 },
+        { x: COLS - 2, y: 2,        moveTimer: 20 }, 
+        { x: 2,        y: ROWS - 2, moveTimer: 10 }
+    ];
+  },
+
+  player_up:    (ctx) => { ctx.player.y--; },
+  player_down:  (ctx) => { ctx.player.y++; },
+  player_left:  (ctx) => { ctx.player.x--; },
+  player_right: (ctx) => { ctx.player.x++; },
+
+  execute_place_bomb: (ctx) => {
+    ctx.bombs.push({
+        x: ctx.player.x,
+        y: ctx.player.y,
+        timer: 150, 
+        power: ctx.player.bombPower,
+        triggered: false
+    });
+  },
+
+  process_chain_explosion: (ctx) => {
+    let activeBombs = ctx.bombs.filter(b => b.timer <= 0 || b.triggered);
+    let remainingBombs = ctx.bombs.filter(b => b.timer > 0 && !b.triggered);
+
+    while (activeBombs.length > 0) {
+        let nextWaveBombs = [];
+
+        activeBombs.forEach(bomb => {
+            ctx.flames.push({ x: bomb.x, y: bomb.y, timer: 30 }); 
+
+            const dirs = [{x:0, y:-1}, {x:0, y:1}, {x:-1, y:0}, {x:1, y:0}];
+            dirs.forEach(d => {
+                for (let i = 1; i <= bomb.power; i++) {
+                    const fx = bomb.x + d.x * i;
+                    const fy = bomb.y + d.y * i;
+
+                    if (fx < 0 || fx >= COLS || fy < 0 || fy >= ROWS) break;
+
+                    const tile = ctx.grid[fy][fx];
+                    if (tile === 1) break; 
+
+                    ctx.flames.push({ x: fx, y: fy, timer: 30 });
+
+                    if (tile === 2) {
+                        ctx.grid[fy][fx] = 0; 
+                        ctx.score += 20;
+                        break; 
+                    }
+
+                    let hitBomb = remainingBombs.find(b => b.x === fx && b.y === fy);
+                    if (hitBomb) {
+                        hitBomb.triggered = true;
+                        nextWaveBombs.push(hitBomb);
+                        remainingBombs = remainingBombs.filter(b => b !== hitBomb);
+                    }
+                }
+            });
+        });
+
+        activeBombs = nextWaveBombs;
+    }
+
+    ctx.bombs = remainingBombs;
+    checkFlamesCollision(ctx);
+  },
+
+  update_round_loop: (ctx) => {
+    ctx.bombs.forEach(b => b.timer--);
+
+    ctx.flames.forEach(f => f.timer--);
+    ctx.flames = ctx.flames.filter(f => f.timer > 0);
+
+    checkFlamesCollision(ctx);
+
+    ctx.enemies.forEach(e => {
+        e.moveTimer++;
+        if (e.moveTimer >= 40) {
+            e.moveTimer = 0;
+            const dirs = [{x:0, y:-1}, {x:0, y:1}, {x:-1, y:0}, {x:1, y:0}];
+            dirs.sort(() => Math.random() - 0.5);
+
+            for (let d of dirs) {
+                const nx = e.x + d.x;
+                const ny = e.y + d.y;
+                if (isWalkable(ctx, nx, ny)) {
+                    e.x = nx;
+                    e.y = ny;
+                    break; 
+                }
+            }
+        }
+    });
+
+    if (ctx.enemies.some(e => e.x === ctx.player.x && e.y === ctx.player.y)) {
+        ctx.player.lives = 0;
+    }
+  }
+};
+
+// ==========================================
+// 5. SFA ステートマシンエンジン
+// ==========================================
+class SFAEngine {
+  constructor(definitions, initialState, context, guards, actions, onTransitioned) {
+    this.definitions = definitions;
+    this.currentState = initialState;
+    this.context = context;
+    this.guards = guards;
+    this.actions = actions;
+    this.onTransitioned = onTransitioned;
+    this.onTransitioned(this.currentState, this.context);
+  }
+
+  transition(event) {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const matchedTransitions = stateDef.next_transitions.filter(t => t.event === event);
+
+    for (const trans of matchedTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+
+        this.handleAutoTransition();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  handleAutoTransition() {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const autoTransitions = stateDef.next_transitions.filter(t => t.event === "AUTO");
+
+    for (const trans of autoTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+        
+        this.handleAutoTransition();
+        return; 
+      }
+    }
+  }
+}
+
+// ==========================================
+// 6. UI Canvas レンダラー
+// ==========================================
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+function render(state, ctxGame) {
+    ctx.fillStyle = "#05050f";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const yOffset = 40;
+
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            const tx = c * CELL_SIZE;
+            const ty = r * CELL_SIZE + yOffset;
+            const tile = ctxGame.grid[r]?.[c];
+
+            if (tile === 1) {
+                ctx.fillStyle = "#1a1a3a";
+                ctx.fillRect(tx + 1, ty + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.strokeStyle = "#3d3d7d";
+                ctx.lineWidth = 1;
+                ctx.strokeRect(tx + 3, ty + 3, CELL_SIZE - 6, CELL_SIZE - 6);
+            } else if (tile === 2) {
+                ctx.fillStyle = "#4a004a";
+                ctx.fillRect(tx + 2, ty + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                ctx.strokeStyle = "#ff00ff";
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(tx + 4, ty + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+            } else {
+                ctx.fillStyle = "#0a0a14";
+                ctx.fillRect(tx, ty, CELL_SIZE, CELL_SIZE);
+            }
+        }
+    }
+
+    ctxGame.bombs.forEach(b => {
+        const bx = b.x * CELL_SIZE + CELL_SIZE / 2;
+        const by = b.y * CELL_SIZE + CELL_SIZE / 2 + yOffset;
+        const pulse = Math.floor(b.timer / 10) % 2 === 0;
+        ctx.fillStyle = pulse ? "#ff3333" : "#880000";
+        
+        ctx.beginPath();
+        ctx.arc(bx, by, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.strokeStyle = "#ffff00";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bx, by - 14);
+        ctx.lineTo(bx + 6, by - 20);
+        ctx.stroke();
+    });
+
+    ctx.fillStyle = "rgba(255, 100, 0, 0.8)";
+    ctx.strokeStyle = "#ffff00";
+    ctx.lineWidth = 2;
+    ctxGame.flames.forEach(f => {
+        const fx = f.x * CELL_SIZE;
+        const fy = f.y * CELL_SIZE + yOffset;
+        ctx.fillRect(fx + 2, fy + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+        ctx.strokeRect(fx + 4, fy + 4, CELL_SIZE - 8, CELL_SIZE - 8);
+    });
+
+    ctx.fillStyle = "#00ff66";
+    ctxGame.enemies.forEach(e => {
+        const ex = e.x * CELL_SIZE + CELL_SIZE / 2;
+        const ey = e.y * CELL_SIZE + CELL_SIZE / 2 + yOffset;
+        ctx.beginPath();
+        ctx.moveTo(ex, ey - 12);
+        ctx.lineTo(ex - 12, ey + 10);
+        ctx.lineTo(ex + 12, ey + 10);
+        ctx.closePath();
+        ctx.fill();
+    });
+
+    if (ctxGame.player.lives > 0) {
+        const px = ctxGame.player.x * CELL_SIZE + CELL_SIZE / 2;
+        const py = ctxGame.player.y * CELL_SIZE + CELL_SIZE / 2 + yOffset;
+        ctx.fillStyle = "#00ffff";
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#00ffff";
+        ctx.beginPath();
+        ctx.arc(px, py, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0; 
+    }
+
+    ctx.fillStyle = "#111122";
+    ctx.fillRect(0, 0, canvas.width, yOffset);
+    
+    ctx.fillStyle = "#00ffcc";
+    ctx.font = "bold 14px 'M PLUS 1 Code', monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(`SCORE: ${ctxGame.score}`, 15, 25);
+    ctx.fillText(`ACTIVE BOMBS: ${ctxGame.bombs.length}/${ctxGame.player.maxBombs}`, 160, 25);
+    
+    ctx.textAlign = "right";
+    ctx.fillText(`ENEMIES: ${ctxGame.enemies.length}`, canvas.width - 15, 25);
+
+    if (state === "FE_TITLE") {
+        ctx.fillStyle = "rgba(5, 5, 15, 0.95)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#ff00ff"; ctx.font = "bold 36px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText("SFA BOMBER", canvas.width / 2, 170);
+        
+        ctx.fillStyle = "#00ffff"; ctx.font = "13px 'M PLUS 1 Code', monospace";
+        ctx.fillText("DETERMINISTIC CASCADE ACTION", canvas.width / 2, 210);
+
+        if (Math.floor(Date.now() / 400) % 2 === 0) {
+            ctx.fillStyle = "#ffffff"; ctx.font = "16px 'M PLUS 1 Code', monospace";
+            ctx.fillText("PRESS [ENTER] TO FUSE", canvas.width / 2, 320);
+        }
+    } else if (state === "FE_GAMEOVER") {
+        ctx.fillStyle = "rgba(30, 0, 10, 0.85)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#ff3366"; ctx.font = "bold 40px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText("BLOWN AWAY", canvas.width / 2, 190);
+        
+        ctx.fillStyle = "#ffffff"; ctx.font = "16px 'M PLUS 1 Code', monospace";
+        ctx.fillText(`FINAL SCORE: ${ctxGame.score}`, canvas.width / 2, 240);
+        ctx.fillText("PRESS [ENTER] TO RETRY", canvas.width / 2, 340);
+    } else if (state === "FE_VICTORY") {
+        ctx.fillStyle = "rgba(0, 25, 15, 0.9)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#00ff66"; ctx.font = "bold 40px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText("ARENA CLEARED", canvas.width / 2, 190);
+        
+        ctx.fillStyle = "#ffff00"; ctx.font = "14px 'M PLUS 1 Code', monospace";
+        ctx.fillText("PERFECT CHAIN SOLUTION DETECTED", canvas.width / 2, 230);
+        
+        ctx.fillStyle = "#ffffff"; ctx.font = "16px 'M PLUS 1 Code', monospace";
+        ctx.fillText(`FINAL SCORE: ${ctxGame.score}`, canvas.width / 2, 270);
+        ctx.fillText("PRESS [ESC] FOR MAIN TITLE", canvas.width / 2, 360);
+    }
+}
+
+// ==========================================
+// 7. イベントハンドラ ＆ メインリアルタイムループ
+// ==========================================
+const ctxGame = context;
+const engine = new SFAEngine(SFA_DEFINITIONS, "FE_TITLE", ctxGame, guards, actions, (state, c) => render(state, c));
+
+document.addEventListener("keydown", (e) => {
+    let sfaEvent = null;
+    const state = engine.currentState;
+
+    if (state === "FE_ROUND_PLAY") {
+        if (e.key === "ArrowUp")    sfaEvent = "MOVE_UP";
+        if (e.key === "ArrowDown")  sfaEvent = "MOVE_DOWN";
+        if (e.key === "ArrowLeft")  sfaEvent = "MOVE_LEFT";
+        if (e.key === "ArrowRight") sfaEvent = "MOVE_RIGHT";
+        if (e.key === " ")          sfaEvent = "PLACE_BOMB";
+        if (e.key === "Escape")     sfaEvent = "ESCAPE";
+    } else {
+        if (e.key === "Enter")   sfaEvent = "START";
+        if (e.key === "Escape")  sfaEvent = "ESCAPE";
+    }
+
+    if (sfaEvent) {
+        e.preventDefault();
+        engine.transition(sfaEvent);
+    }
+});
+
+function loop() {
+    engine.transition("TICK");
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>
