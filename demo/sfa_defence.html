@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SFA Defense - Tactical Neon Edition</title>
+    <!-- Import monospace font -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #080810;
+            color: #ced4da;
+            font-family: 'M PLUS 1 Code', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #00ffcc;
+            box-shadow: 0 0 25px rgba(0, 255, 204, 0.3);
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+        #instructions {
+            margin-top: 15px;
+            width: 640px;
+            font-size: 13px;
+            color: #888;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .highlight {
+            color: #ff00ff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="640" height="480"></canvas>
+    </div>
+    
+    <div id="instructions">
+        <span class="highlight">[Enter]</span>: Start Game / Start Next Wave <br>
+        <span class="highlight">[Space]</span>: Build Tower (Cost: 100g) | <span class="highlight">[Esc]</span>: Return to Title Screen <br>
+        <span class="highlight">[← / → / ↑ / ↓]</span>: Move Grid Selection Cursor (Only during Prep Phase) <br>
+        <p style="font-size: 11px; color: #555;">SFA Engine driving 60Hz real-time multi-agent laser tracking defense pipeline.</p>
+    </div>
+
+<script>
+// ==========================================
+// 1. SFA 状態遷移定義 (SFA-SSOT: 信頼できる唯一の情報源)
+// ==========================================
+const SFA_DEFINITIONS = {
+  FE_TITLE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "START", action: "init_game_data", target_state: "FE_PREPARATION" }
+    ]
+  },
+  FE_PREPARATION: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "MOVE_UP",    action: "cursor_up",    target_state: "FE_PREPARATION" },
+      { event: "MOVE_DOWN",  action: "cursor_down",  target_state: "FE_PREPARATION" },
+      { event: "MOVE_LEFT",  action: "cursor_left",  target_state: "FE_PREPARATION" },
+      { event: "MOVE_RIGHT", action: "cursor_right", target_state: "FE_PREPARATION" },
+      { event: "BUILD",      guard: "can_build_tower", action: "execute_build", target_state: "FE_PREPARATION" },
+      { event: "START_WAVE", action: "spawn_wave_entities", target_state: "FE_COMBAT" }
+    ]
+  },
+  FE_COMBAT: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "TICK", guard: "is_player_dead",  target_state: "FE_GAMEOVER" },
+      { event: "TICK", guard: "is_wave_cleared", target_state: "FE_WAVE_END" },
+      { event: "TICK", action: "update_combat_loop", target_state: "FE_COMBAT" }
+      // 💡 堅牢性の証明：戦闘中（FE_COMBAT）は MOVE や BUILD 遷移が定義されていません。
+      // これにより、激しい戦闘中に操作ミスやキー連打があっても、配置不正バグを構造的に100%シャットアウトします。
+    ]
+  },
+  FE_WAVE_END: {
+    role: "frontend",
+    next_transitions: [
+      { event: "AUTO", guard: "is_all_waves_cleared", target_state: "FE_VICTORY" },
+      { event: "AUTO", guard: "has_more_waves",       action: "prepare_next_wave", target_state: "FE_PREPARATION" }
+    ]
+  },
+  FE_GAMEOVER: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START", action: "init_game_data", target_state: "FE_PREPARATION" }
+    ]
+  },
+  FE_VICTORY: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START", action: "init_game_data", target_state: "FE_PREPARATION" }
+    ]
+  }
+};
+
+// ==========================================
+// 2. ゲームコンテキスト (640x480 画面を 16x12 マスに分割)
+// ==========================================
+const CELL_SIZE = 40;
+const COLS = 16;
+const ROWS = 12;
+const CANVAS_WIDTH = 640;  // ★追加：不足していた定数を補填
+const CANVAS_HEIGHT = 480; // ★追加：不足していた定数を補填
+
+// 敵が進軍する固定ルートのチェックポイント（マス座標）
+const PATH_POINTS = [
+    { x: 0,  y: 3 },
+    { x: 5,  y: 3 },
+    { x: 5,  y: 9 },
+    { x: 11, y: 9 },
+    { x: 11, y: 1 },
+    { x: 15, y: 1 }
+];
+
+const context = {
+  gold: 250,
+  lives: 10,
+  wave: 1,
+  maxWaves: 5,
+  score: 0,
+  
+  cursor: { x: 7, y: 6 }, // 準備フェーズのタワー配置カーソル
+  towers: [],             // { x, y, range, atk, cooldown, maxCooldown }
+  enemies: [],            // { id, hp, maxHp, speed, goldReward, pathIndex, currentX, currentY }
+  lasers: [],             // 描画用のレーザー軌跡バッファ [{ fromX, fromY, toX, toY }]
+  
+  enemiesLeftToSpawn: 0,
+  spawnTimer: 0
+};
+
+// ==========================================
+// 3. ガード（判定純粋関数群）
+// ==========================================
+const guards = {
+  is_player_dead:       (ctx) => ctx.lives <= 0,
+  is_wave_cleared:      (ctx) => ctx.enemiesLeftToSpawn <= 0 && ctx.enemies.length === 0,
+  is_all_waves_cleared: (ctx) => ctx.wave > ctx.maxWaves,
+  has_more_waves:       (ctx) => ctx.wave <= ctx.maxWaves,
+  
+  can_build_tower: (ctx) => {
+    // 1. 所持金が足りているか？
+    if (ctx.gold < 100) return false;
+    // 2. 既にタワーがあるか？
+    if (ctx.towers.some(t => t.x === ctx.cursor.x && t.y === ctx.cursor.y)) return false;
+    // 3. 敵の「侵走路（パス）」の上ではないか？
+    if (isPositionOnPath(ctx.cursor.x, ctx.cursor.y)) return false;
+    return true;
+  }
+};
+
+// マス座標が敵の侵走路（線分）の上にあるかを網羅判定するヘルパー
+function isPositionOnPath(cx, cy) {
+    for (let i = 0; i < PATH_POINTS.length - 1; i++) {
+        const p1 = PATH_POINTS[i];
+        const p2 = PATH_POINTS[i+1];
+        const minX = Math.min(p1.x, p2.x);
+        const maxX = Math.max(p1.x, p2.x);
+        const minY = Math.min(p1.y, p2.y);
+        const maxY = Math.max(p1.y, p2.y);
+        
+        if (cx >= minX && cx <= maxX && cy >= minY && cy <= maxY) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// ==========================================
+// 4. アクション（副作用・データ変更関数群）
+// ==========================================
+const actions = {
+  init_game_data: (ctxData) => {
+    ctxGame.gold = 250;
+    ctxGame.lives = 10;
+    ctxGame.wave = 1;
+    ctxGame.score = 0;
+    ctxGame.towers = [];
+    ctxGame.enemies = [];
+    ctxGame.lasers = [];
+    ctxGame.cursor = { x: 7, y: 6 };
+  },
+  
+  cursor_up:    (ctxData) => { ctxData.cursor.y = Math.max(0, ctxData.cursor.y - 1); },
+  cursor_down:  (ctxData) => { ctxData.cursor.y = Math.min(ROWS - 1, ctxData.cursor.y + 1); },
+  cursor_left:  (ctxData) => { ctxData.cursor.x = Math.max(0, ctxData.cursor.x - 1); },
+  cursor_right: (ctxData) => { ctxData.cursor.x = Math.min(COLS - 1, ctxData.cursor.x + 1); },
+  
+  execute_build: (ctxData) => {
+    ctxData.gold -= 100;
+    ctxData.towers.push({
+        x: ctxData.cursor.x,
+        y: ctxData.cursor.y,
+        range: 120, // 射程半径（ピクセル換算）
+        atk: 5 + ctxData.wave, // ウェーブを重ねるとわずかに設計強化
+        cooldown: 0,
+        maxCooldown: 15 // 0.25秒に1回発射
+    });
+  },
+  
+  spawn_wave_entities: (ctxData) => {
+    ctxData.enemiesLeftToSpawn = 5 + ctxData.wave * 3; // 敵の数
+    ctxData.spawnTimer = 0;
+    ctxData.enemies = [];
+    ctxData.lasers = [];
+  },
+  
+  update_combat_loop: (ctxData) => {
+    ctxData.lasers = []; // レーザー残像を毎フレームリセット
+
+    // --- 1. 敵のスポーン処理 ---
+    ctxData.spawnTimer++;
+    if (ctxData.enemiesLeftToSpawn > 0 && ctxData.spawnTimer >= 45) {
+        ctxData.spawnTimer = 0;
+        ctxData.enemiesLeftToSpawn--;
+        
+        // ハクスラ要素：ウェーブ進行度に応じて敵の耐久力をインフレーション強化
+        const hpMultiplier = Math.pow(1.4, ctxData.wave - 1);
+        ctxData.enemies.push({
+            id: Date.now() + Math.random(),
+            hp: Math.round(20 * hpMultiplier),
+            maxHp: Math.round(20 * hpMultiplier),
+            speed: 1.2 + Math.random() * 0.5,
+            goldReward: 15,
+            pathIndex: 0, // 今どのチェックポイントに向かっているか
+            currentX: PATH_POINTS[0].x * CELL_SIZE + CELL_SIZE / 2,
+            currentY: PATH_POINTS[0].y * CELL_SIZE + CELL_SIZE / 2
+        });
+    }
+
+    // --- 2. 敵の進軍移動処理 ---
+    ctxData.enemies.forEach((enemy, index) => {
+        const targetPoint = PATH_POINTS[enemy.pathIndex + 1];
+        if (!targetPoint) return; // 終着点
+
+        const targetPx = targetPoint.x * CELL_SIZE + CELL_SIZE / 2;
+        const targetPy = targetPoint.y * CELL_SIZE + CELL_SIZE / 2;
+
+        const distX = targetPx - enemy.currentX;
+        const distY = targetPy - enemy.currentY;
+        const distance = Math.sqrt(distX * distX + distY * distY);
+
+        if (distance <= enemy.speed) {
+            // チェックポイントに到達 ➡️ 次のポイントへターゲット変更
+            enemy.pathIndex++;
+            if (enemy.pathIndex >= PATH_POINTS.length - 1) {
+                // 防衛ライン突破！拠点ダメージ
+                ctxData.lives--;
+                enemy.reachedBase = true;
+            }
+        } else {
+            // ベクトル方向へ前進
+            enemy.currentX += (distX / distance) * enemy.speed;
+            enemy.currentY += (distY / distance) * enemy.speed;
+        }
+    });
+
+    // 突破した敵を配列からクリーンアップ
+    ctxData.enemies = ctxData.enemies.filter(e => !e.reachedBase);
+
+    // --- 3. 防衛タワーの自動走査 ＆ レーザー迎撃処理 ---
+    ctxData.towers.forEach(tower => {
+        if (tower.cooldown > 0) {
+            tower.cooldown--;
+            return;
+        }
+
+        const tx = tower.x * CELL_SIZE + CELL_SIZE / 2;
+        const ty = tower.y * CELL_SIZE + CELL_SIZE / 2;
+
+        // 射程圏内にいる最も「防衛拠点に近い（pathIndexが進んでいる）」敵を最優先ターゲットにロック
+        let bestTarget = null;
+        let maxProgress = -1;
+
+        ctxData.enemies.forEach(enemy => {
+            const dx = enemy.currentX - tx;
+            const dy = enemy.currentY - ty;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist <= tower.range) {
+                // 進軍スコアが高い敵を優先
+                const progressScore = enemy.pathIndex * 1000 + enemy.currentX + enemy.currentY;
+                if (progressScore > maxProgress) {
+                    maxProgress = progressScore;
+                    bestTarget = enemy;
+                }
+            }
+        });
+
+        // 射撃実行
+        if (bestTarget) {
+            bestTarget.hp -= tower.atk;
+            tower.cooldown = tower.maxCooldown;
+            
+            // コンテキストにレーザーの描画開始・終了座標をバッファ記憶
+            ctxData.lasers.push({
+                fromX: tx, fromY: ty,
+                toX: bestTarget.currentX, toY: bestTarget.currentY
+            });
+        }
+    });
+
+    // --- 4. 敵の撃破・ゴールド・スコア解決 ---
+    ctxData.enemies.forEach(enemy => {
+        if (enemy.hp <= 0) {
+            ctxData.gold += enemy.goldReward;
+            ctxData.score += enemy.maxHp * 10;
+            enemy.isDead = true;
+        }
+    });
+    ctxData.enemies = ctxData.enemies.filter(e => !e.isDead);
+  },
+  
+  prepare_next_wave: (ctxData) => {
+    ctxData.wave++;
+    ctxData.gold += 100; // ウェーブクリア基本ボーナス
+  }
+};
+
+// ==========================================
+// 5. SFA ステートマシンエンジン (テトリス、Freewayと100%同一コア)
+// ==========================================
+class SFAEngine {
+  constructor(definitions, initialState, context, guards, actions, onTransitioned) {
+    this.definitions = definitions;
+    this.currentState = initialState;
+    this.context = context;
+    this.guards = guards;
+    this.actions = actions;
+    this.onTransitioned = onTransitioned;
+    this.onTransitioned(this.currentState, this.context);
+  }
+
+  transition(event) {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const matchedTransitions = stateDef.next_transitions.filter(t => t.event === event);
+
+    for (const trans of matchedTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+
+        this.handleAutoTransition();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  handleAutoTransition() {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const autoTransitions = stateDef.next_transitions.filter(t => t.event === "AUTO");
+
+    for (const trans of autoTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+        
+        this.handleAutoTransition();
+        return; 
+      }
+    }
+  }
+}
+
+// ==========================================
+// 6. UI Canvas レンダラー
+// ==========================================
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+function render(state, ctxGame) {
+    // 画面の初期化クリーン
+    ctx.fillStyle = "#05050a";
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // --- 1. グリッド背景 ＆ 敵の侵走路（パス）の描画 ---
+    ctx.strokeStyle = "#101025";
+    ctx.lineWidth = 1;
+    for (let c = 0; c <= COLS; c++) {
+        ctx.beginPath(); ctx.moveTo(c * CELL_SIZE, 0); ctx.lineTo(c * CELL_SIZE, CANVAS_HEIGHT); ctx.stroke();
+    }
+    for (let r = 0; r <= ROWS; r++) {
+        ctx.beginPath(); ctx.moveTo(0, r * CELL_SIZE); ctx.lineTo(CANVAS_WIDTH, r * CELL_SIZE); ctx.stroke();
+    }
+
+    // 侵走路のハイライトパイプライン
+    ctx.strokeStyle = "#1a1a35";
+    ctx.lineWidth = 24;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    PATH_POINTS.forEach((p, idx) => {
+        const px = p.x * CELL_SIZE + CELL_SIZE / 2;
+        const py = p.y * CELL_SIZE + CELL_SIZE / 2;
+        if (idx === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+
+    // --- 2. 配置されたタワーの描画 ---
+    ctxGame.towers.forEach(t => {
+        const tx = t.x * CELL_SIZE + CELL_SIZE / 2;
+        const ty = t.y * CELL_SIZE + CELL_SIZE / 2;
+        
+        // 索敵射程の円を薄く可視化
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.08)";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(tx, ty, t.range, 0, Math.PI * 2); ctx.stroke();
+
+        // タワー本体の多角形コア
+        ctx.fillStyle = "#00ffcc";
+        ctx.fillRect(t.x * CELL_SIZE + 8, t.y * CELL_SIZE + 8, CELL_SIZE - 16, CELL_SIZE - 16);
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(t.x * CELL_SIZE + 12, t.y * CELL_SIZE + 12, CELL_SIZE - 24, CELL_SIZE - 24);
+    });
+
+    // --- 3. 敵（エネミー）の描画 ---
+    ctxGame.enemies.forEach(enemy => {
+        // 本体コア（マゼンタ of 光球）
+        ctx.fillStyle = "#ff00ff";
+        ctx.beginPath(); ctx.arc(enemy.currentX, enemy.currentY, 10, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(enemy.currentX, enemy.currentY, 11, 0, Math.PI * 2); ctx.stroke();
+
+        // 簡易体力ゲージ（バー）
+        const barW = 24;
+        const barH = 4;
+        const bx = enemy.currentX - barW / 2;
+        const by = enemy.currentY - 18;
+        ctx.fillStyle = "#441111";
+        ctx.fillRect(bx, by, barW, barH);
+        ctx.fillStyle = "#ff0055";
+        ctx.fillRect(bx, by, barW * (enemy.hp / enemy.maxHp), barH);
+    });
+
+    // --- 4. リアルタイムレーザー光線の描画 ---
+    ctx.strokeStyle = "#ffff00";
+    ctx.lineWidth = 2.5;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = "#ffff00";
+    ctxGame.lasers.forEach(laser => {
+        ctx.beginPath();
+        ctx.moveTo(laser.fromX, laser.fromY);
+        ctx.lineTo(laser.toX, laser.toY);
+        ctx.stroke();
+    });
+    ctx.shadowBlur = 0; // シャドウ効果を即座にリセット
+
+    // --- 5. 準備フェーズにおけるグリッド配置カーソルの描画 ---
+    if (state === "FE_PREPARATION") {
+        const cx = ctxGame.cursor.x * CELL_SIZE;
+        const cy = ctxGame.cursor.y * CELL_SIZE;
+        
+        // 設置可能かどうかに応じてカーソル色を論理的シフト変化
+        const isValid = !ctxGame.towers.some(t => t.x === ctxGame.cursor.x && t.y === ctxGame.cursor.y) && !isPositionOnPath(ctxGame.cursor.x, ctxGame.cursor.y);
+        ctx.strokeStyle = isValid ? "#ffff00" : "#ff0055";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(cx + 2, cy + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+        
+        // タワーを建てる前の仮ターゲット射程円をプレビュー表示
+        ctx.strokeStyle = isValid ? "rgba(255, 255, 0, 0.15)" : "rgba(255, 0, 85, 0.1)";
+        ctx.beginPath(); ctx.arc(cx + CELL_SIZE/2, cy + CELL_SIZE/2, 120, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // --- 6. 上部ステータスパネル (HUD) ---
+    ctx.fillStyle = "rgba(10, 10, 20, 0.8)";
+    ctx.fillRect(0, 0, CANVAS_WIDTH, 35);
+    ctx.fillStyle = "#00ffcc";
+    ctx.font = "bold 13px 'M PLUS 1 Code', monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(`WAVE: ${ctxGame.wave}/${ctxGame.maxWaves}`, 15, 22);
+    ctx.fillText(`GOLD: ${ctxGame.gold}g`, 140, 22);
+    ctx.fillText(`LIVES: ${ctxGame.lives}`, 260, 22);
+    ctx.textAlign = "right";
+    ctx.fillText(`SCORE: ${ctxGame.score}`, CANVAS_WIDTH - 15, 22);
+
+    // --- 7. 各モード別フルスクリーン・オーバーレイ ---
+    if (state === "FE_TITLE") {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.fillStyle = "#00ffcc"; ctx.font = "bold 38px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText("SFA DEFENSE", CANVAS_WIDTH / 2, 180);
+        ctx.fillStyle = "#ff00ff"; ctx.font = "14px 'M PLUS 1 Code', monospace";
+        ctx.fillText("REAL-TIME AUTOMATION STRATEGY", CANVAS_WIDTH / 2, 220);
+        if (Math.floor(Date.now() / 400) % 2 === 0) {
+            ctx.fillStyle = "#ffffff"; ctx.font = "16px 'M PLUS 1 Code', monospace";
+            ctx.fillText("PRESS [ENTER] TO DEFEND", CANVAS_WIDTH / 2, 330);
+        }
+    } else if (state === "FE_PREPARATION") {
+        ctx.fillStyle = "rgba(255, 255, 0, 0.1)";
+        ctx.fillRect(0, 35, CANVAS_WIDTH, 25);
+        ctx.fillStyle = "#ffff00"; ctx.font = "11px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText("PREPARATION PHASE: BUILD TOWERS OR PRESS [ENTER] TO UNLEASH WAVE", CANVAS_WIDTH / 2, 51);
+    } else if (state === "FE_GAMEOVER") {
+        ctx.fillStyle = "rgba(20, 0, 5, 0.85)";
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.fillStyle = "#ff0055"; ctx.font = "bold 44px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText("BASE DESTROYED", CANVAS_WIDTH / 2, 200);
+        ctx.fillStyle = "#ffffff"; ctx.font = "16px 'M PLUS 1 Code', monospace";
+        ctx.fillText(`FINAL SCORE: ${ctxGame.score}`, CANVAS_WIDTH / 2, 250);
+        ctx.fillStyle = "#00ffcc";
+        ctx.fillText("PRESS [ENTER] TO REBUILD", CANVAS_WIDTH / 2, 350);
+    } else if (state === "FE_VICTORY") {
+        ctx.fillStyle = "rgba(5, 15, 10, 0.9)";
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.fillStyle = "#00ffcc"; ctx.font = "bold 44px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText("SECTOR CLEARED", CANVAS_WIDTH / 2, 190);
+        ctx.fillStyle = "#ffff00"; ctx.font = "16px 'M PLUS 1 Code', monospace";
+        ctx.fillText("PERFECT PERFECT DETERMINISTIC DEFENSE", CANVAS_WIDTH / 2, 240);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(`FINAL SCORE: ${ctxGame.score}`, CANVAS_WIDTH / 2, 280);
+        ctx.fillStyle = "#ff00ff";
+        ctx.fillText("PRESS [ESC] TO RETURN TO TITLE", CANVAS_WIDTH / 2, 370);
+    }
+}
+
+// ==========================================
+// 7. イベントとリアルタイムループの初期化
+// ==========================================
+const ctxGame = context;
+const engine = new SFAEngine(SFA_DEFINITIONS, "FE_TITLE", ctxGame, guards, actions, (state, c) => render(state, c));
+
+const activeKeys = {};
+
+document.addEventListener("keydown", (e) => {
+    let sfaEvent = null;
+    const state = engine.currentState;
+
+    if (state === "FE_PREPARATION") {
+        if (e.key === "ArrowUp")    sfaEvent = "MOVE_UP";
+        if (e.key === "ArrowDown")  sfaEvent = "MOVE_DOWN";
+        if (e.key === "ArrowLeft")  sfaEvent = "MOVE_LEFT";
+        if (e.key === "ArrowRight") sfaEvent = "MOVE_RIGHT";
+        if (e.key === " ")          sfaEvent = "BUILD";
+        if (e.key === "Enter")      sfaEvent = "START_WAVE";
+        if (e.key === "Escape")     sfaEvent = "ESCAPE";
+    } else {
+        if (e.key === "Enter")   sfaEvent = "START";
+        if (e.key === "Escape")  sfaEvent = "ESCAPE";
+    }
+
+    if (sfaEvent) {
+        e.preventDefault();
+        engine.transition(sfaEvent);
+    }
+});
+
+function loop() {
+    engine.transition("TICK");
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>

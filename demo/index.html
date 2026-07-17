@@ -13,8 +13,10 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
         }
         h1 {
             font-size: 36px;
@@ -29,6 +31,9 @@
         .menu-container {
             display: flex;
             gap: 30px;
+            flex-wrap: wrap; /* ★4枚のネオンカードが画面幅に合わせて綺麗に収まるよう折り返しを許可 */
+            justify-content: center;
+            max-width: 1100px;
         }
         .menu-card {
             border: 2px solid #00ffcc;
@@ -80,6 +85,12 @@
         <a href="sfa_rogue.html" class="menu-card">
             <h2>SFA Rogue</h2>
             <p>A turn-based hack & slash RPG orchestrating multi-phase turn pipelines, isolated facility menu states, and dynamic environmental day-night cycles.</p>
+        </a>
+
+        <!-- Link to Defense -->
+        <a href="sfa_defense.html" class="menu-card">
+            <h2>SFA Defense</h2>
+            <p>A 60Hz real-time strategy defense game demonstrating structural input separation during combat and multi-agent laser tracking pipelines.</p>
         </a>
     </div>
 
