@@ -3,11 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>SFA Tetris - Master Edition</title>
+    <!-- Google Fonts から日本語の等幅フォント「M PLUS 1m」をインポート -->
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1m:wght@400;700&display=swap" rel="stylesheet">
     <style>
         body {
             background-color: #1a1a1a;
             color: #00ff00;
-            font-family: monospace;
+            /* 読み込んだ日本語等幅フォントを最優先で適用 */
+            font-family: 'M PLUS 1m', monospace;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -25,6 +28,8 @@
             font-size: 20px;
             line-height: 1.1;
             margin: 0;
+            /* 文字と文字の隙間（カーニング）をゼロにしてズレを完全防止 */
+            letter-spacing: 0px;
         }
         #overlay {
             position: absolute;
@@ -472,7 +477,7 @@ class SFAEngine {
 }
 
 // ==========================================
-// 6. UIレンダラー (100%等幅・全角文字セット)
+// 6. UIレンダラー (美しい日本語フルブロック・等幅Webフォント仕様)
 // ==========================================
 function render(state, ctx) {
   const displayBoard = ctx.board.map(row => [...row]);
@@ -488,13 +493,15 @@ function render(state, ctx) {
     }
   }
 
+  // 100%等幅が保証されたフォント「M PLUS 1m」により、
+  // 全角文字の「■」「□」「・」「｜」がどのOSでも完璧に整列します。
   let boardHtml = "";
   for (let r = 0; r < 20; r++) {
     boardHtml += "｜"; 
     for (let c = 0; c < 10; c++) {
-      if (displayBoard[r][c] === 1) boardHtml += "■"; 
-      else if (displayBoard[r][c] === 2) boardHtml += "□"; 
-      else boardHtml += "・"; 
+      if (displayBoard[r][c] === 1) boardHtml += "■";      // 固定ブロック
+      else if (displayBoard[r][c] === 2) boardHtml += "□"; // 操作中ブロック
+      else boardHtml += "・";                               // 空きマス
     }
     boardHtml += "｜\n"; 
   }
@@ -542,3 +549,4 @@ setInterval(() => {
 </script>
 </body>
 </html>
+
