@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>SFA Tetris - Master Edition</title>
+    <style>
+        body {
+            background-color: #1a1a1a;
+            color: #00ff00;
+            font-family: monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #333;
+            padding: 10px;
+            background-color: #000;
+        }
+        #board {
+            font-size: 20px;
+            line-height: 1.1;
+            margin: 0;
+        }
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        #hud {
+            margin-top: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <pre id="board"></pre>
+        <div id="overlay"></div>
+    </div>
+    
+    <div style="width: 260px;">
+        <div id="hud">
+            <span id="state">State: </span>
+            <span id="score">Score: 0</span>
+        </div>
+        <p style="font-size: 11px; color: #888; text-align: center; line-height: 1.4;">
+            [Enter]: Start/Restart <br>
+            [←/→]: Move Left/Right <br>
+            [↑]: Rotate Clockwise <br>
+            [↓]: Rotate Counter-Clockwise <br>
+            [Space]: Soft Drop
+        </p>
+    </div>
+
+<script>
+// ==========================================
+// 1. 状態遷移定義 (SSOT - 優先順位付きフォールバック遷移)
+// ==========================================
+const SFA_DEFINITIONS = {
+  FE_TITLE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "START", action: "reset_game", target_state: "FE_SPAWN" }
+    ]
+  },
+  FE_SPAWN: {
+    role: "frontend",
+    on_enter: "spawn_mino",
+    next_transitions: [
+      { event: "AUTO", guard: "has_space", target_state: "FE_FALLING" },
+      { event: "AUTO", guard: "has_no_space", target_state: "FE_GAMEOVER" }
+    ]
+  },
+  FE_FALLING: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MOVE_LEFT",  guard: "can_move_left",  action: "move_left",  target_state: "FE_FALLING" },
+      { event: "MOVE_RIGHT", guard: "can_move_right", action: "move_right", target_state: "FE_FALLING" },
+      
+      // 【正回転（時計回り）キック遷移フォールバック】
+      // 1. その場で回れるか？
+      { event: "ROTATE", guard: "can_rotate_normal",     action: "rotate_normal",     target_state: "FE_FALLING" },
+      // 2. 左に1ずらせば回れるか？（右壁キック）
+      { event: "ROTATE", guard: "can_rotate_kick_left",  action: "rotate_kick_left",  target_state: "FE_FALLING" },
+      // 3. 右に1ずらせば回れるか？（左壁キック）
+      { event: "ROTATE", guard: "can_rotate_kick_right", action: "rotate_kick_right", target_state: "FE_FALLING" },
+      // 4. 上に1ずらせば回れるか？（床キック）
+      { event: "ROTATE", guard: "can_rotate_kick_up",    action: "rotate_kick_up",    target_state: "FE_FALLING" },
+
+      // 【逆回転（反時計回り）キック遷移フォールバック】
+      { event: "ROTATE_REVERSE", guard: "can_rotate_rev_normal",     action: "rotate_rev_normal",     target_state: "FE_FALLING" },
+      { event: "ROTATE_REVERSE", guard: "can_rotate_rev_kick_left",  action: "rotate_rev_kick_left",  target_state: "FE_FALLING" },
+      { event: "ROTATE_REVERSE", guard: "can_rotate_rev_kick_right", action: "rotate_rev_kick_right", target_state: "FE_FALLING" },
+      { event: "ROTATE_REVERSE", guard: "can_rotate_rev_kick_up",    action: "rotate_rev_kick_up",    target_state: "FE_FALLING" },
+
+      { event: "TICK",       guard: "can_fall",       action: "fall",       target_state: "FE_FALLING" },
+      { event: "TICK",       guard: "cannot_fall",    action: "lock_and_check", target_state: "FE_LINE_CHECK" }
+    ]
+  },
+  FE_LINE_CHECK: {
+    role: "frontend",
+    next_transitions: [
+      { event: "AUTO", guard: "has_lines", target_state: "FE_CLEARING" },
+      { event: "AUTO", guard: "has_no_lines", target_state: "FE_SPAWN" }
+    ]
+  },
+  FE_CLEARING: {
+    role: "frontend",
+    on_enter: "clear_lines",
+    next_transitions: [
+      { event: "AUTO", target_state: "FE_SPAWN" }
+    ]
+  },
+  FE_GAMEOVER: {
+    role: "frontend",
+    next_transitions: [
+      { event: "START", action: "reset_game", target_state: "FE_SPAWN" }
+    ]
+  }
+};
+
+// ==========================================
+// 2. ゲームコンテキスト（7つのテトリミノと固定軸の定義）
+// ==========================================
+const context = {
+  board: Array(20).fill(null).map(() => Array(10).fill(0)),
+  currentMino: { x: 0, y: 0, shape: [], isO: false },
+  score: 0,
+  linesToClear: []
+};
+
+// 世界基準のグリッド軸に準拠したテトリミノ
+const MINO_SHAPES = [
+  {
+    name: "O",
+    shape: [
+      [1, 1],
+      [1, 1]
+    ],
+    isO: true,
+    spawnX: 4, spawnY: 0
+  },
+  {
+    name: "I",
+    shape: [
+      [0, 0, 0, 0],
+      [1, 1, 1, 1],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0]
+    ],
+    isO: false,
+    spawnX: 3, spawnY: -1
+  },
+  {
+    name: "T",
+    shape: [
+      [0, 1, 0],
+      [1, 1, 1],
+      [0, 0, 0]
+    ],
+    isO: false,
+    spawnX: 3, spawnY: 0
+  },
+  {
+    name: "J",
+    shape: [
+      [1, 0, 0],
+      [1, 1, 1],
+      [0, 0, 0]
+    ],
+    isO: false,
+    spawnX: 3, spawnY: 0
+  },
+  {
+    name: "L",
+    shape: [
+      [0, 0, 1],
+      [1, 1, 1],
+      [0, 0, 0]
+    ],
+    isO: false,
+    spawnX: 3, spawnY: 0
+  },
+  {
+    name: "S",
+    shape: [
+      [0, 1, 1],
+      [1, 1, 0],
+      [0, 0, 0]
+    ],
+    isO: false,
+    spawnX: 3, spawnY: 0
+  },
+  {
+    name: "Z",
+    shape: [
+      [1, 1, 0],
+      [0, 1, 1],
+      [0, 0, 0]
+    ],
+    isO: false,
+    spawnX: 3, spawnY: 0
+  }
+];
+
+// 衝突判定ヘルパー (y < 0のスポーン時領域も考慮)
+function checkCollision(board, shape, x, y) {
+  for (let r = 0; r < shape.length; r++) {
+    for (let c = 0; c < shape[r].length; c++) {
+      if (shape[r][c]) {
+        const nextX = x + c;
+        const nextY = y + r;
+        if (nextX < 0 || nextX >= 10 || nextY >= 20) return true;
+        if (nextY >= 0 && board[nextY][nextX]) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// 衝突シミュレーション用ヘルパー
+function canRotateWithOffset(ctx, rotatedShape, offsetX, offsetY) {
+  return !checkCollision(
+    ctx.board, 
+    rotatedShape, 
+    ctx.currentMino.x + offsetX, 
+    ctx.currentMino.y + offsetY
+  );
+}
+
+// 回転アルゴリズム
+function rotateMatrix(matrix) {
+  return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse());
+}
+
+function rotateMatrixReverse(matrix) {
+  return matrix[0].map((_, i) => matrix.map(row => row[i])).reverse();
+}
+
+// ==========================================
+// 3. ガード関数 (キック可能性の評価)
+// ==========================================
+const guards = {
+  has_space: (ctx) => !checkCollision(ctx.board, ctx.currentMino.shape, ctx.currentMino.x, ctx.currentMino.y),
+  has_no_space: (ctx) => checkCollision(ctx.board, ctx.currentMino.shape, ctx.currentMino.x, ctx.currentMino.y),
+  
+  can_move_left: (ctx) => !checkCollision(ctx.board, ctx.currentMino.shape, ctx.currentMino.x - 1, ctx.currentMino.y),
+  can_move_right: (ctx) => !checkCollision(ctx.board, ctx.currentMino.shape, ctx.currentMino.x + 1, ctx.currentMino.y),
+  
+  can_fall: (ctx) => !checkCollision(ctx.board, ctx.currentMino.shape, ctx.currentMino.x, ctx.currentMino.y + 1),
+  cannot_fall: (ctx) => checkCollision(ctx.board, ctx.currentMino.shape, ctx.currentMino.x, ctx.currentMino.y + 1),
+  
+  has_lines: (ctx) => ctx.linesToClear.length > 0,
+  has_no_lines: (ctx) => ctx.linesToClear.length === 0,
+
+  // --- 正回転（時計回り）ガード群 ---
+  can_rotate_normal: (ctx) => {
+    if (ctx.currentMino.isO) return true; // Oミノは回転不要だが遷移可能にする
+    const rotated = rotateMatrix(ctx.currentMino.shape);
+    return canRotateWithOffset(ctx, rotated, 0, 0);
+  },
+  can_rotate_kick_left: (ctx) => {
+    if (ctx.currentMino.isO) return false;
+    const rotated = rotateMatrix(ctx.currentMino.shape);
+    return canRotateWithOffset(ctx, rotated, -1, 0);
+  },
+  can_rotate_kick_right: (ctx) => {
+    if (ctx.currentMino.isO) return false;
+    const rotated = rotateMatrix(ctx.currentMino.shape);
+    return canRotateWithOffset(ctx, rotated, 1, 0);
+  },
+  can_rotate_kick_up: (ctx) => {
+    if (ctx.currentMino.isO) return false;
+    const rotated = rotateMatrix(ctx.currentMino.shape);
+    return canRotateWithOffset(ctx, rotated, 0, -1); // 床蹴り
+  },
+
+  // --- 逆回転（反時計回り）ガード群 ---
+  can_rotate_rev_normal: (ctx) => {
+    if (ctx.currentMino.isO) return true;
+    const rotated = rotateMatrixReverse(ctx.currentMino.shape);
+    return canRotateWithOffset(ctx, rotated, 0, 0);
+  },
+  can_rotate_rev_kick_left: (ctx) => {
+    if (ctx.currentMino.isO) return false;
+    const rotated = rotateMatrixReverse(ctx.currentMino.shape);
+    return canRotateWithOffset(ctx, rotated, -1, 0);
+  },
+  can_rotate_rev_kick_right: (ctx) => {
+    if (ctx.currentMino.isO) return false;
+    const rotated = rotateMatrixReverse(ctx.currentMino.shape);
+    return canRotateWithOffset(ctx, rotated, 1, 0);
+  },
+  can_rotate_rev_kick_up: (ctx) => {
+    if (ctx.currentMino.isO) return false;
+    const rotated = rotateMatrixReverse(ctx.currentMino.shape);
+    return canRotateWithOffset(ctx, rotated, 0, -1);
+  }
+};
+
+// ==========================================
+// 4. アクション関数 (位置補正＋回転)
+// ==========================================
+const actions = {
+  reset_game: (ctx) => {
+    ctx.board = Array(20).fill(null).map(() => Array(10).fill(0));
+    ctx.score = 0;
+    ctx.linesToClear = [];
+  },
+  spawn_mino: (ctx) => {
+    const randomMino = MINO_SHAPES[Math.floor(Math.random() * MINO_SHAPES.length)];
+    ctx.currentMino = {
+      x: randomMino.spawnX,
+      y: randomMino.spawnY,
+      shape: JSON.parse(JSON.stringify(randomMino.shape)), // ディープコピー
+      isO: randomMino.isO
+    };
+  },
+  move_left:  (ctx) => { ctx.currentMino.x--; },
+  move_right: (ctx) => { ctx.currentMino.x++; },
+  fall:       (ctx) => { ctx.currentMino.y++; },
+  
+  // --- 正回転（時計回り）アクション ---
+  rotate_normal: (ctx) => {
+    if (ctx.currentMino.isO) return;
+    ctx.currentMino.shape = rotateMatrix(ctx.currentMino.shape);
+  },
+  rotate_kick_left: (ctx) => {
+    if (ctx.currentMino.isO) return;
+    ctx.currentMino.x--;
+    ctx.currentMino.shape = rotateMatrix(ctx.currentMino.shape);
+  },
+  rotate_kick_right: (ctx) => {
+    if (ctx.currentMino.isO) return;
+    ctx.currentMino.x++;
+    ctx.currentMino.shape = rotateMatrix(ctx.currentMino.shape);
+  },
+  rotate_kick_up: (ctx) => {
+    if (ctx.currentMino.isO) return;
+    ctx.currentMino.y--;
+    ctx.currentMino.shape = rotateMatrix(ctx.currentMino.shape);
+  },
+
+  // --- 逆回転（反時計回り）アクション ---
+  rotate_rev_normal: (ctx) => {
+    if (ctx.currentMino.isO) return;
+    ctx.currentMino.shape = rotateMatrixReverse(ctx.currentMino.shape);
+  },
+  rotate_rev_kick_left: (ctx) => {
+    if (ctx.currentMino.isO) return;
+    ctx.currentMino.x--;
+    ctx.currentMino.shape = rotateMatrixReverse(ctx.currentMino.shape);
+  },
+  rotate_rev_kick_right: (ctx) => {
+    if (ctx.currentMino.isO) return;
+    ctx.currentMino.x++;
+    ctx.currentMino.shape = rotateMatrixReverse(ctx.currentMino.shape);
+  },
+  rotate_rev_kick_up: (ctx) => {
+    if (ctx.currentMino.isO) return;
+    ctx.currentMino.y--;
+    ctx.currentMino.shape = rotateMatrixReverse(ctx.currentMino.shape);
+  },
+
+  lock_and_check: (ctx) => {
+    const { shape, x, y } = ctx.currentMino;
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c] && y + r >= 0) {
+          ctx.board[y + r][x + c] = 1;
+        }
+      }
+    }
+    ctx.linesToClear = [];
+    for (let r = 0; r < 20; r++) {
+      if (ctx.board[r].every(cell => cell === 1)) {
+        ctx.linesToClear.push(r);
+      }
+    }
+  },
+  
+  clear_lines: (ctx) => {
+    ctx.board = ctx.board.filter((_, idx) => !ctx.linesToClear.includes(idx));
+    while (ctx.board.length < 20) {
+      ctx.board.unshift(Array(10).fill(0));
+    }
+    ctx.score += ctx.linesToClear.length * 100;
+    ctx.linesToClear = [];
+  }
+};
+
+// ==========================================
+// 5. SFAステートマシンエンジン (複数AUTOガード対応版)
+// ==========================================
+class SFAEngine {
+  constructor(definitions, initialState, context, guards, actions, onTransitioned) {
+    this.definitions = definitions;
+    this.currentState = initialState;
+    this.context = context;
+    this.guards = guards;
+    this.actions = actions;
+    this.onTransitioned = onTransitioned;
+    this.onTransitioned(this.currentState, this.context);
+  }
+
+  async transition(event) {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const matchedTransitions = stateDef.next_transitions.filter(t => t.event === event);
+
+    for (const trans of matchedTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+
+        await this.handleAutoTransition();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async handleAutoTransition() {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const autoTransitions = stateDef.next_transitions.filter(t => t.event === "AUTO");
+
+    for (const trans of autoTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+        
+        await this.handleAutoTransition();
+        return; 
+      }
+    }
+  }
+}
+
+// ==========================================
+// 6. UIレンダラー (100%等幅・全角文字セット)
+// ==========================================
+function render(state, ctx) {
+  const displayBoard = ctx.board.map(row => [...row]);
+  
+  if (state === "FE_FALLING") {
+    const { shape, x, y } = ctx.currentMino;
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c] && y + r >= 0) {
+          displayBoard[y + r][x + c] = 2; 
+        }
+      }
+    }
+  }
+
+  let boardHtml = "";
+  for (let r = 0; r < 20; r++) {
+    boardHtml += "｜"; 
+    for (let c = 0; c < 10; c++) {
+      if (displayBoard[r][c] === 1) boardHtml += "■"; 
+      else if (displayBoard[r][c] === 2) boardHtml += "□"; 
+      else boardHtml += "・"; 
+    }
+    boardHtml += "｜\n"; 
+  }
+
+  document.getElementById("board").textContent = boardHtml;
+  document.getElementById("state").textContent = `State: ${state}`;
+  document.getElementById("score").textContent = `Score: ${ctx.score}`;
+
+  const overlay = document.getElementById("overlay");
+  if (state === "FE_TITLE") {
+    overlay.style.display = "flex";
+    overlay.innerHTML = "<h1>SFA TETRIS</h1><p>Press [ENTER] to Start</p>";
+  } else if (state === "FE_GAMEOVER") {
+    overlay.style.display = "flex";
+    overlay.innerHTML = "<h1>GAME OVER</h1><p>Score: " + ctx.score + "</p><p>Press [ENTER] to Restart</p>";
+  } else {
+    overlay.style.display = "none";
+  }
+}
+
+// ==========================================
+// 7. エントリポイント
+// ==========================================
+const engine = new SFAEngine(SFA_DEFINITIONS, "FE_TITLE", context, guards, actions, render);
+
+document.addEventListener("keydown", (e) => {
+  let sfaEvent = null;
+  if (e.key === "ArrowLeft")  sfaEvent = "MOVE_LEFT";
+  if (e.key === "ArrowRight") sfaEvent = "MOVE_RIGHT";
+  if (e.key === "ArrowUp")    sfaEvent = "ROTATE";
+  if (e.key === "ArrowDown")  sfaEvent = "ROTATE_REVERSE";
+  if (e.key === " ")          sfaEvent = "TICK";
+  if (e.key === "Enter")      sfaEvent = "START";
+
+  if (sfaEvent) {
+    e.preventDefault(); 
+    engine.transition(sfaEvent);
+  }
+});
+
+setInterval(() => {
+  engine.transition("TICK");
+}, 1000);
+
+</script>
+</body>
+</html>
