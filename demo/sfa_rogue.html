@@ -601,6 +601,21 @@ const FOOD_ENEMY_ARCHETYPES = [
   { name: 'Cave Bear', symbol: '熊', hpFactor: 1.2, atkFactor: 1.0, expFactor: 1.12, foodName: 'Bear Roast', hunger: 85, heal: 28 }
 ];
 
+const TOWN_ENEMY_ARCHETYPES = [
+  { name: 'Grave Ghoul', symbol: 'Ｇ', hpFactor: 1.02, atkFactor: 1.02, expFactor: 1.05, threatCost: 1.0 },
+  { name: 'Alley Stalker', symbol: 'Ｓ', hpFactor: 0.88, atkFactor: 1.24, expFactor: 1.14, threatCost: 1.16 },
+  { name: 'Night Wraith', symbol: 'Ｗ', hpFactor: 0.94, atkFactor: 1.32, expFactor: 1.24, threatCost: 1.28 },
+  { name: 'Bell Tower Witch', symbol: 'Ｑ', hpFactor: 0.92, atkFactor: 1.30, expFactor: 1.28, threatCost: 1.34, magicType: 'line', magicEvery: 4 },
+  { name: 'Graveyard Brute', symbol: 'Ｂ', hpFactor: 1.52, atkFactor: 1.12, expFactor: 1.32, threatCost: 1.42 },
+  { name: 'Moonlit Reaper', symbol: 'Ｒ', hpFactor: 1.18, atkFactor: 1.48, expFactor: 1.58, threatCost: 1.70, magicType: 'area', magicEvery: 4 }
+];
+
+const TOWN_NIGHT_PROFILES = {
+  3: { label: 'Night', count: 3, even: 2, dangerous: 1, deadly: 0, power: 1.00 },
+  4: { label: 'Midnight', count: 4, even: 4, dangerous: 2, deadly: 1, power: 1.10 },
+  5: { label: 'Dawn', count: 2, even: 2, dangerous: 1, deadly: 0, power: 1.16 }
+};
+
 const BOSS_ARCHETYPES = [
   { name: 'Goblin King', symbol: '♛', hpFactor: 5.4, atkFactor: 1.2 },
   { name: 'Bone Colossus', symbol: '☠', hpFactor: 6.0, atkFactor: 1.28 },
@@ -682,6 +697,95 @@ function createFoodEnemy(ctxOrDepth, depthOrId, idOrRarity = null, forcedRarity 
     provoked: false
   };
   return applyEnemyRarity(enemy, forcedRarity || rollRarity(ctx, depth, false));
+}
+
+function townThreatDepth(ctx) {
+  const levelDepth = Math.max(1, Math.floor((ctx.player.level - 1) / BALANCE_CONFIG.recommendedLevelPerFloor));
+  return Math.max(1, Math.min(1000, Math.floor(Math.max(ctx.maxReachedDepth * 0.70, levelDepth))));
+}
+
+function createTownEnemy(ctx, phase, id, forcedArchetype = null) {
+  const profile = TOWN_NIGHT_PROFILES[phase] || TOWN_NIGHT_PROFILES[3];
+  const depth = townThreatDepth(ctx);
+  const base = forcedArchetype || TOWN_ENEMY_ARCHETYPES[Math.floor(Math.random() * TOWN_ENEMY_ARCHETYPES.length)];
+  const level = recommendedLevelForDepth(depth);
+  const stats = combatBaseForLevel(level);
+  const rarity = rollRarity(ctx, depth, false);
+  const enemy = {
+    id, name: `${base.name} Lv.${level}`, symbol: base.symbol,
+    hp: Math.max(1, Math.floor(stats.hp * base.hpFactor * profile.power)), maxHp: 0,
+    atk: Math.max(1, Math.floor(stats.atk * base.atkFactor * profile.power)),
+    exp: Math.max(1, Math.floor(stats.exp * base.expFactor * profile.power)),
+    threatCost: base.threatCost, archetype: base.name, enemyLevel: level,
+    magicType: base.magicType || null, magicEvery: base.magicEvery || 4,
+    pendingSpell: null, hasDetectedPlayer: false, isTownEnemy: true
+  };
+  enemy.maxHp = enemy.hp;
+  return applyEnemyRarity(enemy, rarity);
+}
+
+function townSafeCorridorKeys() {
+  const keys = new Set();
+  const paths = [
+    [{x:7,y:12},{x:3,y:3}],
+    [{x:7,y:12},{x:11,y:3}],
+    [{x:7,y:12},{x:11,y:11}]
+  ];
+  for (const [start, goal] of paths) {
+    let x=start.x, y=start.y;
+    keys.add(coordinateKey(x,y));
+    while (x !== goal.x) { x += Math.sign(goal.x-x); keys.add(coordinateKey(x,y)); }
+    while (y !== goal.y) { y += Math.sign(goal.y-y); keys.add(coordinateKey(x,y)); }
+  }
+  return keys;
+}
+
+function availableTownEnemyPositions(ctx) {
+  const safe = townSafeCorridorKeys();
+  const facilities = [{x:3,y:3},{x:11,y:3},{x:3,y:11},{x:11,y:11}];
+  return getReachableFloorPositions(ctx).filter(pos => {
+    if (isReservedPosition(ctx, pos.x, pos.y)) return false;
+    if (Math.abs(pos.x-ctx.player.x)+Math.abs(pos.y-ctx.player.y) < 4) return false;
+    if (safe.has(coordinateKey(pos.x,pos.y))) return false;
+    return facilities.every(f => Math.abs(pos.x-f.x)+Math.abs(pos.y-f.y) > 1);
+  });
+}
+
+function enforceTownThreatMix(ctx, phase) {
+  const profile = TOWN_NIGHT_PROFILES[phase] || TOWN_NIGHT_PROFILES[3];
+  const enemies = ctx.enemies.filter(enemy => enemy.isTownEnemy);
+  const rank = { safe:0, even:1, dangerous:2, deadly:3 };
+  const countAtLeast = band => enemies.filter(enemy => rank[enemyThreatBand(ctx, enemy)] >= rank[band]).length;
+  for (const [band, required] of [['deadly',profile.deadly],['dangerous',profile.dangerous],['even',profile.even]]) {
+    let count=countAtLeast(band);
+    if (count >= required) continue;
+    const candidates=[...enemies].sort((a,b)=>enemyThreatScore(ctx,b)-enemyThreatScore(ctx,a));
+    for (const enemy of candidates) {
+      if (rank[enemyThreatBand(ctx,enemy)] >= rank[band]) continue;
+      if (fortifyEnemyToThreatBand(ctx,enemy,band)) count++;
+      if (count >= required) break;
+    }
+  }
+}
+
+function spawnTownNightForce(ctx, phase = ctx.timePhase) {
+  ctx.enemies = ctx.enemies.filter(enemy => !enemy.isTownEnemy);
+  const profile = TOWN_NIGHT_PROFILES[phase];
+  if (!profile) return;
+  const positions = availableTownEnemyPositions(ctx);
+  const archetypes = [...TOWN_ENEMY_ARCHETYPES];
+  if (phase === 3) archetypes.splice(archetypes.findIndex(a=>a.name==='Moonlit Reaper'),1);
+  for (let i=0; i<profile.count && positions.length; i++) {
+    let base;
+    if (phase === 4 && i === 0) base = TOWN_ENEMY_ARCHETYPES.find(a=>a.name==='Moonlit Reaper');
+    else if (phase === 5 && i === 0) base = TOWN_ENEMY_ARCHETYPES.find(a=>a.name==='Graveyard Brute');
+    else base = archetypes[Math.floor(Math.random()*archetypes.length)];
+    const posIndex=Math.floor(Math.random()*positions.length);
+    const pos=positions.splice(posIndex,1)[0];
+    ctx.enemies.push({...createTownEnemy(ctx,phase,900000+phase*100+i,base),x:pos.x,y:pos.y});
+  }
+  enforceTownThreatMix(ctx,phase);
+  addLog(ctx, `${profile.label} town threat: ${ctx.enemies.filter(e=>e.isTownEnemy).length} hostile entities stalk the streets.`);
 }
 
 function createBoss(ctxOrDepth, depthOrRarity = null, forcedRarity = null) {
@@ -1307,14 +1411,7 @@ const actions = {
       ctx.tiles["3,11"] = "bar";
       ctx.tiles["11,11"] = "stairs";
       for(let x=5; x<=9; x++) ctx.grid[6][x] = 2;
-      if (ctx.timePhase >= 3) {
-        for(let i=0; i<3; i++) {
-          const pos = getEmptyFloorPos(ctx);
-          if (!pos) break;
-          ctx.enemies.push({ ...createEnemy(1, i), name: "Town Ghoul", x: pos.x, y: pos.y });
-        }
-        addLog(ctx, "Be careful. Ghouls roam the town at night!");
-      }
+      if (ctx.timePhase >= 3) spawnTownNightForce(ctx, ctx.timePhase);
       return;
     }
 
@@ -1490,14 +1587,9 @@ const actions = {
         ctx.timePhase = (ctx.timePhase + 1) % 6;
         addLog(ctx, `The environment shifts into [${TIME_NAMES[ctx.timePhase]}].`);
 
-        // 夜になった瞬間、もし町にいたらゾンビを急襲スポーンさせるためのマップ動的再構築
-        if (ctx.currentMapType === "town" && ctx.timePhase === 3) {
-            for(let i=0; i<3; i++) {
-                const pos = getEmptyReachableFloorPos(ctx);
-                if (!pos) break;
-                ctx.enemies.push({ id: i, name: "Town Ghoul", x: pos.x, y: pos.y, hp: 15, maxHp: 15, atk: 5, exp: 4 });
-            }
-            addLog(ctx, "Night falls. Dark entities manifest around town!");
+        if (ctx.currentMapType === "town") {
+          if (ctx.timePhase >= 3) spawnTownNightForce(ctx, ctx.timePhase);
+          else ctx.enemies = ctx.enemies.filter(enemy => !enemy.isTownEnemy);
         }
     }
 
