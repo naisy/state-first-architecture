@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SFA Fighting - Stickman Counter Burst</title>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #05050b;
+            color: #ced4da;
+            font-family: 'M PLUS 1 Code', monospace;
+            display: flex;
+            flex-direction: column;
+        align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #00ffcc;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.2);
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+        }
+        #instructions {
+            margin-top: 12px;
+            width: 640px;
+            font-size: 12px;
+            color: #777;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .highlight {
+            color: #00ffcc;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="640" height="360"></canvas>
+    </div>
+    
+    <div id="instructions">
+        <span class="highlight">[Enter]</span>: Select Menu / Start Game / Restart | <span class="highlight">[Esc]</span>: Return to Title <br>
+        <span class="highlight">[← / →]</span>: Walk | <span class="highlight">[↑]</span>: Jump | <span class="highlight">[↓]</span>: Crouch (Posture Only) <br>
+        <span class="highlight">[C] (Hold)</span>: Independent Guard (Stand / Crouch / Air Guard active) <br>
+        <span class="highlight">[Z]</span>: Punch (Fast) | <span class="highlight">[X]</span>: Kick (Ground: Low / Jump: Overhead Break) <br>
+        <p style="font-size: 11px; color: #444;">SFA Engine orchestrating 3-way tactical guard mix-up and skeletal Stickman animation pipeline.</p>
+    </div>
+
+<script>
+// ==========================================
+// 1. SFA 状態遷移定義 (SFA-SSOT: 信頼できる唯一の情報源)
+// ==========================================
+const SFA_DEFINITIONS = {
+  FE_TITLE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP",   action: "menu_cursor_up",   target_state: "FE_TITLE" },
+      { event: "MENU_DOWN", action: "menu_cursor_down", target_state: "FE_TITLE" },
+      { event: "START",     action: "init_fight_session", target_state: "FE_ROUND_PLAY" }
+    ]
+  },
+  FE_ROUND_PLAY: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      
+      // 1P人間の独立キーアクション
+      { event: "MOVE_LEFT",     guard: "is_1p_human", action: "player_walk_left",    target_state: "FE_ROUND_PLAY" },
+      { event: "MOVE_RIGHT",    guard: "is_1p_human", action: "player_walk_right",   target_state: "FE_ROUND_PLAY" },
+      { event: "TRIGGER_JUMP",  guard: "is_1p_human_and_grounded", action: "player_jump", target_state: "FE_ROUND_PLAY" },
+      { event: "HOLD_CROUCH",    guard: "is_1p_human", action: "player_crouch",        target_state: "FE_ROUND_PLAY" },
+      { event: "RELEASE_CROUCH", guard: "is_1p_human", action: "player_stand",         target_state: "FE_ROUND_PLAY" },
+      { event: "HOLD_GUARD",     guard: "is_1p_human", action: "player_hold_guard",    target_state: "FE_ROUND_PLAY" },
+      { event: "RELEASE_GUARD",  guard: "is_1p_human", action: "player_release_guard", target_state: "FE_ROUND_PLAY" },
+      { event: "PRESS_PUNCH",    guard: "is_1p_human", action: "player_punch",         target_state: "FE_ROUND_PLAY" },
+      { event: "PRESS_KICK",     guard: "is_1p_human", action: "player_kick",          target_state: "FE_ROUND_PLAY" },
+      
+      // リアルタイムコア・パイプライン
+      { event: "TICK", guard: "is_p2_ko", target_state: "FE_VICTORY" },
+      { event: "TICK", guard: "is_p1_ko", target_state: "FE_GAMEOVER" },
+      { event: "TICK", guard: "has_hit_occurred", action: "freeze_simulation", target_state: "FE_HIT_STOP" },
+      { event: "TICK", action: "update_fighting_physics_and_ai", target_state: "FE_ROUND_PLAY" }
+    ]
+  },
+  FE_HIT_STOP: {
+    role: "frontend",
+    next_transitions: [
+      { event: "TICK", guard: "is_hit_stop_done", action: "apply_buffered_damage", target_state: "FE_ROUND_PLAY" },
+      { event: "TICK", action: "countdown_hit_stop", target_state: "FE_HIT_STOP" }
+    ]
+  },
+  FE_GAMEOVER: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START",  action: "init_fight_session", target_state: "FE_ROUND_PLAY" }
+    ]
+  },
+  FE_VICTORY: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START",  action: "init_fight_session", target_state: "FE_ROUND_PLAY" }
+    ]
+  }
+};
+
+// ==========================================
+// 2. ゲームコンテキスト
+// ==========================================
+const GROUND_Y = 290;
+const BASE_HEIGHT = 90;
+const PUNCH_RANGE = 70;
+const KICK_RANGE = 95;
+
+const context = {
+  menuCursor: 0, 
+  gameMode: "1P_VS_CPU", 
+  
+  p1: { x: 160, y: 0, vy: 0, hp: 100, state: "idle", frameTimer: 0, dir: 1,  aiTimer: 0, isCPU: false, aiMode: "NEUTRAL", comboStep: 0, lastActionWasAttack: false, isWalking: false, isGuarding: false, counted: false, history: { punch: 1, kick: 1, jump: 1, total: 3 } },
+  p2: { x: 480, y: 0, vy: 0, hp: 100, state: "idle", frameTimer: 0, dir: -1, aiTimer: 0, isCPU: true,  aiMode: "NEUTRAL", comboStep: 0, lastActionWasAttack: false, isWalking: false, isGuarding: false, counted: false, history: { punch: 1, kick: 1, jump: 1, total: 3 } },
+  
+  hitStopTimer: 0,
+  damageBuffer: { p1: null, p2: null } 
+};
+
+function isActionable(char) {
+    return char.state === "idle" || char.state === "crouch" || char.state === "jump";
+}
+
+// ==========================================
+// 3. ガード
+// ==========================================
+const guards = {
+  is_1p_human:                 (ctx) => !ctx.p1.isCPU,
+  is_1p_human_and_grounded:    (ctx) => !ctx.p1.isCPU && ctx.p1.y === 0, 
+  is_p2_ko:                    (ctx) => ctx.p2.hp <= 0,
+  is_p1_ko:                    (ctx) => ctx.p1.hp <= 0,
+  has_hit_occurred:            (ctx) => ctx.damageBuffer.p1 !== null || ctx.damageBuffer.p2 !== null, 
+  is_hit_stop_done:            (ctx) => ctx.hitStopTimer <= 0
+};
+
+// ==========================================
+// 4. アクション
+// ==========================================
+const actions = {
+  menu_cursor_up:   (ctx) => { ctx.menuCursor = 0; },
+  menu_cursor_down: (ctx) => { ctx.menuCursor = 1; },
+  
+  init_fight_session: (ctx) => {
+    ctx.gameMode = ctx.menuCursor === 0 ? "1P_VS_CPU" : "CPU_VS_CPU";
+    
+    ctx.p1 = { x: 160, y: 0, vy: 0, hp: 100, state: "idle", frameTimer: 0, dir: 1,  aiTimer: 0, isCPU: (ctx.gameMode === "CPU_VS_CPU"), aiMode: "NEUTRAL", comboStep: 0, lastActionWasAttack: false, isWalking: false, isGuarding: false, counted: false, history: { punch: 1, kick: 1, jump: 1, total: 3 } };
+    ctx.p2 = { x: 480, y: 0, vy: 0, hp: 100, state: "idle", frameTimer: 0, dir: -1, aiTimer: 0, isCPU: true,  aiMode: "NEUTRAL", comboStep: 0, lastActionWasAttack: false, isWalking: false, isGuarding: false, counted: false, history: { punch: 1, kick: 1, jump: 1, total: 3 } };
+    ctx.hitStopTimer = 0;
+    ctx.damageBuffer = { p1: null, p2: null };
+  },
+
+  player_walk_left:  (ctx) => { if (isActionable(ctx.p1) && ctx.p1.y === 0) { ctx.p1.x = Math.max(45, ctx.p1.x - 4); ctx.p1.isWalking = true; } },
+  player_walk_right: (ctx) => { if (isActionable(ctx.p1) && ctx.p1.y === 0) { ctx.p1.x = Math.min(595, ctx.p1.x + 4); ctx.p1.isWalking = true; } },
+  player_jump:       (ctx) => { ctx.p1.state = "jump"; ctx.p1.vy = -13; },
+  player_crouch:     (ctx) => { if (ctx.p1.y === 0 && isActionable(ctx.p1)) { ctx.p1.state = "crouch"; } },
+  player_stand:      (ctx) => { if (ctx.p1.state === "crouch") { ctx.p1.state = "idle"; } },
+  
+  player_hold_guard:    (ctx) => { ctx.p1.isGuarding = true; },
+  player_release_guard: (ctx) => { ctx.p1.isGuarding = false; },
+
+  player_punch:      (ctx) => { if (ctx.p1.state !== "hit" && ctx.p1.state !== "punch" && ctx.p1.state !== "kick" && ctx.p1.state !== "air_kick") { ctx.p1.state = "punch"; ctx.p1.frameTimer = 18; ctx.p1.isGuarding = false; } },
+  player_kick:       (ctx) => { 
+    if (ctx.p1.state !== "hit" && ctx.p1.state !== "punch" && ctx.p1.state !== "kick" && ctx.p1.state !== "air_kick") { 
+        ctx.p1.state = (ctx.p1.y < 0) ? "air_kick" : "kick";  
+        ctx.p1.frameTimer = 26; 
+        ctx.p1.isGuarding = false;
+    } 
+  },
+
+  freeze_simulation: (ctx) => { ctx.hitStopTimer = 10; },
+  countdown_hit_stop: (ctx) => { ctx.hitStopTimer--; },
+  
+  apply_buffered_damage: (ctx) => {
+      ["p1", "p2"].forEach(targetKey => {
+          const dmg = ctx.damageBuffer[targetKey];
+          if (!dmg) return;
+
+          const side = ctx[targetKey];
+          const attackerSide = targetKey === "p1" ? ctx.p2 : ctx.p1;
+          
+          let isBlocked = false;
+          const isFacingAttacker = attackerSide.x * attackerSide.dir < side.x * attackerSide.dir;
+          
+          if (isFacingAttacker && side.isGuarding && side.state !== "hit") {
+              if (dmg.hitType === "low" && side.state === "crouch") {
+                  isBlocked = true; 
+              } else if (dmg.hitType === "high" && side.state === "idle") {
+                  isBlocked = true; 
+              } else if (dmg.hitType === "mid" && side.state === "idle") {
+                  isBlocked = true; 
+              } else if (dmg.hitType === "high" && side.state === "jump") {
+                  isBlocked = true; 
+              } else if (dmg.hitType === "mid" && side.state === "jump") {
+                  isBlocked = true; 
+              }
+          }
+
+          const finalDmg = isBlocked ? Math.round(dmg.amount * 0.1) : dmg.amount;
+          side.hp = Math.max(0, side.hp - finalDmg);
+          
+          if (!isBlocked) {
+              side.state = "hit";
+              side.frameTimer = 22; 
+              side.isGuarding = false; 
+              
+              const oldX = side.x;
+              side.x = Math.max(45, Math.min(595, side.x + attackerSide.dir * 20)); 
+
+              if (Math.abs(side.x - oldX) < 15) {
+                  attackerSide.x = Math.max(45, Math.min(595, attackerSide.x - attackerSide.dir * 25));
+              }
+          }
+
+          if (attackerSide.state === "punch" || attackerSide.state === "kick" || attackerSide.state === "air_kick") {
+              attackerSide.state = (attackerSide.y < 0) ? "jump" : "idle";
+              attackerSide.frameTimer = 0;
+          }
+      });
+      ctx.damageBuffer = { p1: null, p2: null };
+  },
+
+  update_fighting_physics_and_ai: (ctxData) => {
+    ctxData.p1.isWalking = false;
+    ctxData.p2.isWalking = false;
+
+    ctxData.p1.dir = ctxData.p1.x < ctxData.p2.x ? 1 : -1;
+    ctxData.p2.dir = ctxData.p2.x < ctxData.p1.x ? 1 : -1;
+
+    // キャラクター同士の物理的な押し返し
+    const overlap = 44 - Math.abs(ctxData.p1.x - ctxData.p2.x);
+    if (overlap > 0 && ctxData.p1.y === 0 && ctxData.p2.y === 0) {
+        ctxData.p1.x = Math.max(45, Math.min(595, ctxData.p1.x - ctxData.p1.dir * (overlap / 2)));
+        ctxData.p2.x = Math.max(45, Math.min(595, ctxData.p2.x - ctxData.p2.dir * (overlap / 2)));
+    }
+
+    // --- 重力物理、硬直タイマー ＆ CPU空中サーボ追従 ---
+    [ctxData.p1, ctxData.p2].forEach((char, idx) => {
+        const targetChar = idx === 0 ? ctxData.p2 : ctxData.p1;
+
+        // 行動履歴の自己集計
+        if (char.state === "punch" && char.frameTimer === 18 && !char.counted) {
+            char.history.punch++; char.history.total++; char.counted = true;
+        }
+        if (char.state === "kick" && char.frameTimer === 26 && !char.counted) {
+            char.history.kick++; char.history.total++; char.counted = true;
+        }
+        if (((char.state === "air_kick" && char.frameTimer === 26) || (char.state === "jump" && char.vy === -13)) && !char.counted) {
+            char.history.jump++; char.history.total++; char.counted = true;
+        }
+        if (char.state === "idle" || char.state === "crouch") {
+            char.counted = false; 
+        }
+
+        // 技の硬直
+        if (char.state === "punch" || char.state === "kick" || char.state === "air_kick" || char.state === "hit") {
+            char.frameTimer--;
+            if (char.frameTimer <= 0) {
+                char.state = (char.y < 0) ? "jump" : "idle";
+            }
+        }
+
+        // 空中高精度サーボ追従起爆エンジン
+        if (char.isCPU && char.state === "jump") {
+            const tDist = Math.abs(char.x - targetChar.x);
+            const isTargetCrouch = (targetChar.state === "crouch" || targetChar.state === "kick");
+            
+            if (isTargetCrouch && tDist <= KICK_RANGE && char.y >= -75) {
+                char.state = "air_kick";
+                char.frameTimer = 26;
+                char.isGuarding = false;
+            } else if (tDist <= PUNCH_RANGE && char.y >= -45) {
+                char.state = "punch";
+                char.frameTimer = 18;
+                char.isGuarding = false;
+            }
+        }
+
+        // 重力
+        if (char.state === "jump" || char.y < 0) {
+            char.vy += 0.6; 
+            char.y += char.vy;
+            if (char.y >= 0) {
+                char.y = 0;
+                char.vy = 0;
+                char.state = "idle";
+            }
+        }
+    });
+
+    // --- 2. 衝突・攻撃ヒット判定判定パイプライン ---
+    if (ctxData.p1.state === "punch" && ctxData.p1.frameTimer >= 6 && ctxData.p1.frameTimer <= 14) {
+        const isTargetCrouching = (ctxData.p2.state === "crouch" || ctxData.p2.state === "kick");
+        if (Math.abs(ctxData.p1.x - ctxData.p2.x) <= PUNCH_RANGE && !isTargetCrouching && ctxData.p2.y >= -40) {
+            if (ctxData.p2.state !== "hit") ctxData.damageBuffer.p2 = { amount: 12, hitType: "high" };
+        }
+    }
+    if (ctxData.p1.state === "kick" && ctxData.p1.frameTimer >= 10 && ctxData.p1.frameTimer <= 20) {
+        if (Math.abs(ctxData.p1.x - ctxData.p2.x) <= KICK_RANGE && ctxData.p2.y >= -20) {
+            if (ctxData.p2.state !== "hit") ctxData.damageBuffer.p2 = { amount: 18, hitType: "low" }; 
+        }
+    }
+    if (ctxData.p1.state === "air_kick" && ctxData.p1.frameTimer >= 10 && ctxData.p1.frameTimer <= 20) {
+        if (Math.abs(ctxData.p1.x - ctxData.p2.x) <= KICK_RANGE && Math.abs((ctxData.p1.y + BASE_HEIGHT/2) - ctxData.p2.y) <= 60) {
+            if (ctxData.p2.state !== "hit") ctxData.damageBuffer.p2 = { amount: 15, hitType: "mid" }; 
+        }
+    }
+
+    if (ctxData.p2.state === "punch" && ctxData.p2.frameTimer >= 6 && ctxData.p2.frameTimer <= 14) {
+        const isTargetCrouching = (ctxData.p1.state === "crouch" || ctxData.p1.state === "kick");
+        if (Math.abs(ctxData.p2.x - ctxData.p1.x) <= PUNCH_RANGE && !isTargetCrouching && ctxData.p1.y >= -40) {
+            if (ctxData.p1.state !== "hit") ctxData.damageBuffer.p1 = { amount: 12, hitType: "high" };
+        }
+    }
+    if (ctxData.p2.state === "kick" && ctxData.p2.frameTimer >= 10 && ctxData.p2.frameTimer <= 20) {
+        if (Math.abs(ctxData.p2.x - ctxData.p1.x) <= KICK_RANGE && ctxData.p1.y >= -20) {
+            if (ctxData.p1.state !== "hit") ctxData.damageBuffer.p1 = { amount: 18, hitType: "low" };
+        }
+    }
+    if (ctxData.p2.state === "air_kick" && ctxData.p2.frameTimer >= 10 && ctxData.p2.frameTimer <= 20) {
+        if (Math.abs(ctxData.p2.x - ctxData.p1.x) <= KICK_RANGE && Math.abs((ctxData.p2.y + BASE_HEIGHT/2) - ctxData.p1.y) <= 60) {
+            if (ctxData.p1.state !== "hit") ctxData.damageBuffer.p1 = { amount: 15, hitType: "mid" };
+        }
+    }
+
+    // --- 3. CPU AI 思考エンジン ---
+    executeAILogic(ctxData, ctxData.p1, ctxData.p2);
+    executeAILogic(ctxData, ctxData.p2, ctxData.p1);
+  }
+};
+
+// =============================================================================
+// 🧠 SFA 戦略的インナーAI思考エンジン
+// =============================================================================
+function executeAILogic(ctxData, me, target) {
+    if (!me.isCPU || !isActionable(me)) return;
+
+    me.aiTimer++;
+    if (me.aiTimer < 6) return; 
+    me.aiTimer = 0;
+
+    const dist = Math.abs(me.x - target.x);
+    const isTargetAttacking = (target.state === "punch" || target.state === "kick" || target.state === "air_kick");
+    const isTargetCrouching = (target.state === "crouch" || target.state === "kick");
+    
+    const isAtWall = (me.x <= 60 || me.x >= 580);
+    const isTargetAtWall = (target.x <= 60 || target.x >= 580);
+
+    const totalActions = target.history.total;
+    const kickRate  = target.history.kick / totalActions;
+    const jumpRate  = target.history.jump / totalActions;
+
+    // 戦略メタ思考状態の動的遷移
+    if (me.state === "idle" || me.state === "crouch") {
+        if (me.isGuarding && (!isTargetAttacking || target.isGuarding)) {
+            me.aiMode = "COUNTER_BURST";
+        } else if (target.state === "hit" && dist <= PUNCH_RANGE + 10) {
+            me.aiMode = "RUSH";
+            if (me.comboStep === 0) me.comboStep = 1;
+        } else if (me.lastActionWasAttack && target.state !== "hit") {
+            if (Math.random() < 0.40) {
+                me.aiMode = "PRESSURE"; 
+            } else {
+                me.aiMode = "TURTLE";   
+            }
+            me.lastActionWasAttack = false;
+        } else if (totalActions >= 10 && kickRate > 0.45 && dist <= KICK_RANGE + 40) {
+            me.aiMode = "PREDICT_KICK";
+        } else if (totalActions >= 10 && jumpRate > 0.40 && dist > KICK_RANGE) {
+            me.aiMode = "PREDICT_JUMP";
+        } else {
+            me.aiMode = "NEUTRAL";
+        }
+    }
+
+    // ⚡ モードY: COUNTER_BURST（ラインを強引に押し戻す、力強い確定割り込み反撃）
+    if (me.aiMode === "COUNTER_BURST") {
+        me.isGuarding = false; 
+        me.aiMode = "NEUTRAL";
+        me.x = Math.max(45, Math.min(595, me.x + me.dir * 15)); 
+        if (Math.random() < 0.55) {
+            me.state = "kick"; me.frameTimer = 26;
+        } else {
+            me.state = "punch"; me.frameTimer = 18;
+        }
+        me.lastActionWasAttack = true;
+        return;
+    }
+
+    me.isGuarding = false;
+
+    // ⚡ モードX: PRESSURE（暴れフレームトラップ）
+    if (me.aiMode === "PRESSURE") {
+        me.aiMode = "NEUTRAL"; 
+        if (dist <= KICK_RANGE + 10) {
+            if (Math.random() < 0.60) {
+                me.state = "punch"; me.frameTimer = 18;
+            } else {
+                me.state = "kick"; me.frameTimer = 26;
+            }
+            me.lastActionWasAttack = true;
+            return;
+        }
+    }
+
+    // 🔷 モードA: RUSH
+    if (me.aiMode === "RUSH") {
+        if (me.comboStep === 1) {
+            me.state = "punch"; me.frameTimer = 18;
+            me.comboStep = 2; return;
+        }
+        if (me.comboStep === 2) {
+            me.state = "kick"; me.frameTimer = 26;
+            me.comboStep = 0; me.aiMode = "NEUTRAL"; return;
+        }
+    }
+
+    // 🔶 モードB: TURTLE
+    if (me.aiMode === "TURTLE") {
+        const r = Math.random();
+        if (dist > KICK_RANGE + 40) {
+            me.aiMode = "NEUTRAL";
+        } else if (r < 0.60) {
+            me.state = "crouch"; me.isGuarding = true;
+            me.aiMode = "NEUTRAL"; return;
+        } else {
+            me.state = "idle"; me.x = Math.max(45, Math.min(595, me.x - me.dir * 45)); 
+            me.aiMode = "NEUTRAL"; return;
+        }
+    }
+
+    // 👁️ モード1: PREDICT_KICK
+    if (me.aiMode === "PREDICT_KICK") {
+        if (isTargetAtWall) {
+            if (Math.random() < 0.60) {
+                me.state = "kick"; me.frameTimer = 26; me.lastActionWasAttack = true;
+            } else {
+                me.state = "idle"; me.x = Math.max(45, Math.min(595, me.x - me.dir * 8)); me.isWalking = true;
+            }
+            return;
+        }
+        if (me.y === 0 && dist <= KICK_RANGE + 30) {
+            me.state = "jump"; me.vy = -13; 
+            return;
+        }
+        if (target.state === "kick" && target.frameTimer < 12 && dist <= KICK_RANGE) {
+            me.state = "kick"; me.frameTimer = 26; me.lastActionWasAttack = true; return;
+        }
+        me.state = "crouch"; me.isGuarding = true;
+        return;
+    }
+
+    // 👁️ モード2: PREDICT_JUMP
+    if (me.aiMode === "PREDICT_JUMP") {
+        if (target.state === "jump" && dist <= KICK_RANGE + 30) {
+            me.state = "kick"; me.frameTimer = 26; me.lastActionWasAttack = true; return;
+        }
+        
+        if (dist > KICK_RANGE + 40) {
+            me.state = "idle"; me.x = Math.max(45, Math.min(595, me.x + me.dir * 5)); me.isWalking = true;
+        } else {
+            me.state = "idle"; me.isGuarding = true; 
+            me.x = Math.max(45, Math.min(595, me.x - me.dir * 4));
+        }
+        return;
+    }
+
+    // 🟢 モードC: NEUTRAL
+    if (me.aiMode === "NEUTRAL") {
+        if (isTargetAttacking && target.frameTimer < 8 && dist <= KICK_RANGE) {
+            me.state = "kick"; me.frameTimer = 26; me.lastActionWasAttack = true; return;
+        }
+
+        if (target.state === "jump" && dist <= KICK_RANGE + 20) {
+            me.state = "kick"; me.frameTimer = 26; me.lastActionWasAttack = true; return;
+        }
+
+        // 超密着戦 ＆ 画面端背水のエスケープ
+        if (dist <= 35 || (isAtWall && dist <= 50)) {
+            const r = Math.random();
+            if (isAtWall && r < 0.35 && me.y === 0) {
+                me.state = "jump"; me.vy = -14;
+                me.x = Math.max(45, Math.min(595, me.x + me.dir * 70)); 
+                return;
+            }
+            
+            if (r < 0.50) {
+                me.state = "punch"; me.frameTimer = 18; 
+            } else if (r < 0.85) {
+                me.state = "kick"; me.frameTimer = 26;  
+            } else if (me.y === 0) {
+                me.state = "jump"; me.vy = -12;         
+                me.x = Math.max(45, Math.min(595, me.x + me.dir * 30));
+            }
+            me.lastActionWasAttack = true;
+            return;
+        }
+
+        // 通常密着戦
+        if (dist <= PUNCH_RANGE) {
+            const r = Math.random();
+            if (isTargetCrouching) {
+                if (r < 0.40) {
+                    me.state = "kick"; me.frameTimer = 26; me.lastActionWasAttack = true; return;
+                } else if (r < 0.90) {
+                    me.state = "punch"; me.frameTimer = 18; 
+                    me.lastActionWasAttack = true; return;
+                } else {
+                    me.state = "crouch"; me.isGuarding = true; return; 
+                }
+            } else {
+                if (r < 0.70) {
+                    me.state = "punch"; me.frameTimer = 18; 
+                    me.lastActionWasAttack = true; return;
+                } else if (r < 0.95) {
+                    me.state = "kick"; me.frameTimer = 26;
+                    me.lastActionWasAttack = true; return;
+                } else {
+                    me.state = "idle"; me.isGuarding = true; return; 
+                }
+            }
+        }
+
+        if (dist <= KICK_RANGE && dist > PUNCH_RANGE) {
+            if (Math.random() < 0.50) {
+                me.state = "kick"; me.frameTimer = 26;
+                me.lastActionWasAttack = true;
+                return;
+            }
+        }
+
+        if (dist > KICK_RANGE) {
+            if (isTargetAttacking && dist <= KICK_RANGE + 45) {
+                me.state = "idle"; me.isGuarding = true; 
+                return;
+            }
+
+            const r = Math.random();
+            if (r < 0.12 && me.y === 0) {
+                me.state = "jump"; me.vy = -13;
+                return;
+            } else if (r < 0.35) {
+                me.state = "crouch"; return;
+            } else if (r < 0.50) {
+                me.state = "idle"; return;
+            } else {
+                const dynamicSpeed = 4 + Math.random() * 2.5;
+                me.state = "idle"; me.x = Math.max(45, Math.min(595, me.x + me.dir * dynamicSpeed)); me.isWalking = true; return;
+            }
+        }
+
+        me.state = Math.random() < 0.20 ? "crouch" : "idle";
+    }
+}
+
+// ==========================================
+// 5. SFA ステートマシンエンジン
+// ==========================================
+class SFAEngine {
+  constructor(definitions, initialState, context, guards, actions, onTransitioned) {
+    this.definitions = definitions;
+    this.currentState = initialState;
+    this.context = context;
+    this.guards = guards;
+    this.actions = actions;
+    this.onTransitioned = onTransitioned;
+    this.onTransitioned(this.currentState, this.context);
+  }
+
+  transition(event) {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const matchedTransitions = stateDef.next_transitions.filter(t => t.event === event);
+
+    for (const trans of matchedTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+
+        this.handleAutoTransition();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  handleAutoTransition() {
+    // 💡 修正の核心：this.definitions から状態定義を引き出すように完全修正し、Enterキー開始不能バグを粉砕！
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const autoTransitions = stateDef.next_transitions.filter(t => t.event === "AUTO");
+
+    for (const trans of autoTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+        
+        this.handleAutoTransition();
+        return; 
+      }
+    }
+  }
+}
+
+// ==========================================
+// 6. UI Canvas 棒人間（Skeletal Stickman）描画エンジン 
+// ==========================================
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+function drawFighter(char, bodyColor, glowColor) {
+    ctx.save();
+    
+    const cx = char.x;
+    const cy = GROUND_Y + char.y;
+    ctx.translate(cx, cy);
+
+    const d = char.dir; 
+
+    const isCrouching = (char.state === "crouch" || char.state === "kick");
+    
+    let pelvisY = isCrouching ? -22 : -38;
+    let chestY  = isCrouching ? -42 : -68;
+    let headY   = isCrouching ? -58 : -86;
+    
+    let pelvis = { x: 0, y: pelvisY };
+    let chest  = { x: 0, y: chestY };
+    let head   = { x: 0, y: headY };
+    
+    let f_knee = { x: 12 * d,  y: pelvisY + 18 }; 
+    let f_foot = { x: 16 * d,  y: 0 };                         
+    let b_knee = { x: -10 * d, y: pelvisY + 18 }; 
+    let b_foot = { x: -14 * d, y: 0 };                         
+    
+    let f_elbow = { x: 10 * d,  y: chestY + 12 };              
+    let f_hand  = { x: 22 * d,  y: chestY + 4 };               
+    let b_elbow = { x: -8 * d,  y: chestY + 10 };              
+    let b_hand  = { x: 8 * d,   y: chestY - 4 };               
+
+    if (char.state === "hit") {
+        chest.x  = -16 * d; head.x   = -24 * d;
+        f_hand   = { x: 8 * d,   y: headY - 10 };
+        b_hand   = { x: -15 * d, y: headY - 5 };
+        f_foot   = { x: 22 * d,  y: -5 }; 
+    } 
+    else if (char.state === "punch") {
+        chest.x = 8 * d; head.x  = 12 * d;
+        const isPunchActive = (char.frameTimer >= 6 && char.frameTimer <= 14);
+        const ext = isPunchActive ? PUNCH_RANGE : 24;
+        f_elbow = { x: (ext*0.5) * d, y: chestY + 4 };
+        f_hand  = { x: ext * d,        y: chestY + 2 };
+    } 
+    else if (char.state === "kick") {
+        pelvis.y = -14; chest.y = -22; head.y = -34;
+        chest.x = 6 * d; head.x = 10 * d;
+        const isKickActive = (char.frameTimer >= 10 && char.frameTimer <= 20);
+        const ext = isKickActive ? KICK_RANGE : 30;
+        f_knee = { x: (ext*0.5) * d, y: -4 }; f_foot = { x: ext * d, y: -2 };
+        f_hand = { x: 14 * d, y: -2 }; b_hand = { x: -6 * d, y: -4 };
+    } 
+    else if (char.state === "air_kick") {
+        chest.x = -10 * d; head.x = -15 * d;
+        const isAirKickActive = (char.frameTimer >= 10 && char.frameTimer <= 20);
+        const ext = isAirKickActive ? KICK_RANGE : 34;
+        f_knee = { x: (ext*0.5) * d, y: 15 }; f_foot = { x: ext * d, y: 35 }; 
+        f_hand = { x: -14 * d, y: chestY }; b_hand = { x: 5 * d, y: chestY - 15 };
+    } 
+    else if (char.isGuarding) {
+        f_hand = { x: 14 * d, y: headY + 6 };
+        b_hand = { x: 6 * d,  y: headY - 4 };
+        f_elbow = { x: 8 * d, y: chestY + 2 };
+    }
+    else if (char.state === "idle" || char.state === "jump") {
+        if (char.isWalking && char.y === 0) {
+            const cycle = Math.sin(Date.now() * 0.015);
+            f_foot.x = (12 + cycle * 14) * d; b_foot.x = (-10 - cycle * 14) * d;
+            f_knee.x = f_foot.x - 2 * d; b_knee.x = b_foot.x - 2 * d;
+        }
+    }
+
+    // レンダリング
+    ctx.strokeStyle = bodyColor; ctx.fillStyle = bodyColor;
+    ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    
+    ctx.shadowBlur = (char.state === "punch" || char.state === "kick" || char.state === "air_kick") ? 18 : 6;
+    ctx.shadowColor = glowColor;
+
+    ctx.beginPath(); ctx.arc(head.x, head.y, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(head.x, head.y + 10); ctx.lineTo(chest.x, chest.y); ctx.lineTo(pelvis.x, pelvis.y); ctx.stroke();
+    
+    ctx.strokeStyle = bodyColor + "44"; 
+    ctx.beginPath(); ctx.moveTo(pelvis.x, pelvis.y); ctx.lineTo(b_knee.x, b_knee.y); ctx.lineTo(b_foot.x, b_foot.y); ctx.stroke(); 
+    ctx.beginPath(); ctx.moveTo(chest.x, chest.y - 4); ctx.lineTo(b_elbow.x, b_elbow.y); ctx.lineTo(b_hand.x, b_hand.y); ctx.stroke();
+
+    ctx.strokeStyle = bodyColor; 
+    ctx.beginPath(); ctx.moveTo(pelvis.x, pelvis.y); ctx.lineTo(f_knee.x, f_knee.y); ctx.lineTo(f_foot.x, f_foot.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(chest.x, chest.y - 4); ctx.lineTo(f_elbow.x, f_elbow.y); ctx.lineTo(f_hand.x, f_hand.y); ctx.stroke();
+
+    if (char.isCPU) {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#ffffff"; ctx.font = "10px 'M PLUS 1 Code'"; ctx.textAlign = "center";
+        
+        let modeLabel = "CPU";
+        if (char.aiMode === "COUNTER_BURST") modeLabel = "⚡COUNTER";
+        else if (char.state === "air_kick") modeLabel = "💥OVERHEAD!!";
+        else if (char.aiMode === "PRESSURE") modeLabel = "🔥PRESSURE";
+        else if (char.aiMode === "PREDICT_KICK") modeLabel = "👁️ANTI-KICK";
+        else if (char.aiMode === "PREDICT_JUMP") modeLabel = "👁️ANTI-AIR";
+        else if (char.aiMode === "RUSH") modeLabel = "⚡RUSH";
+        else if (char.aiMode === "TURTLE") modeLabel = "🛡️EVADE";
+        ctx.fillText(modeLabel, 0, -102);
+    }
+
+    ctx.shadowBlur = 0;
+    ctx.restore();
+}
+
+function render(state, ctxGame) {
+    ctx.fillStyle = "#04040a"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = "#111126"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(canvas.width, GROUND_Y); ctx.stroke();
+    for (let i = 0; i < canvas.width; i += 40) {
+        ctx.beginPath(); ctx.moveTo(i, GROUND_Y); ctx.lineTo(i + (i - canvas.width/2)*0.6, canvas.height); ctx.stroke();
+    }
+
+    drawFighter(ctxGame.p1, "#00ffcc", "#00ffcc");
+    drawFighter(ctxGame.p2, "#ff00ff", "#ff00ff");
+
+    const barW = 220; const barH = 16;
+    ctx.fillStyle = "#201010"; ctx.fillRect(40, 20, barW, barH);
+    ctx.fillStyle = "#00ffcc"; ctx.fillRect(40, 20, barW * (ctxGame.p1.hp / 100), barH);
+    ctx.strokeStyle = "#ffffff"; ctx.strokeRect(40, 20, barW, barH);
+
+    ctx.fillStyle = "#201010"; ctx.fillRect(canvas.width - 40 - barW, 20, barW, barH);
+    ctx.fillStyle = "#ff00ff"; ctx.fillRect(canvas.width - 40 - barW + (barW - barW * (ctxGame.p2.hp / 100)), 20, barW * (ctxGame.p2.hp / 100), barH);
+    ctx.strokeStyle = "#ffffff"; ctx.strokeRect(canvas.width - 40 - barW, 20, barW, barH);
+
+    ctx.fillStyle = "#ffffff"; ctx.font = "bold 11px 'M PLUS 1 Code', monospace"; ctx.textAlign = "left";
+    ctx.fillText(ctxGame.p1.isCPU ? "CPU 1" : "PLAYER 1", 40, 50);
+    ctx.textAlign = "right";
+    ctx.fillText("CPU 2 (AI-PRO)", canvas.width - 40, 50);
+
+    if (state === "FE_TITLE") {
+        ctx.fillStyle = "rgba(3, 3, 8, 0.96)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#00ffcc"; ctx.font = "bold 34px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText("SFA FIGHTING", canvas.width / 2, 110);
+        ctx.fillStyle = "#ff00ff"; ctx.font = "12px 'M PLUS 1 Code', monospace";
+        ctx.fillText("- STICKMAN MIX-UP CORE -", canvas.width / 2, 145);
+
+        ctx.font = "16px 'M PLUS 1 Code', monospace";
+        ctx.fillStyle = ctxGame.menuCursor === 0 ? "#ffff00" : "#555577";
+        ctx.fillText(`${ctxGame.menuCursor === 0 ? "> " : "  "}1P vs CPU (BATTLE)`, canvas.width / 2, 220);
+        
+        ctx.fillStyle = ctxGame.menuCursor === 1 ? "#ffff00" : "#555577";
+        ctx.fillText(`${ctxGame.menuCursor === 1 ? "> " : "  "}CPU vs CPU (WATCH)`, canvas.width / 2, 250);
+
+        ctx.fillStyle = "#888"; ctx.font = "11px 'M PLUS 1 Code'";
+        ctx.fillText("[↑/↓]: Select Mode  |  [Enter]: Confirm", canvas.width / 2, 310);
+        
+    } else if (state === "FE_GAMEOVER") {
+        ctx.fillStyle = "rgba(35, 0, 5, 0.85)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ff3366"; ctx.font = "bold 44px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText(ctxGame.gameMode === "CPU_VS_CPU" ? "MATCH CONCLUDED" : "YOU WERE K. O.", canvas.width / 2, 160);
+        ctx.fillStyle = "#ffffff"; ctx.font = "15px 'M PLUS 1 Code'";
+        ctx.fillText("PRESS [ENTER] TO REMATCH", canvas.width / 2, 220);
+    } else if (state === "VICTORY" || state === "FE_VICTORY") {
+        ctx.fillStyle = "rgba(0, 30, 10, 0.85)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#00ff66"; ctx.font = "bold 44px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText(ctxGame.gameMode === "CPU_VS_CPU" ? "MATCH CONCLUDED" : "VICTORY !", canvas.width / 2, 160);
+        ctx.fillStyle = "#ffffff"; ctx.font = "15px 'M PLUS 1 Code'";
+        ctx.fillText("PRESS [ENTER] TO REMATCH | [ESC] TO PORTAL", canvas.width / 2, 220);
+    }
+}
+
+// ==========================================
+// 7. イベントマッピング & キーレジストリ
+// ==========================================
+const ctxGame = context;
+const engine = new SFAEngine(SFA_DEFINITIONS, "FE_TITLE", ctxGame, guards, actions, (state, c) => {});
+
+const activeKeys = {};
+
+document.addEventListener("keydown", (e) => {
+    activeKeys[e.key] = true;
+    const state = engine.currentState;
+
+    if (state === "FE_TITLE") {
+        if (e.key === "ArrowUp")   engine.transition("MENU_UP");
+        if (e.key === "ArrowDown") engine.transition("MENU_DOWN");
+        if (e.key === "Enter")     engine.transition("START");
+    } else if (state === "FE_ROUND_PLAY") {
+        if (e.key === "ArrowUp")   engine.transition("TRIGGER_JUMP");
+        if (e.key === "ArrowDown") engine.transition("HOLD_CROUCH");
+        if (e.key === "c" || e.key === "C") engine.transition("HOLD_GUARD"); 
+        if (e.key === "z" || e.key === "Z") engine.transition("PRESS_PUNCH");
+        if (e.key === "x" || e.key === "X") engine.transition("PRESS_KICK");
+        if (e.key === "Escape")    engine.transition("ESCAPE");
+    } else {
+        if (e.key === "Enter")  engine.transition("START");
+        if (e.key === "Escape") engine.transition("ESCAPE");
+    }
+});
+
+document.addEventListener("keyup", (e) => {
+    delete activeKeys[e.key];
+    if (engine.currentState === "FE_ROUND_PLAY") {
+        if (e.key === "ArrowDown") engine.transition("RELEASE_CROUCH");
+        if (e.key === "c" || e.key === "C") engine.transition("RELEASE_GUARD"); 
+    }
+});
+
+function loop() {
+    if (engine.currentState === "FE_ROUND_PLAY") {
+        if (activeKeys["ArrowLeft"])  engine.transition("MOVE_LEFT");
+        if (activeKeys["ArrowRight"]) engine.transition("MOVE_RIGHT");
+    }
+    engine.transition("TICK");
+    render(engine.currentState, engine.context);
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>
