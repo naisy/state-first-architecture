@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SFA Heist - Isometric Canvas Edition (Title Fixed)</title>
+<style>
+:root{--bg:#03060c;--cyan:#00e5ff;--text:#dce7ef;--muted:#7d92a3;--yellow:#ffd84a;--green:#52ff8f;--danger:#ff4d6d}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#03060c;color:var(--text);font-family:'M PLUS 1 Code',ui-monospace,SFMono-Regular,Consolas,monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px;overflow:auto}
+#game-container{position:relative;width:min(960px,calc(100vw - 36px));border:4px solid var(--cyan);box-shadow:0 0 30px rgba(0,229,255,.24);background:#000;overflow:hidden}
+canvas{display:block;width:100%;height:auto;aspect-ratio:16/10;cursor:crosshair}
+#game-hud{position:absolute;left:12px;right:12px;top:10px;z-index:3;display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;pointer-events:none}
+#game-hud.hidden{display:none}
+.hud-cell{min-height:34px;padding:7px 10px;border:1px solid #24495c;background:rgba(3,10,17,.88);color:#9eb2c0;font-size:11px;box-shadow:inset 0 0 12px rgba(0,229,255,.035)}
+.hud-cell strong{color:#fff;font-size:12px}.hud-objective{color:var(--yellow);border-color:#76652a}.hud-alert.alert{color:#ff92a8;border-color:var(--danger)}
+#titleScreen{position:absolute;inset:0;z-index:5;display:none;align-items:center;justify-content:center;text-align:center;background:rgba(2,2,8,.96)}
+#titleScreen.visible{display:flex}
+#titleScreen::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 32%,rgba(0,229,255,.12),transparent 42%),repeating-linear-gradient(180deg,rgba(0,229,255,.026) 0,rgba(0,229,255,.026) 1px,transparent 1px,transparent 8px)}
+.title-content{position:relative;width:min(760px,88%)}
+.title-logo{margin:0;color:var(--cyan);font-size:64px;line-height:1;text-shadow:0 0 25px var(--cyan)}
+.title-subtitle{margin:15px 0 70px;color:#ff5cda;font-size:14px;letter-spacing:.13em}
+.start-prompt{color:#fff;font-size:18px;font-weight:700;text-shadow:0 0 14px #fff;animation:titleBlink .8s steps(1,end) infinite}
+.title-system{margin-top:54px;color:#3f5968;font-size:11px}
+@keyframes titleBlink{50%{opacity:.2}}
+#instructions{margin-top:14px;width:min(960px,calc(100vw - 36px));font-size:13px;color:#888;text-align:center;line-height:1.7}
+.highlight{color:var(--cyan);font-weight:bold}.goal{color:var(--yellow);font-weight:bold}.exit{color:var(--green);font-weight:bold}
+@media(max-width:760px){.title-logo{font-size:44px}.title-subtitle{margin-bottom:48px}#game-hud{grid-template-columns:1fr 1fr}.hud-objective{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="game" width="960" height="600"></canvas>
+  <div id="game-hud" class="hidden">
+    <div class="hud-cell hud-objective" id="objective">OBJECTIVE: Acquire the yellow DATA CORE</div>
+    <div class="hud-cell">DATA <strong id="dataStatus">NOT ACQUIRED</strong></div>
+    <div class="hud-cell hud-alert" id="alertCell">ALERT <strong id="alertStatus">CLEAR</strong></div>
+    <div class="hud-cell">GUARD <strong id="guardState">PATROL</strong></div>
+  </div>
+  <div id="titleScreen" class="visible">
+    <div class="title-content">
+      <h1 class="title-logo">SFA HEIST</h1>
+      <div class="title-subtitle">ISOMETRIC STATE-FIRST INFILTRATION</div>
+      <div class="start-prompt">PRESS [ENTER] TO START</div>
+      <div class="title-system">SFA ENGINE // STEALTH STATE MACHINE ONLINE</div>
+    </div>
+  </div>
+</div>
+<div id="instructions">
+  <span class="highlight">[Enter]</span>: Start Game / Restart &nbsp;|&nbsp; <span class="highlight">[Esc]</span>: Return to Title Screen<br>
+  <span class="highlight">[← / → / ↑ / ↓]</span>: Move &nbsp;|&nbsp; <span class="highlight">[Space]</span>: Create Noise &nbsp;|&nbsp; <span class="highlight">[1 / 2]</span>: Inspect Guard<br>
+  <span class="goal">MISSION:</span> Step onto the yellow DATA CORE. The <span class="exit">green EXIT flag</span> appears after the DATA CORE is acquired.
+  <p style="font-size:11px;color:#445866;margin:8px 0 0">SFA Engine visualizing PATROL → SUSPICIOUS → INVESTIGATE → ALERT → CHASE → SEARCH → RETURN.</p>
+</div>
+<script>
+'use strict';
+const GRID_W=18,GRID_H=13,TILE_W=54,TILE_H=27,WALL_H=34;
+const canvas=document.querySelector('#game');
+const g=canvas.getContext('2d');
+const COLORS={PATROL:'#4aa3ff',SUSPICIOUS:'#ffe066',INVESTIGATE:'#ff9f43',ALERT:'#ff4d6d',CHASE:'#ff00c8',SEARCH:'#a66cff',RETURN:'#52e38f'};
+const SFA_DEFINITIONS={
+ FE_TITLE:{role:'frontend',next_transitions:[{event:'START',action:'init_game',target_state:'FE_PLAYING'}]},
+ FE_PLAYING:{role:'frontend',next_transitions:[
+  {event:'ESCAPE',action:'return_title',target_state:'FE_TITLE'},
+  {event:'SELECT_GUARD_1',action:'select_guard_1',target_state:'FE_PLAYING'},
+  {event:'SELECT_GUARD_2',action:'select_guard_2',target_state:'FE_PLAYING'},
+  {event:'MOVE_UP',guard:'can_move_up',action:'move_up',target_state:'FE_PLAYING'},
+  {event:'MOVE_DOWN',guard:'can_move_down',action:'move_down',target_state:'FE_PLAYING'},
+  {event:'MOVE_LEFT',guard:'can_move_left',action:'move_left',target_state:'FE_PLAYING'},
+  {event:'MOVE_RIGHT',guard:'can_move_right',action:'move_right',target_state:'FE_PLAYING'},
+  {event:'MAKE_NOISE',action:'create_noise',target_state:'FE_PLAYING'},
+  {event:'INTERACT',action:'interact',target_state:'FE_PLAYING'},
+  {event:'TICK',guard:'is_caught',target_state:'FE_CAUGHT'},
+  {event:'TICK',guard:'is_escaped',target_state:'FE_VICTORY'},
+  {event:'TICK',action:'update_simulation',target_state:'FE_PLAYING'}]},
+ FE_CAUGHT:{role:'frontend',next_transitions:[{event:'START',action:'init_game',target_state:'FE_PLAYING'},{event:'ESCAPE',action:'return_title',target_state:'FE_TITLE'}]},
+ FE_VICTORY:{role:'frontend',next_transitions:[{event:'START',action:'init_game',target_state:'FE_PLAYING'},{event:'ESCAPE',action:'return_title',target_state:'FE_TITLE'}]}
+};
+const context={player:{x:2,y:10,viewX:2,viewY:10},hasData:false,escaped:false,caught:false,noise:null,tick:0,lastEvent:null,guards:[],selectedGuard:0};
+const walls=new Set();
+for(let x=0;x<GRID_W;x++){walls.add(`${x},0`);walls.add(`${x},${GRID_H-1}`)}
+for(let y=0;y<GRID_H;y++){walls.add(`0,${y}`);walls.add(`${GRID_W-1},${y}`)}
+for(let y=2;y<10;y++)if(y!==6)walls.add(`7,${y}`);
+for(let x=10;x<16;x++)if(x!==13)walls.add(`${x},7`);
+walls.add('12,3');walls.add('12,4');
+const DATA_POS={x:15,y:10};
+const EXIT_POS={x:16,y:1};
+function isWalkable(x,y){return !walls.has(`${x},${y}`)}
+function manhattan(a,b){return Math.abs(a.x-b.x)+Math.abs(a.y-b.y)}
+function makeGuard(id,x,y,route){return{id,x,y,viewX:x,viewY:y,route,routeIndex:0,state:'PATROL',timer:0,target:null,lastSeen:null,dir:Math.PI,viewDir:Math.PI}}
+const guards={
+ can_move_up:c=>isWalkable(c.player.x,c.player.y-1),can_move_down:c=>isWalkable(c.player.x,c.player.y+1),
+ can_move_left:c=>isWalkable(c.player.x-1,c.player.y),can_move_right:c=>isWalkable(c.player.x+1,c.player.y),
+ is_caught:c=>c.caught,is_escaped:c=>c.escaped
+};
+function resolvePlayerObjective(c,allowAdjacent=false){
+ const dataReached=allowAdjacent?manhattan(c.player,DATA_POS)<=1:(c.player.x===DATA_POS.x&&c.player.y===DATA_POS.y);
+ if(!c.hasData&&dataReached){c.hasData=true;c.lastEvent={guard:'PLAYER',event:'DATA_ACQUIRED',from:'INFILTRATING',to:'EXTRACTING'}}
+ const exitReached=allowAdjacent?manhattan(c.player,EXIT_POS)<=1:(c.player.x===EXIT_POS.x&&c.player.y===EXIT_POS.y);
+ if(c.hasData&&exitReached){c.escaped=true;c.lastEvent={guard:'PLAYER',event:'EXIT_REACHED',from:'EXTRACTING',to:'ESCAPED'}}
+}
+const actions={
+ init_game:c=>{c.player={x:2,y:10,viewX:2,viewY:10};c.hasData=false;c.escaped=false;c.caught=false;c.noise=null;c.tick=0;c.lastEvent=null;c.selectedGuard=0;c.guards=[makeGuard(1,14,2,[{x:14,y:2},{x:9,y:2},{x:9,y:6},{x:14,y:6}]),makeGuard(2,4,4,[{x:4,y:4},{x:4,y:9},{x:6,y:9},{x:6,y:4}])]},
+ return_title:c=>{c.caught=false;c.escaped=false;c.noise=null},select_guard_1:c=>{c.selectedGuard=0},select_guard_2:c=>{c.selectedGuard=1},
+ move_up:c=>{c.player.y--;resolvePlayerObjective(c)},move_down:c=>{c.player.y++;resolvePlayerObjective(c)},move_left:c=>{c.player.x--;resolvePlayerObjective(c)},move_right:c=>{c.player.x++;resolvePlayerObjective(c)},
+ create_noise:c=>{c.noise={x:c.player.x,y:c.player.y,r:0,life:85}},
+ interact:c=>{resolvePlayerObjective(c,true)},
+ update_simulation:updateSimulation
+};
+class SFAEngine{
+ constructor(definitions,initialState,ctx,guardMap,actionMap,onTransitioned){this.definitions=definitions;this.currentState=initialState;this.context=ctx;this.guards=guardMap;this.actions=actionMap;this.onTransitioned=onTransitioned}
+ transition(event){const stateDef=this.definitions[this.currentState];if(!stateDef)return false;const candidates=stateDef.next_transitions.filter(t=>t.event===event);for(const transition of candidates){if(transition.guard&&!this.guards[transition.guard](this.context))continue;if(transition.action)this.actions[transition.action](this.context);this.currentState=transition.target_state;this.onTransitioned(this.currentState,this.context);return true}return false}
+}
+const engine=new SFAEngine(SFA_DEFINITIONS,'FE_TITLE',context,guards,actions,projectUI);
+function setGuardState(q,next,event,target=null,timer=0){if(q.state===next&&sameTarget(q.target,target))return;const previous=q.state;q.state=next;q.target=target;q.timer=timer;context.lastEvent={guard:q.id,event,from:previous,to:next}}
+function sameTarget(a,b){return(!a&&!b)||(a&&b&&a.x===b.x&&a.y===b.y)}
+function hasLineOfSight(q){const dx=context.player.x-q.x,dy=context.player.y-q.y;const distance=Math.hypot(dx,dy);if(distance>5.2)return false;const angle=Math.atan2(dy,dx);const delta=Math.atan2(Math.sin(angle-q.dir),Math.cos(angle-q.dir));if(Math.abs(delta)>.58)return false;const steps=Math.ceil(distance*6);for(let i=1;i<steps;i++){const x=Math.round(q.x+dx*i/steps),y=Math.round(q.y+dy*i/steps);if(walls.has(`${x},${y}`))return false}return true}
+function stepToward(q,target){const horizontal={x:q.x+Math.sign(target.x-q.x),y:q.y};const vertical={x:q.x,y:q.y+Math.sign(target.y-q.y)};const options=Math.abs(target.x-q.x)>=Math.abs(target.y-q.y)?[horizontal,vertical]:[vertical,horizontal];const next=options.find(p=>isWalkable(p.x,p.y));if(next){q.dir=Math.atan2(next.y-q.y,next.x-q.x);q.x=next.x;q.y=next.y}}
+function updateSimulation(c){c.tick++;if(c.noise){c.noise.r+=.1;c.noise.life--;if(c.noise.life<=0)c.noise=null}for(const q of c.guards){if(hasLineOfSight(q)){q.lastSeen={...c.player};setGuardState(q,'ALERT','SAW_PLAYER',q.lastSeen,18)}else if(c.noise&&manhattan(q,c.noise)<=5&&['PATROL','RETURN'].includes(q.state)){setGuardState(q,'SUSPICIOUS','HEARD_NOISE',{x:c.noise.x,y:c.noise.y},25)}if(c.tick%8!==0)continue;q.timer--;switch(q.state){case'PATROL':{const target=q.route[q.routeIndex];if(q.x===target.x&&q.y===target.y)q.routeIndex=(q.routeIndex+1)%q.route.length;stepToward(q,q.route[q.routeIndex]);break}case'SUSPICIOUS':if(q.timer<=0)setGuardState(q,'INVESTIGATE','CONFIRMED_NOISE',q.target,50);break;case'INVESTIGATE':if(q.x===q.target.x&&q.y===q.target.y)setGuardState(q,'SEARCH','REACHED_NOISE',q.target,45);else stepToward(q,q.target);break;case'ALERT':if(q.timer<=0)setGuardState(q,'CHASE','ALERT_CONFIRMED',q.lastSeen,80);break;case'CHASE':q.target={...c.player};q.lastSeen={...c.player};stepToward(q,q.target);if(manhattan(q,c.player)<=1)c.caught=true;if(!hasLineOfSight(q)&&q.timer<=0)setGuardState(q,'SEARCH','LOST_PLAYER',q.lastSeen,55);break;case'SEARCH':if(q.timer%10===0){const candidates=[{x:q.x+1,y:q.y},{x:q.x-1,y:q.y},{x:q.x,y:q.y+1},{x:q.x,y:q.y-1}].filter(p=>isWalkable(p.x,p.y));if(candidates.length)stepToward(q,candidates[Math.floor(Math.random()*candidates.length)])}if(q.timer<=0)setGuardState(q,'RETURN','SEARCH_EXPIRED',q.route[q.routeIndex],80);break;case'RETURN':if(q.x===q.route[q.routeIndex].x&&q.y===q.route[q.routeIndex].y)setGuardState(q,'PATROL','ROUTE_REJOINED');else stepToward(q,q.route[q.routeIndex]);break}}}
+function projectUI(){
+ const isTitle=engine.currentState==='FE_TITLE';
+ document.querySelector('#titleScreen').classList.toggle('visible',isTitle);
+ document.querySelector('#game-hud').classList.toggle('hidden',isTitle);
+ let objective='OBJECTIVE: Acquire the yellow DATA CORE';
+ if(context.hasData)objective='OBJECTIVE: Reach the green EXIT flag';
+ if(engine.currentState==='FE_CAUGHT')objective='MISSION FAILED — Press Enter to retry';
+ if(engine.currentState==='FE_VICTORY')objective='MISSION COMPLETE — Press Enter to replay';
+ document.querySelector('#objective').textContent=objective;
+ document.querySelector('#dataStatus').textContent=context.hasData?'ACQUIRED':'NOT ACQUIRED';
+ const alert=context.guards.some(q=>['ALERT','CHASE'].includes(q.state));
+ document.querySelector('#alertStatus').textContent=alert?'ACTIVE':'CLEAR';
+ document.querySelector('#alertCell').classList.toggle('alert',alert);
+ const selected=context.guards[context.selectedGuard]||{state:'PATROL'};
+ document.querySelector('#guardState').textContent=selected.state;
+}
+function iso(x,y,z=0){return{x:canvas.width/2+(x-y)*TILE_W/2-20,y:76+(x+y)*TILE_H/2-z}}
+function lerp(a,b,t){return a+(b-a)*t}
+function updateVisualInterpolation(){context.player.viewX=lerp(context.player.viewX,context.player.x,.24);context.player.viewY=lerp(context.player.viewY,context.player.y,.24);for(const q of context.guards){q.viewX=lerp(q.viewX,q.x,.17);q.viewY=lerp(q.viewY,q.y,.17);q.viewDir=Math.atan2(Math.sin(q.dir-q.viewDir)*.18,Math.cos(q.dir-q.viewDir)*.18)+q.viewDir}}
+function polygon(points,fill,stroke=null,width=1){g.beginPath();g.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)g.lineTo(points[i].x,points[i].y);g.closePath();if(fill){g.fillStyle=fill;g.fill()}if(stroke){g.strokeStyle=stroke;g.lineWidth=width;g.stroke()}}
+function drawFloorTile(x,y){const p=iso(x,y),right=iso(x+1,y),bottom=iso(x+1,y+1),left=iso(x,y+1);const alt=(x+y)%2===0?'#091823':'#0b1c28';polygon([p,right,bottom,left],alt,'#163142',1)}
+function drawWall(x,y){const top=iso(x,y,WALL_H),tr=iso(x+1,y,WALL_H),tb=iso(x+1,y+1,WALL_H),tl=iso(x,y+1,WALL_H);const b=iso(x,y),br=iso(x+1,y),bb=iso(x+1,y+1),bl=iso(x,y+1);polygon([top,tr,tb,tl],'#213747','#436074',1);polygon([tl,tb,bb,bl],'#172734','#30495b',1);polygon([tr,tb,bb,br],'#10212d','#30495b',1);g.strokeStyle='#00e5ff18';g.beginPath();g.moveTo(top.x,top.y);g.lineTo(tb.x,tb.y);g.stroke()}
+function drawBeacon(pos,color,label,height=22){const p=iso(pos.x+.5,pos.y+.5);g.save();g.shadowBlur=18;g.shadowColor=color;g.strokeStyle=color;g.lineWidth=2;g.beginPath();g.ellipse(p.x,p.y,20,9,0,0,Math.PI*2);g.stroke();g.beginPath();g.moveTo(p.x,p.y);g.lineTo(p.x,p.y-height);g.stroke();g.fillStyle=color;g.font='bold 13px monospace';g.textAlign='center';g.fillText(label,p.x,p.y-height-8);g.restore()}
+function drawExitFlag(){
+  const color=context.hasData?'#52ff8f':'#2fdc79';
+  const p=iso(EXIT_POS.x+.5,EXIT_POS.y+.5,2);
+  const poleHeight=22;
+  const poleTopY=p.y-poleHeight;
+  const wave=Math.sin(Date.now()/180)*1.5;
+  g.save();
+  g.shadowBlur=context.hasData?18:12;
+  g.shadowColor=color;
+  g.strokeStyle=color;
+  g.lineWidth=2;
+  g.beginPath();
+  g.ellipse(p.x,p.y,20,9,0,0,Math.PI*2);
+  g.stroke();
+  g.beginPath();
+  g.moveTo(p.x,p.y);
+  g.lineTo(p.x,poleTopY);
+  g.stroke();
+
+  g.fillStyle=color;
+  g.beginPath();
+  g.moveTo(p.x+1,poleTopY+2);
+  g.lineTo(p.x+17+wave,poleTopY+7);
+  g.lineTo(p.x+1,poleTopY+13);
+  g.closePath();
+  g.fill();
+
+  g.fillStyle=color;
+  g.font='bold 13px monospace';
+  g.textAlign='center';
+  g.fillText('EXIT',p.x,poleTopY-8);
+  g.restore();
+}
+function drawVision(q){const center=iso(q.viewX+.5,q.viewY+.5,3);const range=5.1;const points=[center];for(let i=0;i<=18;i++){const a=q.viewDir-.58+(1.16*i/18);const wx=q.viewX+.5+Math.cos(a)*range,wy=q.viewY+.5+Math.sin(a)*range;points.push(iso(wx,wy,2))}polygon(points,COLORS[q.state]+'25',COLORS[q.state]+'55',1)}
+function drawAgent(x,y,color,label,height=25){const p=iso(x+.5,y+.5,2);g.save();g.shadowBlur=14;g.shadowColor=color;g.fillStyle='#02070c';g.strokeStyle=color;g.lineWidth=2;g.beginPath();g.ellipse(p.x,p.y-7,13,8,0,0,Math.PI*2);g.fill();g.stroke();g.beginPath();g.moveTo(p.x,p.y-15);g.lineTo(p.x,p.y-height-14);g.stroke();g.beginPath();g.arc(p.x,p.y-height-19,6,0,Math.PI*2);g.fill();g.stroke();g.fillStyle=color;g.font='bold 11px monospace';g.textAlign='center';g.fillText(label,p.x,p.y-height-31);g.restore()}
+function drawNoise(){if(!context.noise)return;const p=iso(context.noise.x+.5,context.noise.y+.5,2);const radius=context.noise.r*TILE_W*.72;g.save();g.strokeStyle='#00e5ffaa';g.lineWidth=2;g.shadowBlur=10;g.shadowColor='#00e5ff';g.beginPath();g.ellipse(p.x,p.y,radius,radius*.5,0,0,Math.PI*2);g.stroke();g.restore()}
+function drawRoute(q){if(context.selectedGuard!==q.id-1)return;g.save();g.strokeStyle=COLORS[q.state]+'70';g.setLineDash([6,5]);g.beginPath();q.route.forEach((r,i)=>{const p=iso(r.x+.5,r.y+.5,1);if(i===0)g.moveTo(p.x,p.y);else g.lineTo(p.x,p.y)});const first=iso(q.route[0].x+.5,q.route[0].y+.5,1);g.lineTo(first.x,first.y);g.stroke();g.restore()}
+function drawWorld(){g.fillStyle='#02060b';g.fillRect(0,0,canvas.width,canvas.height);const gradient=g.createLinearGradient(0,0,0,canvas.height);gradient.addColorStop(0,'#0b2030');gradient.addColorStop(1,'#02060b');g.fillStyle=gradient;g.fillRect(0,0,canvas.width,canvas.height);for(let sum=0;sum<=GRID_W+GRID_H-2;sum++){for(let y=0;y<GRID_H;y++){const x=sum-y;if(x<0||x>=GRID_W)continue;drawFloorTile(x,y)}}for(const q of context.guards)drawRoute(q);if(!context.hasData)drawBeacon(DATA_POS,'#ffd84a','DATA');drawNoise();for(const q of context.guards)drawVision(q);for(let sum=0;sum<=GRID_W+GRID_H-2;sum++){for(let y=0;y<GRID_H;y++){const x=sum-y;if(x<0||x>=GRID_W)continue;if(walls.has(`${x},${y}`))drawWall(x,y)}}if(context.hasData)drawExitFlag();const agents=[...context.guards.map(q=>({kind:'guard',depth:q.viewX+q.viewY,q})),{kind:'player',depth:context.player.viewX+context.player.viewY}].sort((a,b)=>a.depth-b.depth);for(const a of agents){if(a.kind==='player')drawAgent(context.player.viewX,context.player.viewY,'#00f5ff','PLAYER',27);else{drawAgent(a.q.viewX,a.q.viewY,COLORS[a.q.state],`G${a.q.id}`,25);const p=iso(a.q.viewX+.5,a.q.viewY+.5,58);g.fillStyle=COLORS[a.q.state];g.font='bold 10px monospace';g.textAlign='center';g.fillText(a.q.state,p.x,p.y)}}g.fillStyle='#a8bfce';g.font='12px monospace';g.textAlign='left';g.fillText(`SELECTED GUARD: ${context.selectedGuard+1}`,18,canvas.height-18)}
+function overlay(title,subtitle,color='#00e5ff'){g.fillStyle='#01040bdc';g.fillRect(0,0,canvas.width,canvas.height);g.textAlign='center';g.shadowBlur=20;g.shadowColor=color;g.fillStyle=color;g.font='bold 46px monospace';g.fillText(title,canvas.width/2,260);g.shadowBlur=0;g.fillStyle='#fff';g.font='16px monospace';g.fillText(subtitle,canvas.width/2,312)}
+function drawTitleScreen(){
+  g.save();
+  g.fillStyle='#01040be8';
+  g.fillRect(0,0,canvas.width,canvas.height);
+
+  const scan=g.createLinearGradient(0,0,0,canvas.height);
+  scan.addColorStop(0,'rgba(0,229,255,.08)');
+  scan.addColorStop(.45,'rgba(0,0,0,0)');
+  scan.addColorStop(1,'rgba(255,0,200,.05)');
+  g.fillStyle=scan;
+  g.fillRect(0,0,canvas.width,canvas.height);
+
+  g.strokeStyle='rgba(0,229,255,.07)';
+  g.lineWidth=1;
+  for(let y=0;y<canvas.height;y+=8){g.beginPath();g.moveTo(0,y);g.lineTo(canvas.width,y);g.stroke()}
+
+  g.textAlign='center';
+  g.shadowBlur=24;
+  g.shadowColor='#00e5ff';
+  g.fillStyle='#00e5ff';
+  g.font='bold 58px monospace';
+  g.fillText('SFA HEIST',canvas.width/2,150);
+
+  g.shadowBlur=12;
+  g.shadowColor='#ff00c8';
+  g.fillStyle='#ff5cda';
+  g.font='bold 15px monospace';
+  g.fillText('- ISOMETRIC STATE-FIRST INFILTRATION -',canvas.width/2,188);
+  g.shadowBlur=0;
+
+  const cardX=canvas.width/2-265,cardY=225,cardW=530,cardH=170;
+  g.fillStyle='rgba(3,12,20,.88)';
+  g.fillRect(cardX,cardY,cardW,cardH);
+  g.strokeStyle='#25495c';
+  g.lineWidth=1;
+  g.strokeRect(cardX,cardY,cardW,cardH);
+  g.strokeStyle='#00e5ff';
+  g.lineWidth=3;
+  g.beginPath();g.moveTo(cardX,cardY+35);g.lineTo(cardX,cardY);g.lineTo(cardX+35,cardY);g.stroke();
+  g.beginPath();g.moveTo(cardX+cardW-35,cardY);g.lineTo(cardX+cardW,cardY);g.lineTo(cardX+cardW,cardY+35);g.stroke();
+  g.beginPath();g.moveTo(cardX,cardY+cardH-35);g.lineTo(cardX,cardY+cardH);g.lineTo(cardX+35,cardY+cardH);g.stroke();
+  g.beginPath();g.moveTo(cardX+cardW-35,cardY+cardH);g.lineTo(cardX+cardW,cardY+cardH);g.lineTo(cardX+cardW,cardY+cardH-35);g.stroke();
+
+  g.textAlign='left';
+  g.fillStyle='#ffd84a';
+  g.font='bold 14px monospace';
+  g.fillText('MISSION // GHOST PROTOCOL',cardX+28,cardY+34);
+  g.fillStyle='#dce7ef';
+  g.font='14px monospace';
+  g.fillText('01  Infiltrate the research facility.',cardX+28,cardY+70);
+  g.fillText('02  Acquire the yellow DATA CORE.',cardX+28,cardY+98);
+  g.fillText('03  Reach the green extraction beacon.',cardX+28,cardY+126);
+  g.fillStyle='#7d92a3';
+  g.font='12px monospace';
+  g.fillText('Avoid guard vision. Use noise to redirect patrols.',cardX+28,cardY+153);
+
+  g.textAlign='center';
+  if(Math.floor(Date.now()/420)%2===0){
+    g.shadowBlur=16;
+    g.shadowColor='#ffffff';
+    g.fillStyle='#ffffff';
+    g.font='bold 17px monospace';
+    g.fillText('PRESS [ENTER] TO INFILTRATE',canvas.width/2,458);
+    g.shadowBlur=0;
+  }
+  g.fillStyle='#8296a5';
+  g.font='12px monospace';
+  g.fillText('[ARROW KEYS] MOVE   [SPACE] NOISE   DATA / EXIT: AUTO',canvas.width/2,500);
+  g.fillStyle='#425b6a';
+  g.font='11px monospace';
+  g.fillText('SFA ENGINE // VISUAL STATE PROJECTION ONLINE',canvas.width/2,548);
+  g.restore();
+}
+function renderLoop(){updateVisualInterpolation();drawWorld();if(engine.currentState==='FE_CAUGHT')overlay('MISSION FAILED','PRESS ENTER TO RETRY','#ff4d6d');if(engine.currentState==='FE_VICTORY')overlay('DATA EXTRACTED','PRESS ENTER TO REPLAY','#52ff8f');requestAnimationFrame(renderLoop)}
+function startOrRestartGame(){
+  if(['FE_TITLE','FE_CAUGHT','FE_VICTORY'].includes(engine.currentState)){
+    engine.transition('START');
+  }
+}
+
+document.addEventListener('keydown',event=>{
+  const isEnter=event.key==='Enter'||event.code==='Enter'||event.code==='NumpadEnter';
+  if(isEnter){
+    event.preventDefault();
+    if(!event.repeat) startOrRestartGame();
+    return;
+  }
+  const mapping={ArrowUp:'MOVE_UP',ArrowDown:'MOVE_DOWN',ArrowLeft:'MOVE_LEFT',ArrowRight:'MOVE_RIGHT',' ':'MAKE_NOISE',Spacebar:'MAKE_NOISE',e:'INTERACT',E:'INTERACT','1':'SELECT_GUARD_1','2':'SELECT_GUARD_2',Escape:'ESCAPE'};
+  const mapped=mapping[event.key]||mapping[event.code];
+  if(mapped){event.preventDefault();engine.transition(mapped)}
+});
+
+setInterval(()=>engine.transition('TICK'),100);
+projectUI();renderLoop();
+</script>
+</body>
+</html>
+
