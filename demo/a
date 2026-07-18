@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SFA Game Demo Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0d0d1a;
+            color: #00ffcc;
+            font-family: 'M PLUS 1 Code', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        h1 {
+            font-size: 36px;
+            text-shadow: 0 0 10px #00ffcc44;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            color: #ff00ff;
+            font-size: 14px;
+            margin-bottom: 40px;
+        }
+        .menu-container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap; 
+            justify-content: center;
+            max-width: 1300px;
+        }
+
+        /* --- 1. ベースとなるネオンカード共通デザイン --- */
+        .menu-card {
+            background-color: #000;
+            padding: 25px;
+            width: 220px;
+            text-align: center;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            transform: translateY(0);
+        }
+        .menu-card:hover {
+            color: #000 !important;
+            transform: translateY(-5px);
+        }
+        .menu-card h2 {
+            margin-top: 0;
+            font-size: 22px;
+        }
+        .menu-card p {
+            font-size: 12px;
+            line-height: 1.5;
+            opacity: 0.8;
+        }
+
+        /* --- 2. 拡張可能なカラーバリエーション・パイプライン --- */
+        /* Cyan (Default) */
+        .menu-card.theme-cyan {
+            border: 2px solid #00ffcc;
+            color: #00ffcc;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+        }
+        .menu-card.theme-cyan:hover {
+            background-color: #00ffcc;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.8);
+        }
+
+        /* Magenta */
+        .menu-card.theme-magenta {
+            border: 2px solid #ff00ff;
+            color: #ff00ff;
+            box-shadow: 0 0 10px rgba(255, 0, 255, 0.2);
+        }
+        .menu-card.theme-magenta:hover {
+            background-color: #ff00ff;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.8);
+        }
+
+        /* Yellow */
+        .menu-card.theme-yellow {
+            border: 2px solid #ffff00;
+            color: #ffff00;
+            box-shadow: 0 0 10px rgba(255, 255, 0, 0.2);
+        }
+        .menu-card.theme-yellow:hover {
+            background-color: #ffff00;
+            box-shadow: 0 0 20px rgba(255, 255, 0, 0.8);
+        }
+
+        /* Green */
+        .menu-card.theme-green {
+            border: 2px solid #00ff66;
+            color: #00ff66;
+            box-shadow: 0 0 10px rgba(0, 255, 102, 0.2);
+        }
+        .menu-card.theme-green:hover {
+            background-color: #00ff66;
+            box-shadow: 0 0 20px rgba(0, 255, 102, 0.8);
+        }
+
+        /* Orange */
+        .menu-card.theme-orange {
+            border: 2px solid #ffaa00;
+            color: #ffaa00;
+            box-shadow: 0 0 10px rgba(255, 170, 0, 0.2);
+        }
+        .menu-card.theme-orange:hover {
+            background-color: #ffaa00;
+            box-shadow: 0 0 20px rgba(255, 170, 0, 0.8);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>SFA GAME DEMOS</h1>
+    <div class="subtitle">State-First Architecture Proof of Concepts</div>
+
+    <!-- JavaScriptによって自動ビルドされるコンテナ領域 -->
+    <div id="menu-container" class="menu-container"></div>
+
+<script>
+// =============================================================================
+// 1. 信頼できる唯一の情報源 (ゲームメタデータ・レジストリ) 【SFA Fighting 接続済】
+// =============================================================================
+const SFA_GAMES_REGISTRY = [
+    {
+        title: "SFA Tetris",
+        url: "sfa_tetris.html",
+        description: "A pure JS Tetris demonstrating deterministic fallback SRS rules and input spams suppression.",
+        theme: "theme-cyan"
+    },
+    {
+        title: "SFA Freeway",
+        url: "sfa_freeway.html",
+        description: "A 60fps pseudo-3D driving game managing realtime loops, crashes, and global state escapes.",
+        theme: "theme-green"
+    },
+    {
+        title: "SFA Rogue",
+        url: "sfa_rogue.html",
+        description: "A turn-based hack & slash RPG orchestrating multi-phase turn pipelines, isolated facility menu states, and dynamic environmental day-night cycles.",
+        theme: "theme-yellow"
+    },
+    {
+        title: "SFA Defense",
+        url: "sfa_defense.html",
+        description: "A 60Hz real-time strategy defense game demonstrating structural input separation during combat and multi-agent laser tracking pipelines.",
+        theme: "theme-cyan"
+    },
+    {
+        title: "SFA Bomber",
+        url: "sfa_bomber.html",
+        description: "A 60Hz arena action game featuring a 1-frame atomic chain reaction explosion pipeline and strict zombie-state elimination.",
+        theme: "theme-magenta"
+    },
+    {
+        title: "SFA Score",
+        url: "sfa_score.html",
+        description: "A classical musical notation engine featuring strict grand staff rendering, Web Audio API synthesis, and rigid edit/play mode separation.",
+        theme: "theme-orange"
+    },
+    {
+        title: "SFA Fighting",
+        url: "sfa_fighting.html",
+        description: "A tactical 2D stickman fighting game orchestrating independent guard physics, overhead guard breaks, and adaptive profiling neural-counter AI.",
+        theme: "theme-magenta"
+    }
+,
+    {
+        title: "SFA Space",
+        url: "sfa_space.html",
+        description: "A real-time space warfare game featuring formation switching, level-scaled burst fire, evasion, shields, and deterministic state transitions.",
+        theme: "theme-orange"
+    }
+];
+
+// ==========================================
+// 2. グリッドジェネレーターコア（決定論的DOMファクトリ）
+// ==========================================
+function generateGameGrid(gamesList) {
+    const container = document.getElementById("menu-container");
+    if (!container) return;
+
+    container.innerHTML = gamesList.map(game => {
+        const themeClass = game.theme || "theme-cyan"; 
+        
+        return `
+            <a href="${game.url}" class="menu-card ${themeClass}">
+                <h2>${game.title}</h2>
+                <p>${game.description}</p>
+            </a>
+        `.trim();
+    }).join("");
+}
+
+// DOM読み込み完了時に自動ビルドを実行
+document.addEventListener("DOMContentLoaded", () => {
+    generateGameGrid(SFA_GAMES_REGISTRY);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SFA Space Warfare - Neon Cascade (V12 Monolithic Fixed)</title>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1+Code:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #020208;
+            color: #ced4da;
+            font-family: 'M PLUS 1 Code', monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #00ffcc;
+            box-shadow: 0 0 35px rgba(0, 255, 204, 0.25);
+            background-color: #000;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        #instructions {
+            margin-top: 15px;
+            width: 800px;
+            font-size: 13px;
+            color: #888;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .highlight {
+            color: #00ffcc;
+            font-weight: bold;
+        }
+        .formation-key {
+            color: #ff00ff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="480"></canvas>
+    </div>
+    
+    <div id="instructions">
+        <span class="highlight">[Mouse Drag & Drop]</span>: Map navigation vector lines from your fleet to destinations (Active during WARFARE)<br>
+        <span class="formation-key">[1]</span>: Strike Formation (ATK: Extended Range) | <span class="formation-key">[2]</span>: Defense Formation (DEF: 3.0x Shield Regen) | <span class="formation-key">[3]</span>: Evasive Formation (EVA: Cascading Multi-Target Rapid Fire) <br>
+        <span class="highlight">[Enter]</span>: Start Game / Rematch | <span class="highlight">[Esc]</span>: Return to Title Screen
+        <p style="font-size: 11px; color: #444;">SFA Engine orchestrating multi-agent interception vector physics and atomic tactical matrix mapping.</p>
+    </div>
+
+<script>
+// =============================================================================
+// 1. SFA State Definitions (SFA-SSOT: Single Source of Truth)
+// =============================================================================
+const SFA_DEFINITIONS = {
+  FE_TITLE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "START", action: "init_game_data", target_state: "FE_PREPARE" }
+    ]
+  },
+  FE_PREPARE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "REPAIR",        guard: "can_afford_repair",        action: "execute_repair",        target_state: "FE_PREPARE" },
+      { event: "UPGRADE_ATK",   guard: "can_afford_atk_upgrade",   action: "execute_atk_upgrade",   target_state: "FE_PREPARE" },
+      { event: "UPGRADE_HP",    guard: "can_afford_hp_upgrade",    action: "execute_hp_upgrade",    target_state: "FE_PREPARE" },
+      { event: "UPGRADE_DRAIN", guard: "can_afford_drain_upgrade", action: "execute_drain_upgrade", target_state: "FE_PREPARE" },
+      { event: "GO_WARFARE",    action: "setup_warfare_spawner",   target_state: "FE_WARFARE" }
+    ]
+  },
+  FE_WARFARE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "FORMATION_ATK", action: "set_formation_atk", target_state: "FE_WARFARE" },
+      { event: "FORMATION_DEF", action: "set_formation_def", target_state: "FE_WARFARE" },
+      { event: "FORMATION_EVA", action: "set_formation_eva", target_state: "FE_WARFARE" },
+      
+      { event: "TICK", guard: "is_player_dead", target_state: "FE_GAMEOVER" },
+      { event: "TICK", guard: "is_all_waves_cleared", target_state: "FE_VICTORY" },
+      { event: "TICK", guard: "is_wave_cleared", action: "advance_wave_session", target_state: "FE_PREPARE" },
+      { event: "TICK", action: "update_warfare_simulation", target_state: "FE_WARFARE" }
+    ]
+  },
+  FE_GAMEOVER: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START",  action: "init_game_data", target_state: "FE_PREPARE" }
+    ]
+  },
+  FE_VICTORY: {
+    role: "frontend",
+    next_transitions: [
+      { event: "ESCAPE", target_state: "FE_TITLE" },
+      { event: "START",  action: "init_game_data", target_state: "FE_PREPARE" }
+    ]
+  }
+};
+
+// =============================================================================
+// 2. Tactical Matrix (Atomic Formation Parameter Mapping)
+// =============================================================================
+const FORMATION_MATRIX = {
+  ATK: { atkMod: 1.6, defMod: 0.7, evaMod: 0.5, speedMod: 2.4, rangeMod: 1.5, hasDrain: 0, shieldRegen: 0.0, maxShieldMod: 0.0, multiAttack: false, color: "#ff3333", label: "STRIKE FORMATION (ATK: SNIPER RANGE)" },
+  DEF: { atkMod: 0.7, defMod: 1.6, evaMod: 0.6, speedMod: 1.2, rangeMod: 1.0, hasDrain: 0, shieldRegen: 0.4, maxShieldMod: 3.0, multiAttack: false, color: "#3333ff", label: "DEFENSE FORMATION (DEF: REGEN SHIELD)" },
+  EVA: { atkMod: 0.9, defMod: 0.5, evaMod: 1.7, speedMod: 3.6, rangeMod: 1.0, hasDrain: 1, shieldRegen: 0.0, maxShieldMod: 1.0, multiAttack: true,  color: "#33ff33", label: "EVASIVE RAPID BURST (EVA: CASCADING SYPHON)" }
+};
+
+const BASE_ATTACK_RANGE = 180; 
+
+// =============================================================================
+// 3. Game Context (SSOT Data Structure)
+// =============================================================================
+const context = {
+  gold: 600,
+  score: 0,
+  wave: 1,
+  maxWaves: 10, 
+  
+  playerFleet: {
+    x: 150, y: 240,
+    targetX: 150, targetY: 240,
+    isDragging: false,
+    hp: 250, maxHp: 250,
+    shield: 0, 
+    lvlAtk: 1, lvlHp: 1, lvlDrain: 1, 
+    formation: "ATK", 
+    weaponCooldown: 0,
+    burstCount: 0, 
+    burstTimer: 0  
+  },
+  
+  enemies: [],     
+  enemiesLeftToSpawn: 0, 
+  spawnTimer: 0,         
+  projectiles: [], 
+  effects: [],     
+  stars: []        
+};
+
+for(let i=0; i<80; i++) {
+    context.stars.push({ x: Math.random()*800, y: Math.random()*480, size: Math.random()*2, alpha: 0.3 + Math.random()*0.7 });
+}
+
+// =============================================================================
+// 4. Guards (Pure Validator Functions)
+// =============================================================================
+const guards = {
+  is_player_dead:        (ctx) => ctx.playerFleet.hp <= 0,
+  is_all_waves_cleared:  (ctx) => ctx.enemies.length === 0 && ctx.enemiesLeftToSpawn <= 0 && ctx.wave >= ctx.maxWaves,
+  is_wave_cleared:       (ctx) => ctx.enemies.length === 0 && ctx.enemiesLeftToSpawn <= 0,
+  
+  can_afford_repair:        (ctx) => ctx.gold >= 80 && ctx.playerFleet.hp < ctx.playerFleet.maxHp,
+  can_afford_atk_upgrade:   (ctx) => ctx.gold >= 250,
+  can_afford_hp_upgrade:    (ctx) => ctx.gold >= 250,
+  can_afford_drain_upgrade: (ctx) => ctx.gold >= 200
+};
+
+// =============================================================================
+// 5. Actions (Mutations & Side Effects)
+// =============================================================================
+const actions = {
+  init_game_data: (ctx) => {
+    ctx.gold = 600;
+    ctx.score = 0;
+    ctx.wave = 1;
+    ctx.playerFleet = {
+      x: 150, y: 240, targetX: 150, targetY: 240, isDragging: false,
+      hp: 250, maxHp: 250, shield: 0, lvlAtk: 1, lvlHp: 1, lvlDrain: 1,
+      formation: "ATK", weaponCooldown: 0, burstCount: 0, burstTimer: 0
+    };
+    ctx.enemies = [];
+    ctx.enemiesLeftToSpawn = 0;
+    ctx.spawnTimer = 0;
+    ctx.projectiles = [];
+    ctx.effects = [];
+  },
+
+  execute_repair: (ctx) => {
+    ctx.gold -= 80;
+    ctx.playerFleet.hp = Math.min(ctx.playerFleet.maxHp, ctx.playerFleet.hp + 80);
+  },
+
+  execute_atk_upgrade: (ctx) => {
+    ctx.gold -= 250;
+    ctx.playerFleet.lvlAtk++;
+  },
+
+  execute_hp_upgrade: (ctx) => {
+    ctx.gold -= 250;
+    ctx.playerFleet.lvlHp++;
+    ctx.playerFleet.maxHp += 100;
+    ctx.playerFleet.hp += 100; 
+  },
+
+  execute_drain_upgrade: (ctx) => {
+    ctx.gold -= 200;
+    ctx.playerFleet.lvlDrain++;
+  },
+
+  setup_warfare_spawner: (ctx) => {
+    ctx.enemies = [];
+    ctx.projectiles = [];
+    ctx.effects = [];
+    
+    ctx.playerFleet.targetX = ctx.playerFleet.x;
+    ctx.playerFleet.targetY = ctx.playerFleet.y;
+    ctx.playerFleet.isDragging = false;
+    ctx.playerFleet.burstCount = 0;
+    ctx.playerFleet.burstTimer = 0;
+
+    ctx.enemiesLeftToSpawn = 3 + ctx.wave * 2; 
+    ctx.spawnTimer = 80; 
+  },
+
+  set_formation_atk: (ctx) => { ctx.playerFleet.formation = "ATK"; },
+  set_formation_def: (ctx) => { ctx.playerFleet.formation = "DEF"; },
+  set_formation_eva: (ctx) => { ctx.playerFleet.formation = "EVA"; },
+
+  advance_wave_session: (ctx) => {
+    ctx.wave++;
+    ctx.gold += 350 + (ctx.wave * 40); 
+  },
+
+  update_warfare_simulation: (ctxData) => {
+    const pf = ctxData.playerFleet;
+    const currentFMatrix = FORMATION_MATRIX[pf.formation];
+
+    // --- 0. Hostile Spawner Pipeline ---
+    if (ctxData.enemiesLeftToSpawn > 0) {
+        ctxData.spawnTimer++;
+        if (ctxData.spawnTimer >= 100) { 
+            ctxData.spawnTimer = 0;
+            ctxData.enemiesLeftToSpawn--;
+            
+            let archLabel = "HASTENER";
+            let archColor = "#ffaa00";
+            let hpMod = 1.0; let speedMod = 1.0; let fireMod = 1.0; let rangeMod = 1.0; let dmgMod = 1.0;
+            let shipRadius = 12;
+
+            if (ctxData.wave === 10 && ctxData.enemiesLeftToSpawn === 0) {
+                archLabel = "GIGA-DREADNOUGHT [BOSS]";
+                archColor = "#ff00ff";
+                hpMod = 6.0; speedMod = 0.35; fireMod = 0.45; rangeMod = 1.6; dmgMod = 2.2;
+                shipRadius = 30;
+            } else {
+                const roll = Math.random();
+                if (roll < 0.25) {
+                    archLabel = "HASTENER (FAST)"; archColor = "#ffaa00"; speedMod = 1.7; hpMod = 0.7;
+                } else if (roll < 0.50) {
+                    archLabel = "STINGER (RAPID)"; archColor = "#ff2266"; fireMod = 0.4; dmgMod = 0.6;
+                } else if (roll < 0.75) {
+                    archLabel = "ZEPHYR (SNIPER)"; archColor = "#cc33ff"; rangeMod = 1.5; speedMod = 0.75;
+                } else {
+                    archLabel = "VANGUARD (HEAVY)"; archColor = "#ff3333"; hpMod = 2.0; speedMod = 0.55; shipRadius = 17;
+                }
+            }
+
+            const scaledMaxHp = Math.round((70 + ctxData.wave * 45) * hpMod); 
+            const scaledSpeed = (0.4 + Math.random() * 0.3 + (ctxData.wave * 0.08)) * speedMod;
+            const scaledCooldown = Math.max(12, Math.round((36 - ctxData.wave * 1.5) * fireMod));
+            const scaledRange = BASE_ATTACK_RANGE * rangeMod;
+
+            ctxData.enemies.push({
+                id: Date.now() + ctxData.enemiesLeftToSpawn + Math.random(),
+                x: 825, y: 65 + Math.random() * 350,
+                label: archLabel, color: archColor, baseHp: scaledMaxHp, hp: scaledMaxHp,
+                speed: scaledSpeed, atkRange: scaledRange, damageMod: dmgMod,
+                fireRateMax: scaledCooldown, weaponCooldown: Math.floor(Math.random() * 20), radius: shipRadius
+            });
+        }
+    }
+
+    // --- 1. Passive Shield Calibration Pipeline ---
+    if (currentFMatrix.shieldRegen > 0) {
+        const maxShieldCap = pf.maxHp * currentFMatrix.maxShieldMod;
+        pf.shield = Math.min(maxShieldCap, pf.shield + currentFMatrix.shieldRegen * pf.lvlHp);
+    }
+    pf.shield = Math.min(pf.maxHp * currentFMatrix.maxShieldMod, pf.shield);
+
+    // --- 2. Fleet Spatial Interpolation ---
+    const pdx = pf.targetX - pf.x;
+    const pdy = pf.targetY - pf.y;
+    const pDist = Math.sqrt(pdx * pdx + pdy * pdy);
+    
+    if (pDist > currentFMatrix.speedMod) {
+        pf.x += (pdx / pDist) * currentFMatrix.speedMod;
+        pf.y += (pdy / pDist) * currentFMatrix.speedMod;
+    } else {
+        pf.x = pf.targetX;
+        pf.y = pf.targetY;
+    }
+
+    if (pf.weaponCooldown > 0 && pf.burstCount === 0) {
+        pf.weaponCooldown--;
+    }
+    ctxData.projectiles.forEach(p => p.timer--);
+    ctxData.projectiles = ctxData.projectiles.filter(p => p.timer > 0);
+    ctxData.effects.forEach(e => e.timer--);
+    ctxData.effects = ctxData.effects.filter(e => e.timer > 0);
+
+    // --- 3. Dynamic Interception Processing ---
+    ctxData.enemies.forEach(enemy => {
+        const edx = pf.x - enemy.x;
+        const edy = pf.y - enemy.y;
+        const eDist = Math.sqrt(edx * edx + edy * edy);
+
+        if (eDist > enemy.atkRange - 40) {
+            enemy.x += (edx / eDist) * enemy.speed;
+            enemy.y += (edy / eDist) * enemy.speed;
+        } else {
+            enemy.x += (-edy / eDist) * enemy.speed * 0.5;
+            enemy.y += (edx / eDist) * enemy.speed * 0.5;
+        }
+
+        if (enemy.weaponCooldown > 0) enemy.weaponCooldown--;
+    });
+
+    // --- 4. SFA Deterministic Cascading Rapid-Fire Burst Engine ---
+    const activeRange = BASE_ATTACK_RANGE * currentFMatrix.rangeMod;
+    let targetsInRange = ctxData.enemies.filter(e => {
+        const tdx = pf.x - e.x; const tdy = pf.y - e.y;
+        return Math.sqrt(tdx * tdx + tdy * tdy) <= activeRange;
+    });
+
+    if (pf.weaponCooldown === 0 && pf.burstCount === 0 && targetsInRange.length > 0) {
+        pf.burstCount = currentFMatrix.multiAttack ? pf.lvlAtk : 1;
+        pf.burstTimer = 0; 
+        pf.weaponCooldown = currentFMatrix.multiAttack ? 35 : 18; 
+    }
+
+    if (pf.burstCount > 0) {
+        if (pf.burstTimer > 0) {
+            pf.burstTimer--;
+        }
+
+        if (pf.burstTimer === 0) {
+            let freshTargets = ctxData.enemies.filter(e => {
+                const tdx = pf.x - e.x; const tdy = pf.y - e.y;
+                return Math.sqrt(tdx * tdx + tdy * tdy) <= activeRange;
+            });
+
+            if (freshTargets.length > 0) {
+                let targetEnemy = freshTargets[0]; 
+                
+                // Attack upgrades always increase the damage of each shot.
+                // EVA mode additionally fires lvlAtk shots per burst (Lv1=1, Lv2=2, Lv3=3...).
+                const baseDamage = 20 * pf.lvlAtk;
+                const finalDamage = Math.round(baseDamage * currentFMatrix.atkMod);
+
+                targetEnemy.hp -= finalDamage;
+
+                const activeDrainRate = 0.05 * pf.lvlDrain * currentFMatrix.hasDrain;
+                let laserColor = currentFMatrix.hasDrain ? "#33ff33" : "#00ffcc";
+
+                if (activeDrainRate > 0) {
+                    const healAmount = Math.round(finalDamage * activeDrainRate);
+                    let projectedHp = pf.hp + healAmount;
+
+                    if (projectedHp > pf.maxHp) {
+                        let structuralOverflow = projectedHp - pf.maxHp;
+                        pf.hp = pf.maxHp;
+                        pf.shield = Math.min(pf.maxHp * currentFMatrix.maxShieldMod, pf.shield + structuralOverflow);
+                    } else {
+                        pf.hp = projectedHp;
+                    }
+                    ctxData.effects.push({ x: pf.x, y: pf.y, color: "#33ff33", timer: 12, type: "drain" });
+                }
+
+                ctxData.projectiles.push({
+                    fromX: pf.x, fromY: pf.y, toX: targetEnemy.x, toY: targetEnemy.y,
+                    color: laserColor, timer: 5, type: "laser"
+                });
+
+                if (targetEnemy.hp <= 0) {
+                    ctxData.effects.push({ x: targetEnemy.x, y: targetEnemy.y, color: "#ff00ff", timer: 20, type: "explosion" });
+                    ctxData.gold += 60 + ctxData.wave * 12;
+                    ctxData.score += 150;
+                }
+
+                pf.burstCount--;
+                pf.burstTimer = currentFMatrix.multiAttack ? 12 : 0; 
+            } else {
+                pf.burstCount = 0; 
+            }
+        }
+    }
+
+    // --- 5. Hostile Counter-Offense Resolve Pipeline ---
+    ctxData.enemies.forEach(enemy => {
+        const edx = pf.x - enemy.x; const edy = pf.y - enemy.y;
+        const eDist = Math.sqrt(edx * edx + edy * edy);
+
+        if (eDist <= enemy.atkRange && enemy.weaponCooldown === 0 && enemy.hp > 0) {
+            enemy.weaponCooldown = enemy.fireRateMax;
+            const enemyRawAtk = (10 + ctxData.wave * 5.5) * enemy.damageMod; 
+            const isEvaded = Math.random() < (0.22 * currentFMatrix.evaMod);
+            
+            if (isEvaded) {
+                ctxData.projectiles.push({
+                    fromX: enemy.x, fromY: enemy.y, 
+                    toX: pf.x + (Math.random() - 0.5) * 60, toY: pf.y + (Math.random() - 0.5) * 60,
+                    color: "#ffaa00", timer: 6, type: "miss"
+                });
+                ctxData.effects.push({ x: pf.x, y: pf.y, color: "#33ff33", timer: 10, type: "shield" });
+            } else {
+                const finalDmg = Math.max(2, Math.round(enemyRawAtk / currentFMatrix.defMod));
+                
+                if (pf.shield > 0) {
+                    pf.shield -= finalDmg;
+                    if (pf.shield < 0) {
+                        pf.hp = Math.max(0, pf.hp + pf.shield);
+                        pf.shield = 0;
+                    }
+                } else {
+                    pf.hp = Math.max(0, pf.hp - finalDmg);
+                }
+                
+                ctxData.projectiles.push({
+                    fromX: enemy.x, fromY: enemy.y, toX: pf.x, toY: pf.y,
+                    color: "#ff3333", timer: 6, type: "plasma"
+                });
+                ctxData.effects.push({ x: pf.x, y: pf.y, color: "#ff3333", timer: 12, type: "hit" });
+            }
+        }
+    });
+
+    ctxData.enemies = ctxData.enemies.filter(e => e.hp > 0);
+  }
+};
+
+// =============================================================================
+// 6. SFA State Machine Core Engine
+// =============================================================================
+class SFAEngine {
+  constructor(definitions, initialState, context, guards, actions, onTransitioned) {
+    this.definitions = definitions;
+    this.currentState = initialState;
+    this.context = context;
+    this.guards = guards;
+    this.actions = actions;
+    this.onTransitioned = onTransitioned;
+    this.onTransitioned(this.currentState, this.context);
+  }
+
+  transition(event) {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const matchedTransitions = stateDef.next_transitions.filter(t => t.event === event);
+
+    for (const trans of matchedTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+        this.handleAutoTransition();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  handleAutoTransition() {
+    const stateDef = this.definitions[this.currentState];
+    if (!stateDef.next_transitions) return;
+
+    const autoTransitions = stateDef.next_transitions.filter(t => t.event === "AUTO");
+
+    for (const trans of autoTransitions) {
+      const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
+      
+      if (isAllowed) {
+        if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
+        if (trans.action) this.actions[trans.action](this.context);
+
+        this.currentState = trans.target_state;
+        const nextStateDef = this.definitions[this.currentState];
+
+        if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
+
+        this.onTransitioned(this.currentState, this.context);
+        this.handleAutoTransition();
+        return; 
+      }
+    }
+  }
+}
+
+// =============================================================================
+// 7. UI Canvas Neon Rendering Pipeline
+// =============================================================================
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+function drawSpaceCruiser(x, y, rot, size, color, isPlayer) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2.5;
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = color;
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+
+    ctx.beginPath();
+    if (isPlayer) {
+        ctx.moveTo(size * 1.5, 0);
+        ctx.lineTo(-size, -size * 0.8);
+        ctx.lineTo(-size * 0.4, 0);
+        ctx.lineTo(-size, size * 0.8);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(-size * 0.2, -size * 0.4);
+        ctx.lineTo(-size * 0.8, -size * 1.2);
+        ctx.moveTo(-size * 0.2, size * 0.4);
+        ctx.lineTo(-size * 0.8, size * 1.2);
+        ctx.stroke(); 
+    } else {
+        ctx.moveTo(size, 0);
+        ctx.lineTo(-size * 0.5, -size);
+        ctx.lineTo(-size, -size * 0.5);
+        ctx.lineTo(-size * 0.3, 0);
+        ctx.lineTo(-size, size * 0.5);
+        ctx.lineTo(-size * 0.5, size);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+    }
+
+    ctx.shadowBlur = 0;
+    ctx.restore();
+}
+
+function drawCyberButton(x, y, w, h, text, cost, enabled) {
+    ctx.fillStyle = enabled ? "rgba(0, 50, 50, 0.4)" : "rgba(20, 20, 20, 0.6)";
+    ctx.fillRect(x, y, w, h);
+    
+    ctx.strokeStyle = enabled ? "#00ffcc" : "#444444";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.fillStyle = enabled ? "#ffffff" : "#666666";
+    ctx.font = "bold 13px 'M PLUS 1 Code', monospace";
+    ctx.textAlign = "left";
+    ctx.fillText(text, x + 20, y + h / 2 + 5);
+
+    if (cost !== null) {
+        ctx.textAlign = "right";
+        ctx.fillStyle = enabled ? "#ffff00" : "#666666";
+        ctx.fillText(`${cost}G`, x + w - 20, y + h / 2 + 5);
+    }
+}
+
+function render(state, ctxGame) {
+    ctx.fillStyle = "#020206";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctxGame.stars.forEach(s => {
+        ctx.fillStyle = `rgba(255, 255, 255, ${s.alpha})`;
+        ctx.fillRect(s.x, s.y, s.size, s.size);
+    });
+
+    const pf = ctxGame.playerFleet;
+    const matrix = FORMATION_MATRIX[pf.formation]; 
+
+    // --- 1. Background Grid Pipeline (Unified) ---
+    if (state === "FE_WARFARE" || state === "FE_PREPARE") {
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.03)";
+        ctx.lineWidth = 1;
+        for (let x = 0; x < canvas.width; x += 40) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height; y += 40) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        }
+    }
+
+    // --- 2. Active Warfare Component Pipeline ---
+    if (state === "FE_WARFARE") {
+        const isMoving = (pf.x !== pf.targetX || pf.y !== pf.targetY);
+        if (isMoving || pf.isDragging) {
+            ctx.strokeStyle = "rgba(0, 255, 204, 0.4)";
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(pf.x, pf.y);
+            ctx.lineTo(pf.targetX, pf.targetY);
+            ctx.stroke();
+            ctx.setLineDash([]); 
+
+            ctx.strokeStyle = "#00ffcc";
+            ctx.beginPath(); ctx.arc(pf.targetX, pf.targetY, 6, 0, Math.PI * 2); ctx.stroke();
+        }
+
+        const activeRange = BASE_ATTACK_RANGE * matrix.rangeMod;
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.04)";
+        ctx.fillStyle = "rgba(0, 255, 204, 0.01)";
+        ctx.beginPath(); ctx.arc(pf.x, pf.y, activeRange, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+        ctxGame.projectiles.forEach(p => {
+            ctx.strokeStyle = p.color;
+            ctx.lineWidth = 2; 
+            ctx.shadowBlur = 10; ctx.shadowColor = p.color;
+            ctx.beginPath(); ctx.moveTo(p.fromX, p.fromY); ctx.lineTo(p.toX, p.toY); ctx.stroke();
+            ctx.shadowBlur = 0;
+        });
+
+        ctxGame.effects.forEach(e => {
+            ctx.strokeStyle = e.color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            if (e.type === "explosion") {
+                ctx.arc(e.x, e.y, (20 - e.timer) * 1.5, 0, Math.PI * 2);
+            } else if (e.type === "shield") {
+                ctx.arc(e.x, e.y, 22, 0, Math.PI * 2);
+            } else if (e.type === "hit") {
+                ctx.arc(e.x, e.y, (12 - e.timer) * 2, 0, Math.PI * 2);
+            } else if (e.type === "drain") {
+                ctx.arc(e.x, e.y, (12 - e.timer) * 1.8, 0, Math.PI * 2);
+            }
+            ctx.stroke();
+        });
+
+        ctxGame.enemies.forEach(enemy => {
+            const rotToPlayer = Math.atan2(pf.y - enemy.y, pf.x - enemy.x);
+            drawSpaceCruiser(enemy.x, enemy.y, rotToPlayer, enemy.radius, enemy.color, false);
+
+            ctx.fillStyle = "#330011"; ctx.fillRect(enemy.x - 18, enemy.y - 22, 36, 3);
+            ctx.fillStyle = enemy.color; ctx.fillRect(enemy.x - 18, enemy.y - 22, 36 * (enemy.hp / enemy.baseHp), 3);
+            
+            ctx.fillStyle = "#888888"; ctx.font = "8px 'M PLUS 1 Code'"; ctx.textAlign = "center";
+            ctx.fillText(enemy.label, enemy.x, enemy.y - 26);
+        });
+
+        let pRot = 0;
+        if (ctxGame.enemies.length > 0) {
+            pRot = Math.atan2(ctxGame.enemies[0].y - pf.y, ctxGame.enemies[0].x - pf.x);
+        } else if (isMoving) {
+            pRot = Math.atan2(pf.targetY - pf.y, pf.targetX - pf.x);
+        }
+        drawSpaceCruiser(pf.x, pf.y, pRot, 16, matrix.color, true);
+
+        ctx.fillStyle = matrix.color; ctx.font = "bold 10px 'M PLUS 1 Code'"; ctx.textAlign = "center";
+        ctx.fillText(matrix.label, pf.x, pf.y + 30);
+        
+        if (ctxGame.enemiesLeftToSpawn > 0) {
+            ctx.fillStyle = "rgba(255, 50, 100, 0.8)";
+            ctx.font = "bold 11px 'M PLUS 1 Code'"; ctx.textAlign = "left";
+            ctx.fillText(`⚠️ INBOUND QUANTUM SIGNATURES DISPERSING: ${ctxGame.enemiesLeftToSpawn} REMAINING`, 25, 68);
+        }
+    }
+
+    // --- 3. Monolithic Consolidated Top Status HUD Ribbon Bar ---
+    // 💡 100% FIXED: Every canvas context drawing operation is strictly prefixed with 'ctx.' (No more naked stroke() errors!)
+    if (state === "FE_WARFARE" || state === "FE_PREPARE") {
+        ctx.fillStyle = "rgba(5, 5, 15, 0.85)";
+        ctx.fillRect(0, 0, canvas.width, 45);
+        ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, 45); ctx.lineTo(canvas.width, 45); ctx.stroke(); 
+
+        ctx.fillStyle = "#00ffcc"; ctx.font = "bold 13px 'M PLUS 1 Code', monospace"; ctx.textAlign = "left";
+        ctx.fillText(`SECTOR WAVE: ${ctxGame.wave}/${ctxGame.maxWaves}`, 20, 26);
+        ctx.fillText(`CREDITS: ${ctxGame.gold}G`, 160, 26);
+        ctx.fillText(`SCORE: ${ctxGame.score}`, 275, 26);
+
+        ctx.textAlign = "right"; ctx.fillStyle = "#ffffff"; ctx.font = "11px 'M PLUS 1 Code'";
+        ctx.fillText("HULL:", 415, 26);
+        ctx.fillStyle = "#220011"; ctx.fillRect(425, 14, 100, 14);
+        const hpRatio = pf.hp / pf.maxHp;
+        ctx.fillStyle = hpRatio > 0.4 ? "#00ffcc" : "#ff3333";
+        ctx.fillRect(425, 14, 100 * hpRatio, 14);
+        ctx.strokeStyle = "#ffffff"; ctx.strokeRect(425, 14, 100, 14);
+
+        ctx.fillStyle = "#ffffff"; ctx.fillText("SHIELD:", 595, 26);
+        ctx.fillStyle = "#051525"; ctx.fillRect(605, 14, 175, 14);
+        const maxShieldVal = pf.maxHp * (matrix?.maxShieldMod || 1.0);
+        const shieldRatio = maxShieldVal > 0 ? Math.min(1.0, pf.shield / maxShieldVal) : 0;
+        ctx.fillStyle = "#00bfff";
+        ctx.fillRect(605, 14, 175 * shieldRatio, 14);
+        ctx.strokeStyle = "#ffffff"; ctx.strokeRect(605, 14, 175, 14);
+    }
+
+    // --- 4. Main Phase Overlay Controllers ---
+    if (state === "FE_TITLE") {
+        ctx.fillStyle = "rgba(2, 2, 8, 0.95)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = "#00ffcc"; ctx.font = "bold 42px 'M PLUS 1 Code', monospace"; ctx.textAlign = "center";
+        ctx.fillText("SFA SPACE WARFARE", canvas.width / 2, 170);
+        ctx.fillStyle = "#ff00ff"; ctx.font = "14px 'M PLUS 1 Code', monospace";
+        ctx.fillText("- DETERMINISTIC STATE-FIRST MATRIX SIMULATION -", canvas.width / 2, 215);
+
+        if (Math.floor(Date.now() / 400) % 2 === 0) {
+            ctx.fillStyle = "#ffffff"; ctx.font = "16px 'M PLUS 1 Code'";
+            ctx.fillText("PRESS [ENTER] TO COMMENCE STRATEGY", canvas.width / 2, 340);
+        }
+    } 
+    else if (state === "FE_PREPARE") {
+        ctx.fillStyle = "rgba(0, 10, 15, 0.7)"; ctx.fillRect(0, 45, canvas.width, canvas.height - 45);
+
+        ctx.fillStyle = "#00ffcc"; ctx.font = "bold 22px 'M PLUS 1 Code'"; ctx.textAlign = "center";
+        ctx.fillText(`--- ORBITAL BASE STATION (PREPARATION PHASE) ---`, canvas.width / 2, 95);
+
+        ctx.textAlign = "left"; ctx.fillStyle = "#aaa"; ctx.font = "13px 'M PLUS 1 Code'";
+        ctx.fillText(`[FLEET SPECIFICATIONS]`, 65, 145);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(`■ Hull Integrity Cap: ${pf.maxHp} (Lv.${pf.lvlHp})`, 65, 175);
+        ctx.fillText(`■ Burst Fire Output: ${pf.lvlAtk} Sequential (Lv.${pf.lvlAtk})`, 65, 205);
+        ctx.fillText(`■ Evasive Drain Factor: ${pf.lvlDrain * 5}% Siphon (Lv.${pf.lvlDrain})`, 65, 235);
+        ctx.fillText(`■ Current Vitals: Hull: ${pf.hp}/${pf.maxHp} | Shield: ${Math.round(pf.shield)}`, 65, 265);
+        
+        ctx.fillStyle = "#ff3366";
+        ctx.fillText(`[HOSTILE INTEL PROTOCOL: SECTOR ${ctxGame.wave} FORECAST]`, 65, 315);
+        ctx.fillStyle = "#aaa";
+        
+        if(ctxGame.wave === 10) {
+            ctx.fillStyle = "#ff00ff";
+            ctx.fillText(`▶ ALERT: GIGA-DREADNOUGHT CLASS CAPITAL SIGNATURE DETECTED`, 65, 340);
+            ctx.fillText(`▶ Combined Combat Population: 21 Standard Waves + 1 Supreme Overlord`, 65, 365);
+            ctx.fillText(`▶ Tactical Maneuver Core Speed Index: ULTRA MAX SYSTEM CRITICAL`, 65, 390);
+        } else {
+            ctx.fillText(`▶ Estimated Base Hostile Armor: ${70 + ctxGame.wave * 45} HP (Scales by Class)`, 65, 340);
+            ctx.fillText(`▶ Combined Combat Population: ${3 + ctxGame.wave * 2} Hostiles (Staggered Release)`, 65, 365);
+            ctx.fillText(`▶ Intelligence: Hastener (Fast), Stinger (Rapid), Zephyr (Sniper), Vanguard (Heavy)`, 65, 390);
+        }
+
+        drawCyberButton(450, 130, 280, 40, "1. Nano-Mechanic Hull Repair", 80, guards.can_afford_repair(ctxGame));
+        drawCyberButton(450, 180, 280, 40, "2. Plasma Weaponry Calibration", 250, guards.can_afford_atk_upgrade(ctxGame));
+        drawCyberButton(450, 230, 280, 40, "3. Gravitational Shield Overdrive", 250, guards.can_afford_hp_upgrade(ctxGame));
+        drawCyberButton(450, 280, 280, 40, "4. Nanite Drain Systems Upgrade", 200, guards.can_afford_drain_upgrade(ctxGame));
+        
+        drawCyberButton(450, 360, 280, 50, "🚀 Hyperspace Jump (Deploy)", null, true);
+    } 
+    else if (state === "FE_GAMEOVER") {
+        ctx.fillStyle = "rgba(25, 0, 5, 0.9)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#ff2255"; ctx.font = "bold 46px 'M PLUS 1 Code'"; ctx.textAlign = "center";
+        ctx.fillText("FLEET ANNIHILATED", canvas.width / 2, 200);
+        ctx.fillStyle = "#ffffff"; ctx.font = "16px 'M PLUS 1 Code'";
+        ctx.fillText(`FINAL SCORE: ${ctxGame.score} | TOTAL SECTORS SURVIVED: ${ctxGame.wave - 1}`, canvas.width / 2, 250);
+        ctx.fillText("PRESS [ENTER] TO RE-CLONE SQUADRON", canvas.width / 2, 350);
+    } 
+    else if (state === "FE_VICTORY") {
+        ctx.fillStyle = "rgba(0, 25, 15, 0.93)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#00ffcc"; ctx.font = "bold 46px 'M PLUS 1 Code'"; ctx.textAlign = "center";
+        ctx.fillText("GALAXY PACIFIED", canvas.width / 2, 190);
+        ctx.fillStyle = "#ffff00"; ctx.font = "16px 'M PLUS 1 Code'";
+        ctx.fillText("PERFECT 10-SECTOR DETERMINISTIC TACTICAL VICTORY", canvas.width / 2, 240);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(`FINAL SCORE: ${ctxGame.score}`, canvas.width / 2, 280);
+        ctx.fillText("PRESS [ENTER] TO RETURN TO TITLE PORTAL", canvas.width / 2, 370);
+    }
+}
+
+// =============================================================================
+// 8. Engine Initialization
+// =============================================================================
+const engine = new SFAEngine(
+    SFA_DEFINITIONS,
+    "FE_TITLE",
+    context,
+    guards,
+    actions,
+    render
+);
+
+// Backward-compatible alias used by the interaction handlers below.
+const ctxGame = engine.context;
+
+// =============================================================================
+// 9. Mouse & Button Interaction Core
+// =============================================================================
+const canvas_rect = () => canvas.getBoundingClientRect();
+canvas.addEventListener("mousedown", (e) => {
+    const rect = canvas_rect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const state = engine.currentState;
+
+    if (state === "FE_WARFARE") {
+        const dx = mx - ctxGame.playerFleet.x;
+        const dy = my - ctxGame.playerFleet.y;
+        if (Math.sqrt(dx*dx + dy*dy) < 40) {
+            ctxGame.playerFleet.isDragging = true;
+        }
+    } 
+    else if (state === "FE_PREPARE") {
+        if (mx >= 450 && mx <= 730) {
+            if (my >= 130 && my <= 170) engine.transition("REPAIR");
+            if (my >= 180 && my <= 220) engine.transition("UPGRADE_ATK");
+            if (my >= 230 && my <= 270) engine.transition("UPGRADE_HP");
+            if (my >= 280 && my <= 320) engine.transition("UPGRADE_DRAIN");
+            if (my >= 360 && my <= 410) engine.transition("GO_WARFARE");
+        }
+    }
+});
+
+canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas_rect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    if (engine.currentState === "FE_WARFARE" && ctxGame.playerFleet.isDragging) {
+        ctxGame.playerFleet.targetX = mx;
+        ctxGame.playerFleet.targetY = my;
+    }
+});
+
+canvas.addEventListener("mouseup", () => {
+    ctxGame.playerFleet.isDragging = false;
+});
+
+canvas.addEventListener("mouseleave", () => {
+    ctxGame.playerFleet.isDragging = false;
+});
+
+// =============================================================================
+// 10. Input Mapping & 60Hz Engine Clock Loop
+// =============================================================================
+document.addEventListener("keydown", (e) => {
+    const state = engine.currentState;
+
+    if (state === "FE_TITLE" || state === "FE_GAMEOVER" || state === "FE_VICTORY") {
+        if (e.key === "Enter") engine.transition("START");
+    } 
+    else if (state === "FE_WARFARE") {
+        if (e.key === "1") engine.transition("FORMATION_ATK");
+        if (e.key === "2") engine.transition("FORMATION_DEF");
+        if (e.key === "3") engine.transition("FORMATION_EVA");
+    }
+
+    if (e.key === "Escape") engine.transition("ESCAPE");
+});
+
+function coreLoop() {
+    engine.transition("TICK");
+    render(engine.currentState, engine.context);
+    requestAnimationFrame(coreLoop);
+}
+
+requestAnimationFrame(coreLoop);
+
+</script>
+</body>
+</html>
