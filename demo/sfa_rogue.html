@@ -1361,6 +1361,8 @@ const actions = {
     const goldLost = Math.floor(ctx.player.gold * 0.25);
     const expLost = Math.floor(ctx.player.exp * 0.20);
     ctx.player.gold = Math.max(0, ctx.player.gold - goldLost);
+    const divineGoldGranted = ctx.player.gold < 20 ? 20 - ctx.player.gold : 0;
+    if (divineGoldGranted > 0) ctx.player.gold = 20;
     ctx.player.exp = Math.max(0, ctx.player.exp - expLost);
     ctx.player.hp = Math.max(1, Math.floor(ctx.player.maxHp * 0.50));
     ctx.player.hunger = 50.999999;
@@ -1377,6 +1379,8 @@ const actions = {
     ctx.deathSummary = {
       deathFloor,
       goldLost,
+      divineGoldGranted,
+      goldAfterRescue: ctx.player.gold,
       expLost,
       level: ctx.player.level,
       weaponName: ctx.player.weapon.name,
@@ -1389,6 +1393,9 @@ const actions = {
 
   return_to_town_after_death: (ctx) => {
     addLog(ctx, `Rescued from B${ctx.deathSummary ? ctx.deathSummary.deathFloor : 0}.`);
+    if (ctx.deathSummary && ctx.deathSummary.divineGoldGranted > 0) {
+      addLog(ctx, `The gods granted you ${ctx.deathSummary.divineGoldGranted} gold for one night at the Inn.`);
+    }
     addLog(ctx, "Your level, equipment, bomb upgrades, and discovered warps were preserved.");
   },
 
@@ -1936,8 +1943,9 @@ function render(state, ctxGame) {
     overlay.innerHTML = `<div class="menu-title">TAVERN RUMORS</div><p style='font-size:12px; color:#e0e0f0; line-height:1.6; padding: 0 10px;'>${ctxGame.barMessage}</p><p style='font-size:11px; color:#ff00ff; margin-top:30px;'>[Esc/Enter]: Close Discussion</p>`;
   } else if (state === "FE_DEATH_SUMMARY") {
     overlay.style.display = "flex";
-    const summary = ctxGame.deathSummary || { deathFloor: 0, goldLost: 0, expLost: 0, level: ctxGame.player.level, weaponName: ctxGame.player.weapon.name, armorName: ctxGame.player.armor.name, bombRange: ctxGame.player.bombRange, bombCapacity: ctxGame.player.bombCapacity, warpCount: ctxGame.discoveredWarpFloors.length };
-    overlay.innerHTML = `<h1 style='color:#ff9933; font-size:28px; margin-bottom:8px;'>YOU WERE RESCUED</h1><p style='font-size:12px; color:#aaa; margin:0 0 12px;'>The town rescue party recovered you from B${summary.deathFloor}.</p><div style='font-size:11px; line-height:1.6; text-align:left; width:88%;'><div style='color:#ff7777;'>Lost: ${summary.goldLost} gold / ${summary.expLost} current EXP / current floor progress</div><div style='color:#77ff99;'>Preserved: LV ${summary.level}, ${summary.weaponName}, ${summary.armorName}</div><div style='color:#77ff99;'>Bomb RNG ${summary.bombRange}, capacity ${summary.bombCapacity}, discovered warps ${summary.warpCount}</div><div style='color:#aabbee;'>Recovery: HP 50% / Hunger 50 / Morning</div></div><p style='font-size:14px; color:#00ffcc; margin-top:24px;'>Press [ENTER] to Return to Town</p>`;
+    const summary = ctxGame.deathSummary || { deathFloor: 0, goldLost: 0, divineGoldGranted: 0, goldAfterRescue: ctxGame.player.gold, expLost: 0, level: ctxGame.player.level, weaponName: ctxGame.player.weapon.name, armorName: ctxGame.player.armor.name, bombRange: ctxGame.player.bombRange, bombCapacity: ctxGame.player.bombCapacity, warpCount: ctxGame.discoveredWarpFloors.length };
+    const divineGiftHtml = summary.divineGoldGranted > 0 ? `<div style='color:#ffe066;'>Divine aid: The gods granted ${summary.divineGoldGranted} gold. You now carry ${summary.goldAfterRescue} gold for the Inn.</div>` : "";
+    overlay.innerHTML = `<h1 style='color:#ff9933; font-size:28px; margin-bottom:8px;'>YOU WERE RESCUED</h1><p style='font-size:12px; color:#aaa; margin:0 0 12px;'>The town rescue party recovered you from B${summary.deathFloor}.</p><div style='font-size:11px; line-height:1.6; text-align:left; width:88%;'><div style='color:#ff7777;'>Lost: ${summary.goldLost} gold / ${summary.expLost} current EXP / current floor progress</div>${divineGiftHtml}<div style='color:#77ff99;'>Preserved: LV ${summary.level}, ${summary.weaponName}, ${summary.armorName}</div><div style='color:#77ff99;'>Bomb RNG ${summary.bombRange}, capacity ${summary.bombCapacity}, discovered warps ${summary.warpCount}</div><div style='color:#aabbee;'>Recovery: HP 50% / Hunger 50 / Morning</div></div><p style='font-size:14px; color:#00ffcc; margin-top:24px;'>Press [ENTER] to Return to Town</p>`;
   } else if (state === "FE_VICTORY") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<h1 style='color:#ffff00; font-size:32px; text-shadow:0 0 10px #ffff00;'>VICTORY CONCLUDED</h1><p style='font-size:13px; color:#33ff33;'>You successfully slayed the Overlord<br>and returned alive to the Town!</p><p style='font-size:14px; color:#00ffcc; margin-top:30px;'>Press [ESC] to Return to Main Title</p>`;
