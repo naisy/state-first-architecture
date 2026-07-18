@@ -32,8 +32,8 @@
             grid-template-columns: repeat(15, 24px);
             grid-template-rows: repeat(15, 24px);
             gap: 0;
-            width: 360px;  
-            height: 360px; 
+            width: 360px;
+            height: 360px;
             margin: 0;
             font-size: 20px;
             line-height: 24px;
@@ -47,17 +47,31 @@
             height: 24px;
         }
         /* Character specific styling for authentic terminal look */
-        .wall { color: #5a5a7a; }
+        .wall { color: #454851; }
+        .rock { color: #70747f; font-weight: bold; }
         .floor { color: #2e2e3e; }
         .town-floor { color: #3b4f3b; }
-        .player { color: #ffff00; font-weight: bold; text-shadow: 0 0 8px #ffff00aa; }
-        .enemy { color: #ff3333; font-weight: bold; }
-        .boss { color: #ff00ff; font-weight: bold; text-shadow: 0 0 10px #ff00ff; }
+        .player { font-weight: bold; text-shadow: 0 0 8px currentColor; }
+        .enemy, .boss { font-weight: bold; }
+        .boss { text-shadow: 0 0 10px currentColor; }
         .item { color: #33ff33; font-weight: bold; }
+        .rarity-rare { color: #55aaff; text-shadow: 0 0 5px #3388ff; }
+        .rarity-very-rare { color: #d46bff; text-shadow: 0 0 7px #b000ff; }
+        .rarity-ultra-rare { color: #ffd84d; text-shadow: 0 0 9px #ff9900; }
+        /* Threat color overrides rarity color; rarity remains visible through its glow. */
+        .threat-safe { color: #69e38f; }
+        .threat-even { color: #f0dc68; }
+        .threat-dangerous { color: #ff974d; }
+        .threat-deadly { color: #ff4055; }
+        .food-neutral { color: #e8edf2; text-shadow: 0 0 4px #ffffff55; }
         .tile-inn { color: #ff9933; font-weight: bold; }
         .tile-shop { color: #3399ff; font-weight: bold; }
         .tile-bar { color: #cc66ff; font-weight: bold; }
-        .tile-stairs { color: #ffffff; font-weight: bold; underline: true; }
+        .tile-stairs { color: #ffffff; font-weight: bold; text-decoration: underline; }
+        .tile-warp { color: #00ffff; font-weight: bold; text-shadow: 0 0 8px #00ffff; }
+        .bomb { color: #ff9f1c; font-weight: bold; text-shadow: 0 0 8px #ff6b00; }
+        .explosion { color: #fff200; font-weight: bold; text-shadow: 0 0 10px #ff3300; }
+        .magic-warning { color: #ff66ff; font-weight: bold; text-shadow: 0 0 8px #ff00ff; }
 
         #overlay {
             position: absolute;
@@ -88,6 +102,16 @@
             border-bottom: 1px solid #3b3b4f;
             padding-bottom: 6px;
         }
+        #hp { font-weight: bold; transition: color 0.15s ease; }
+        .hp-vital { color: #66e3a4; }
+        .hp-light { color: #d7e86a; }
+        .hp-wounded { color: #ffad5c; }
+        .hp-critical { color: #ff4d5a; text-shadow: 0 0 5px rgba(255,77,90,0.35); }
+        .hp-starving { color: #ffb347; }
+        .hp-poisoned { color: #cc66ff; text-shadow: 0 0 5px rgba(204,102,255,0.35); }
+        .hp-flow { margin-left: 3px; font-weight: bold; }
+        .hp-flow-positive { color: #39e67d; }
+        .hp-flow-negative { color: #ff4545; }
         #log-window {
             margin-top: 8px;
             width: 360px;
@@ -98,7 +122,7 @@
             overflow: hidden;
         }
         .new-log { color: #ffffff; }
-        
+
         /* Menu internal styles */
         .menu-title { color: #00ffcc; font-size: 18px; margin-bottom: 15px; font-weight: bold; }
         .menu-item { font-size: 13px; margin: 6px 0; width: 100%; text-align: left; padding-left: 40px; box-sizing: border-box;}
@@ -112,7 +136,7 @@
         <div id="board"></div>
         <div id="overlay"></div>
     </div>
-    
+
     <div>
         <div id="hud-top">
             <span id="location">LOCATION: Town</span>
@@ -126,7 +150,7 @@
         <div id="log-window"></div>
         <p style="font-size: 11px; color: #666; text-align: center; margin-top: 10px;">
             [Enter]: Select / Action | [Esc]: Title / Exit Menu <br>
-            [←/→/↑/↓]: Move & Attack | [Space]: Pass 1 Turn
+            [←/→/↑/↓]: Move & Attack | [Space]: Place Bomb | [.]: Pass 1 Turn
         </p>
     </div>
 
@@ -143,7 +167,7 @@ const SFA_DEFINITIONS = {
   },
   FE_GENERATE_MAP: {
     role: "frontend",
-    on_enter: "execute_map_generation", 
+    on_enter: "execute_map_generation",
     next_transitions: [
       { event: "AUTO", target_state: "FE_PLAYER_TURN" }
     ]
@@ -157,9 +181,12 @@ const SFA_DEFINITIONS = {
       { event: "MOVE_LEFT",  action: "player_move_left",  target_state: "FE_RESOLVE_PLAYER" },
       { event: "MOVE_RIGHT", action: "player_move_right", target_state: "FE_RESOLVE_PLAYER" },
       { event: "PASS",       action: "player_pass_turn",  target_state: "FE_RESOLVE_PLAYER" },
+      { event: "PLACE_BOMB", guard: "can_place_bomb", action: "place_bomb", target_state: "FE_RESOLVE_PLAYER" },
 
       // 環境要素へのインタラクション遷移（特定のタイルの上でのみ発火可能）
-      { event: "INTERACT", guard: "is_on_stairs",    action: "trigger_stairs",    target_state: "FE_GENERATE_MAP" },
+      { event: "INTERACT", guard: "has_discovered_warps_at_town_stairs", action: "prepare_warp_menu", target_state: "FE_WARP_MENU" },
+      { event: "INTERACT", guard: "can_use_stairs",   action: "trigger_stairs",    target_state: "FE_GENERATE_MAP" },
+      { event: "INTERACT", guard: "is_on_town_warp", action: "trigger_town_warp", target_state: "FE_GENERATE_MAP" },
       { event: "INTERACT", guard: "is_on_shop_tile", action: "generate_shop_stock", target_state: "FE_SHOP_MENU" },
       { event: "INTERACT", guard: "is_on_inn_tile",  target_state: "FE_INN_MENU" },
       { event: "INTERACT", guard: "is_on_bar_tile",  action: "gather_bar_rumor",  target_state: "FE_BAR_MENU" }
@@ -181,9 +208,30 @@ const SFA_DEFINITIONS = {
   FE_TURN_END: {
     role: "frontend",
     next_transitions: [
-      { event: "AUTO", guard: "is_player_dead", target_state: "FE_GAMEOVER" },
-      { event: "AUTO", guard: "is_player_won",  target_state: "FE_VICTORY" },
-      { event: "AUTO", guard: "is_player_alive", action: "process_turn_lifecycle", target_state: "FE_PLAYER_TURN" }
+      { event: "AUTO", guard: "is_player_dead", target_state: "FE_DEATH_RESOLVE" },
+      { event: "AUTO", guard: "is_player_alive", target_state: "FE_PROCESS_TURN_LIFECYCLE" }
+    ]
+  },
+  FE_PROCESS_TURN_LIFECYCLE: {
+    role: "shared",
+    on_enter: "process_turn_lifecycle",
+    next_transitions: [
+      { event: "AUTO", target_state: "FE_CHECK_TURN_OUTCOME" }
+    ]
+  },
+  FE_CHECK_TURN_OUTCOME: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "is_player_dead", target_state: "FE_DEATH_RESOLVE" },
+      { event: "AUTO", guard: "is_player_won", target_state: "FE_VICTORY" },
+      { event: "AUTO", guard: "is_player_alive", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_DEATH_RESOLVE: {
+    role: "shared",
+    on_enter: "apply_death_penalty",
+    next_transitions: [
+      { event: "AUTO", target_state: "FE_DEATH_SUMMARY" }
     ]
   },
   // --- 施設メニュー状態群 ---
@@ -194,6 +242,15 @@ const SFA_DEFINITIONS = {
       { event: "MENU_DOWN", action: "shop_cursor_down", target_state: "FE_SHOP_MENU" },
       { event: "SELECT",    guard: "can_afford_shop_item", action: "execute_buy", target_state: "FE_SHOP_MENU" },
       { event: "ESCAPE",    target_state: "FE_PLAYER_TURN" } // 操作不能ロックを完全に分離
+    ]
+  },
+  FE_WARP_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP", action: "warp_cursor_up", target_state: "FE_WARP_MENU" },
+      { event: "MENU_DOWN", action: "warp_cursor_down", target_state: "FE_WARP_MENU" },
+      { event: "SELECT", guard: "has_selected_warp_destination", action: "enter_selected_warp", target_state: "FE_GENERATE_MAP" },
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
     ]
   },
   FE_INN_MENU: {
@@ -210,11 +267,11 @@ const SFA_DEFINITIONS = {
       { event: "SELECT", target_state: "FE_PLAYER_TURN" }
     ]
   },
-  FE_GAMEOVER: {
+  FE_DEATH_SUMMARY: {
     role: "frontend",
     next_transitions: [
-      { event: "ESCAPE", target_state: "FE_TITLE" },
-      { event: "START", action: "init_game_data", target_state: "FE_GENERATE_MAP" }
+      { event: "RETURN_TO_TOWN", action: "return_to_town_after_death", target_state: "FE_GENERATE_MAP" },
+      { event: "ESCAPE", target_state: "FE_TITLE" }
     ]
   },
   FE_VICTORY: {
@@ -230,25 +287,34 @@ const SFA_DEFINITIONS = {
 // 2. ゲームコンテキスト (状態データ構造)
 // ==========================================
 const context = {
-  currentMapType: "town", 
-  depth: 0,               
+  currentMapType: "town",
+  depth: 0,
   timePhase: 0,           // 0:Morning, 1:Noon, 2:Evening, 3:Night, 4:Midnight, 5:Dawn
-  turnCount: 0,           
-  grid: Array(15).fill(null).map(() => Array(15).fill(1)), 
+  turnCount: 0,
+  grid: Array(15).fill(null).map(() => Array(15).fill(1)),
   tiles: {},              // 特別マスマップ {"x,y": "shop"など}
   player: {
-    x: 0, y: 0, hp: 100, maxHp: 100, hunger: 100, gold: 60,
+    x: 0, y: 0, hp: 100, maxHp: 100, hunger: 100.999999, gold: 60,
     level: 1, exp: 0, nextExp: 20,
     weapon: { name: "Rusty Sword", atk: 4, rank: "E" },
-    armor: { name: "Ragged Cloth", def: 1, rank: "E" }
+    armor: { name: "Ragged Cloth", def: 1, rank: "E" },
+    bombCapacity: 1, bombRange: 1, bombRangeShopPurchases: 0, bombCapacityShopPurchases: 0,
+    statusEffects: { poisonTurns: 0 }, hpFlow: "stable"
   },
-  enemies: [],            
-  items: [],              
-  shopInventory: [],      
-  shopSelectedIndex: 0,   
-  barMessage: "",         
+  enemies: [],
+  items: [],
+  bombs: [],
+  explosionCells: [],
+  shopInventory: [],
+  shopSelectedIndex: 0,
+  warpDestinations: [1],
+  warpSelectedIndex: 0,
+  discoveredWarpFloors: [],
+  barMessage: "",
   logs: [],
-  bossKilled: false
+  defeatedBossFloors: [],
+  maxReachedDepth: 0,
+  deathSummary: null
 };
 
 const TIME_NAMES = ["Morning", "Noon", "Evening", "Night", "Midnight", "Dawn"];
@@ -259,38 +325,868 @@ function addLog(ctx, msg) {
   if (ctx.logs.length > 4) ctx.logs.shift();
 }
 
+function coordinateKey(x, y) { return `${x},${y}`; }
+
+function isReservedPosition(ctx, x, y) {
+  if (ctx.player.x === x && ctx.player.y === y) return true;
+  if (ctx.enemies.some(e => e.x === x && e.y === y)) return true;
+  if (ctx.items.some(i => i.x === x && i.y === y)) return true;
+  if (ctx.bombs && ctx.bombs.some(b => b.x === x && b.y === y)) return true;
+  return Object.prototype.hasOwnProperty.call(ctx.tiles, coordinateKey(x, y));
+}
+
 function getEmptyFloorPos(ctx) {
-  while (true) {
-    const x = Math.floor(Math.random() * 13) + 1;
-    const y = Math.floor(Math.random() * 13) + 1;
-    if (ctx.grid[y][x] === 0) {
-      if (ctx.player.x === x && ctx.player.y === y) continue;
-      if (ctx.enemies.some(e => e.x === x && e.y === y)) continue;
-      if (ctx.items.some(i => i.x === x && i.y === y)) continue;
-      if (ctx.grid[y][x] in ctx.tiles) continue;
-      return { x, y };
+  const candidates = [];
+  for (let y = 1; y < 14; y++) {
+    for (let x = 1; x < 14; x++) {
+      if (ctx.grid[y][x] === 0 && !isReservedPosition(ctx, x, y)) candidates.push({ x, y });
+    }
+  }
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function getReachableFloorPositions(ctx, start = ctx.player) {
+  const queue = [{ x: start.x, y: start.y }];
+  const visited = new Set([coordinateKey(start.x, start.y)]);
+  const result = [];
+  const directions = [[1,0],[-1,0],[0,1],[0,-1]];
+  while (queue.length) {
+    const current = queue.shift();
+    result.push(current);
+    for (const [dx, dy] of directions) {
+      const nx = current.x + dx;
+      const ny = current.y + dy;
+      const key = coordinateKey(nx, ny);
+      if (nx < 1 || nx > 13 || ny < 1 || ny > 13) continue;
+      if (ctx.grid[ny][nx] !== 0 || visited.has(key)) continue;
+      visited.add(key);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  return result;
+}
+
+function getEmptyReachableFloorPos(ctx) {
+  const candidates = getReachableFloorPositions(ctx).filter(pos => !isReservedPosition(ctx, pos.x, pos.y));
+  if (candidates.length === 0) return null;
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function hasWalkablePath(grid, start, goal) {
+  const queue = [start];
+  const visited = new Set([coordinateKey(start.x, start.y)]);
+  const directions = [[1,0],[-1,0],[0,1],[0,-1]];
+  while (queue.length) {
+    const current = queue.shift();
+    if (current.x === goal.x && current.y === goal.y) return true;
+    for (const [dx, dy] of directions) {
+      const nx = current.x + dx;
+      const ny = current.y + dy;
+      const key = coordinateKey(nx, ny);
+      if (nx < 1 || nx > 13 || ny < 1 || ny > 13) continue;
+      if (grid[ny][nx] !== 0 || visited.has(key)) continue;
+      visited.add(key);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  return false;
+}
+
+function carveGuaranteedPath(grid, start, goal) {
+  let x = start.x;
+  let y = start.y;
+  grid[y][x] = 0;
+  while (x !== goal.x) {
+    x += Math.sign(goal.x - x);
+    grid[y][x] = 0;
+  }
+  while (y !== goal.y) {
+    y += Math.sign(goal.y - y);
+    grid[y][x] = 0;
+  }
+}
+
+function generateReachableDungeonGrid(start, stairs, depth) {
+  const wallChance = Math.min(0.27, 0.14 + Math.log10(depth + 1) * 0.035);
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const grid = Array(15).fill(null).map(() => Array(15).fill(0));
+    for (let i = 0; i < 15; i++) {
+      grid[0][i] = 2; grid[14][i] = 2;
+      grid[i][0] = 2; grid[i][14] = 2;
+    }
+    for (let y = 1; y < 14; y++) {
+      for (let x = 1; x < 14; x++) {
+        if ((x === start.x && y === start.y) || (x === stairs.x && y === stairs.y)) continue;
+        if (Math.random() < wallChance) grid[y][x] = 1;
+      }
+    }
+    if (hasWalkablePath(grid, start, stairs)) return grid;
+  }
+
+  const fallback = Array(15).fill(null).map(() => Array(15).fill(0));
+  for (let i = 0; i < 15; i++) {
+    fallback[0][i] = 2; fallback[14][i] = 2;
+    fallback[i][0] = 2; fallback[i][14] = 2;
+  }
+  for (let y = 1; y < 14; y++) {
+    for (let x = 1; x < 14; x++) {
+      if (Math.random() < wallChance) fallback[y][x] = 1;
+    }
+  }
+  carveGuaranteedPath(fallback, start, stairs);
+  return fallback;
+}
+
+const RARITY_DEFINITIONS = {
+  common: {
+    label: 'Common', hpMultiplier: 1.0, attackMultiplier: 1.0, expMultiplier: 1.0,
+    dropQuality: 1.0, magicRateMultiplier: 1.0, blastProof: false
+  },
+  rare: {
+    label: 'Rare', hpMultiplier: 1.35, attackMultiplier: 1.18, expMultiplier: 1.8,
+    dropQuality: 1.12, magicRateMultiplier: 0.9, blastProof: false
+  },
+  very_rare: {
+    label: 'Very Rare', hpMultiplier: 1.75, attackMultiplier: 1.35, expMultiplier: 3.2,
+    dropQuality: 1.28, magicRateMultiplier: 0.8, blastProof: false
+  },
+  ultra_rare: {
+    label: 'Ultra Rare', hpMultiplier: 2.4, attackMultiplier: 1.6, expMultiplier: 6.0,
+    dropQuality: 1.5, magicRateMultiplier: 0.7, blastProof: true
+  }
+};
+
+const RARITY_ORDER = ['common', 'rare', 'very_rare', 'ultra_rare'];
+
+function levelSurplusForDepth(ctx, depth) {
+  return Math.max(0, Math.min(30, ctx.player.level - recommendedLevelForDepth(depth)));
+}
+
+function rarityProbabilities(ctx, depth, isBoss = false) {
+  const surplus = levelSurplusForDepth(ctx, depth);
+  let rare = (isBoss ? 0.10 : 0.04) + surplus * (isBoss ? 0.012 : 0.006);
+  let veryRare = (isBoss ? 0.02 : 0.006) + surplus * (isBoss ? 0.004 : 0.0018);
+  let ultraRare = (isBoss ? 0.003 : 0.0005) + surplus * (isBoss ? 0.0012 : 0.00035);
+  const cap = isBoss ? 0.72 : 0.40;
+  const raw = rare + veryRare + ultraRare;
+  if (raw > cap) {
+    const scale = cap / raw;
+    rare *= scale; veryRare *= scale; ultraRare *= scale;
+  }
+  return { common: 1 - rare - veryRare - ultraRare, rare, very_rare: veryRare, ultra_rare: ultraRare };
+}
+
+function rollRarity(ctx, depth, isBoss = false, roll = Math.random()) {
+  const probabilities = rarityProbabilities(ctx, depth, isBoss);
+  let cumulative = 0;
+  for (const rarity of RARITY_ORDER) {
+    cumulative += probabilities[rarity];
+    if (roll < cumulative) return rarity;
+  }
+  return 'common';
+}
+
+function rarityLabel(rarity) {
+  return RARITY_DEFINITIONS[rarity]?.label || RARITY_DEFINITIONS.common.label;
+}
+
+function applyEnemyRarity(enemy, rarity) {
+  const definition = RARITY_DEFINITIONS[rarity] || RARITY_DEFINITIONS.common;
+  enemy.rarity = rarity;
+  enemy.hp = Math.max(1, Math.floor(enemy.hp * definition.hpMultiplier));
+  enemy.maxHp = enemy.hp;
+  enemy.atk = Math.max(1, Math.floor(enemy.atk * definition.attackMultiplier));
+  enemy.exp = Math.max(1, Math.floor(enemy.exp * definition.expMultiplier));
+  if (enemy.magicEvery) enemy.magicEvery = Math.max(2, Math.round(enemy.magicEvery * definition.magicRateMultiplier));
+  if (enemy.isFoodEnemy && enemy.foodDrop) enemy.foodDrop.rarity = rarity;
+  if (rarity !== 'common') enemy.name = `${definition.label} ${enemy.name}`;
+  return enemy;
+}
+
+function withItemRarity(item, rarity = 'common') {
+  return { ...item, rarity };
+}
+
+const BALANCE_CONFIG = {
+  recommendedLevelPerFloor: 0.58,
+  maxRegularEnemies: 12,
+  minFoodEnemies: 1,
+  maxFoodEnemies: 3,
+  hungerPerTurn: 0.35,
+  fullHunger: 100.999999,
+  starvationDamageRate: 0.01,
+  satiatedRegenRate: 0.003,
+  poisonDamageRate: 0.006,
+  playerLevelAttack: 1.45,
+  levelHpGain: 11,
+  enemyHpMultiplier: 1.03,
+  enemyAttackMultiplier: 1.03,
+  fiveFloorStepRate: 0.0015,
+  fiveFloorStepCap: 0.30
+};
+
+const MAP_THREAT_PROFILES = [
+  { id: 'calm', label: 'Quiet', weight: 0.15, budgetMultiplier: 0.88 },
+  { id: 'standard', label: 'Hostile', weight: 0.45, budgetMultiplier: 1.00 },
+  { id: 'dangerous', label: 'Dangerous', weight: 0.30, budgetMultiplier: 1.18 },
+  { id: 'deadly', label: 'Lethal', weight: 0.10, budgetMultiplier: 1.36 }
+];
+
+const ENEMY_ARCHETYPES = [
+  { name: 'Cave Rat', symbol: 'Ｒ', unlockFloor: 1, weight: 0.55, threatCost: 0.65, hpFactor: 0.72, atkFactor: 0.72, expFactor: 0.72 },
+  { name: 'Goblin Scout', symbol: 'Ｇ', unlockFloor: 1, weight: 1.15, threatCost: 0.85, hpFactor: 0.88, atkFactor: 0.86, expFactor: 0.90 },
+  { name: 'Venom Bat', symbol: 'Ｖ', unlockFloor: 2, weight: 1.00, threatCost: 0.82, hpFactor: 0.70, atkFactor: 1.02, expFactor: 0.92 },
+  { name: 'Bone Archer', symbol: 'Ａ', unlockFloor: 5, weight: 0.90, threatCost: 1.02, hpFactor: 0.80, atkFactor: 1.16, expFactor: 1.10, magicType: 'line', magicEvery: 5 },
+  { name: 'Cave Warg', symbol: 'Ｗ', unlockFloor: 8, weight: 0.95, threatCost: 1.08, hpFactor: 0.94, atkFactor: 1.12, expFactor: 1.12 },
+  { name: 'Skeleton Guard', symbol: 'Ｓ', unlockFloor: 10, weight: 1.00, threatCost: 1.10, hpFactor: 1.02, atkFactor: 0.98, expFactor: 1.05 },
+  { name: 'Abyss Slime', symbol: 'Ｌ', unlockFloor: 12, weight: 0.82, threatCost: 1.12, hpFactor: 1.14, atkFactor: 0.92, expFactor: 1.10 },
+  { name: 'Bomb Beetle', symbol: 'Ｂ', unlockFloor: 15, weight: 0.78, threatCost: 1.20, hpFactor: 0.90, atkFactor: 1.20, expFactor: 1.22 },
+  { name: 'Stone Golem', symbol: 'Ｏ', unlockFloor: 20, weight: 0.70, threatCost: 1.34, hpFactor: 1.48, atkFactor: 0.92, expFactor: 1.28 },
+  { name: 'Dark Knight', symbol: 'Ｋ', unlockFloor: 25, weight: 0.82, threatCost: 1.36, hpFactor: 1.22, atkFactor: 1.12, expFactor: 1.25 },
+  { name: 'Void Sorcerer', symbol: 'Ｍ', unlockFloor: 30, weight: 0.66, threatCost: 1.42, hpFactor: 0.94, atkFactor: 1.25, expFactor: 1.30, magicType: 'line', magicEvery: 3 },
+  { name: 'Phantom Stalker', symbol: 'Ｐ', unlockFloor: 40, weight: 0.62, threatCost: 1.48, hpFactor: 0.88, atkFactor: 1.42, expFactor: 1.38 },
+  { name: 'Ancient Dragonkin', symbol: 'Ｄ', unlockFloor: 55, weight: 0.58, threatCost: 1.58, hpFactor: 1.34, atkFactor: 1.20, expFactor: 1.45 },
+  { name: 'Entropy Reaper', symbol: 'Ｅ', unlockFloor: 70, weight: 0.48, threatCost: 1.68, hpFactor: 1.15, atkFactor: 1.38, expFactor: 1.55, magicType: 'area', magicEvery: 4 },
+  { name: 'Rift Hound', symbol: 'Ｈ', unlockFloor: 90, weight: 0.46, threatCost: 1.72, hpFactor: 1.05, atkFactor: 1.52, expFactor: 1.62 },
+  { name: 'Abyss Witch', symbol: 'Ｑ', unlockFloor: 110, weight: 0.38, threatCost: 1.82, hpFactor: 1.08, atkFactor: 1.48, expFactor: 1.72, magicType: 'area', magicEvery: 3 }
+];
+
+function fiveFloorPowerMultiplier(depth) {
+  const completedBands = Math.max(0, Math.floor((depth - 1) / 5));
+  return 1 + Math.min(BALANCE_CONFIG.fiveFloorStepCap, completedBands * BALANCE_CONFIG.fiveFloorStepRate);
+}
+
+function rollMapThreatProfile(roll = Math.random()) {
+  let cumulative = 0;
+  for (const profile of MAP_THREAT_PROFILES) {
+    cumulative += profile.weight;
+    if (roll < cumulative) return profile;
+  }
+  return MAP_THREAT_PROFILES[1];
+}
+
+function regularEnemyBudget(depth, profile, isBossFloor) {
+  const fiveFloorBand = Math.floor((depth - 1) / 5);
+  const base = 3.9 + Math.log2(depth + 1) * 0.82 + Math.min(4.2, fiveFloorBand * 0.022);
+  return base * profile.budgetMultiplier * (isBossFloor ? 0.66 : 1.0);
+}
+
+function unlockedEnemyArchetypes(depth) {
+  return ENEMY_ARCHETYPES.filter(archetype => depth >= archetype.unlockFloor);
+}
+
+function chooseEnemyArchetype(depth, counts = {}, roll = Math.random()) {
+  const choices = unlockedEnemyArchetypes(depth).map(archetype => {
+    let weight = archetype.weight;
+    if (archetype.name === 'Cave Rat') {
+      weight *= depth <= 5 ? 1 : Math.max(0.12, 0.48 - depth / 500);
+      if ((counts['Cave Rat'] || 0) >= 2) weight *= 0.08;
+    }
+    if ((counts[archetype.name] || 0) >= 2) weight *= 0.35;
+    return { archetype, weight };
+  });
+  const total = choices.reduce((sum, entry) => sum + entry.weight, 0);
+  let cursor = roll * total;
+  for (const entry of choices) {
+    cursor -= entry.weight;
+    if (cursor <= 0) return entry.archetype;
+  }
+  return choices[choices.length - 1].archetype;
+}
+
+const FOOD_ENEMY_ARCHETYPES = [
+  { name: 'Dungeon Rabbit', symbol: '兎', hpFactor: 0.42, atkFactor: 0.28, expFactor: 0.42, foodName: 'Rabbit Meat', hunger: 42, heal: 8 },
+  { name: 'Wild Boar', symbol: '猪', hpFactor: 0.78, atkFactor: 0.62, expFactor: 0.72, foodName: 'Boar Steak', hunger: 58, heal: 15 },
+  { name: 'Cave Bear', symbol: '熊', hpFactor: 1.2, atkFactor: 1.0, expFactor: 1.12, foodName: 'Bear Roast', hunger: 85, heal: 28 }
+];
+
+const BOSS_ARCHETYPES = [
+  { name: 'Goblin King', symbol: '♛', hpFactor: 5.4, atkFactor: 1.2 },
+  { name: 'Bone Colossus', symbol: '☠', hpFactor: 6.0, atkFactor: 1.28 },
+  { name: 'Abyss Hydra', symbol: '♜', hpFactor: 6.6, atkFactor: 1.34 },
+  { name: 'Void Emperor', symbol: '♚', hpFactor: 7.1, atkFactor: 1.4 },
+  { name: 'Chronos Devourer', symbol: 'Ω', hpFactor: 7.7, atkFactor: 1.46 }
+];
+
+function recommendedLevelForDepth(depth) {
+  return 1 + Math.floor(depth * BALANCE_CONFIG.recommendedLevelPerFloor);
+}
+
+function expToNextLevel(level) {
+  return Math.floor(18 + 12 * Math.pow(level, 1.32));
+}
+
+function combatBaseForLevel(level) {
+  return {
+    hp: 16 + level * 4.8,
+    atk: 3.5 + level * 1.18,
+    exp: 5 + level * 2.1
+  };
+}
+
+function equipmentPowerForDepth(depth, type, quality = 1) {
+  const level = recommendedLevelForDepth(depth);
+  const base = type === 'weapon' ? 5 + level * 1.34 : 2 + level * 0.96;
+  return Math.max(1, Math.floor(base * quality));
+}
+
+function createEnemy(ctxOrDepth, depthOrId, idOrRarity = null, forcedRarity = null, forcedArchetype = null) {
+  const ctx = typeof ctxOrDepth === 'number' ? context : ctxOrDepth;
+  const depth = typeof ctxOrDepth === 'number' ? ctxOrDepth : depthOrId;
+  const id = typeof ctxOrDepth === 'number' ? depthOrId : idOrRarity;
+  if (typeof ctxOrDepth === 'number' && typeof idOrRarity === 'string') forcedRarity = idOrRarity;
+  const recommended = recommendedLevelForDepth(depth);
+  const base = forcedArchetype || chooseEnemyArchetype(depth);
+  const stats = combatBaseForLevel(recommended);
+  const depthStep = fiveFloorPowerMultiplier(depth);
+  const hpVariance = 0.96 + Math.random() * 0.09;
+  const attackVariance = 0.97 + Math.random() * 0.07;
+  const enemy = {
+    id, name: `${base.name} Lv.${recommended}`, symbol: base.symbol,
+    hp: Math.floor(stats.hp * base.hpFactor * BALANCE_CONFIG.enemyHpMultiplier * depthStep * hpVariance),
+    maxHp: 0,
+    atk: Math.max(1, Math.floor(stats.atk * base.atkFactor * BALANCE_CONFIG.enemyAttackMultiplier * depthStep * attackVariance)),
+    exp: Math.max(1, Math.floor(stats.exp * base.expFactor * depthStep)),
+    threatCost: base.threatCost,
+    archetype: base.name,
+    enemyLevel: recommended,
+    magicType: base.magicType || null,
+    magicEvery: base.magicEvery || 4,
+    pendingSpell: null,
+    hasDetectedPlayer: false
+  };
+  enemy.maxHp = enemy.hp;
+  return applyEnemyRarity(enemy, forcedRarity || rollRarity(ctx, depth, false));
+}
+
+function createFoodEnemy(ctxOrDepth, depthOrId, idOrRarity = null, forcedRarity = null) {
+  const ctx = typeof ctxOrDepth === 'number' ? context : ctxOrDepth;
+  const depth = typeof ctxOrDepth === 'number' ? ctxOrDepth : depthOrId;
+  const id = typeof ctxOrDepth === 'number' ? depthOrId : idOrRarity;
+  if (typeof ctxOrDepth === 'number' && typeof idOrRarity === 'string') forcedRarity = idOrRarity;
+  const recommended = recommendedLevelForDepth(depth);
+  const unlock = depth < 18 ? 1 : (depth < 55 ? 2 : 3);
+  const base = FOOD_ENEMY_ARCHETYPES[Math.floor(Math.random() * unlock)];
+  const stats = combatBaseForLevel(recommended);
+  const depthStep = fiveFloorPowerMultiplier(depth);
+  const enemy = {
+    id, name: `${base.name} Lv.${recommended}`, symbol: base.symbol,
+    hp: Math.floor(stats.hp * base.hpFactor * BALANCE_CONFIG.enemyHpMultiplier * depthStep), maxHp: Math.floor(stats.hp * base.hpFactor * BALANCE_CONFIG.enemyHpMultiplier * depthStep),
+    atk: Math.max(1, Math.floor(stats.atk * base.atkFactor * BALANCE_CONFIG.enemyAttackMultiplier * depthStep)),
+    exp: Math.max(1, Math.floor(stats.exp * base.expFactor)),
+    isFoodEnemy: true,
+    foodDrop: withItemRarity({ name: base.foodName, type: 'food', hunger: base.hunger, heal: base.heal }, 'common'),
+    enemyLevel: recommended,
+    hasDetectedPlayer: false,
+    provoked: false
+  };
+  return applyEnemyRarity(enemy, forcedRarity || rollRarity(ctx, depth, false));
+}
+
+function createBoss(ctxOrDepth, depthOrRarity = null, forcedRarity = null) {
+  const ctx = typeof ctxOrDepth === 'number' ? context : ctxOrDepth;
+  const depth = typeof ctxOrDepth === 'number' ? ctxOrDepth : depthOrRarity;
+  if (typeof ctxOrDepth === 'number' && typeof depthOrRarity === 'string') forcedRarity = depthOrRarity;
+  const cycle = Math.floor(depth / 5) - 1;
+  const base = BOSS_ARCHETYPES[cycle % BOSS_ARCHETYPES.length];
+  const recommended = recommendedLevelForDepth(depth) + 1;
+  const stats = combatBaseForLevel(recommended);
+  const depthStep = fiveFloorPowerMultiplier(depth);
+  const enemy = {
+    id: 100000 + depth,
+    name: `${base.name} [B${depth} BOSS]`, symbol: base.symbol,
+    hp: Math.floor(stats.hp * base.hpFactor * BALANCE_CONFIG.enemyHpMultiplier * depthStep), maxHp: Math.floor(stats.hp * base.hpFactor * BALANCE_CONFIG.enemyHpMultiplier * depthStep),
+    atk: Math.max(1, Math.floor(stats.atk * base.atkFactor * BALANCE_CONFIG.enemyAttackMultiplier * depthStep)),
+    exp: Math.floor(stats.exp * 8.5), isBoss: true, bossFloor: depth,
+    enemyLevel: recommended,
+    magicType: depth >= 20 ? 'area' : (depth >= 10 ? 'line' : null),
+    magicEvery: 4, pendingSpell: null, hasDetectedPlayer: false, provoked: false
+  };
+  return applyEnemyRarity(enemy, forcedRarity || rollRarity(ctx, depth, true));
+}
+
+function generateRandomEquipment(depth, type, qualityBias = 1, rarity = 'common') {
+  const prefixes = ["Bronze", "Iron", "Steel", "Chitin", "Mithril", "Demonic", "Astral", "Chrono", "Eternal"];
+  const ranks = ["E", "D", "C", "B", "A", "S", "SS", "SSS", "EX"];
+  const tier = Math.min(prefixes.length - 1, Math.floor(Math.log2(Math.max(1, depth))));
+  const quality = Math.max(0.9, qualityBias * (0.94 + Math.random() * 0.18));
+  const power = equipmentPowerForDepth(depth, type, quality);
+  const enhancement = Math.max(0, Math.floor((quality - 0.9) * 20));
+  const value = Math.floor(18 + power * (type === 'weapon' ? 7 : 8));
+  const name = `${prefixes[tier]} ${type === 'weapon' ? 'Blade' : 'Aegis'} +${enhancement}`;
+  return type === 'weapon'
+    ? withItemRarity({ name, type, atk: power, rank: ranks[tier], value }, rarity)
+    : withItemRarity({ name, type, def: power, rank: ranks[tier], value }, rarity);
+}
+
+function generateConsumable(depth, rarity = 'common') {
+  const roll = Math.random();
+  if (roll < 0.32) return withItemRarity({ name: "Trail Rations", type: "food", heal: 5, hunger: 48 }, rarity);
+  if (roll < 0.55) return withItemRarity({ name: "Hunter's Stew", type: "food", heal: 18, hunger: 75 }, rarity);
+  if (roll < 0.78) return withItemRarity({ name: "Greater Healing Flask", type: "potion", heal: 40 + recommendedLevelForDepth(depth) * 2, hunger: 8 }, rarity);
+  if (roll < 0.94) return withItemRarity({ name: "Traveler's Feast", type: "food", heal: 25, hunger: 100 }, rarity);
+  return withItemRarity({ name: "Elixir of Depth", type: "elixir", maxHp: 2 + Math.floor(Math.log10(depth + 1) * 2) }, rarity);
+}
+
+function applyLevelUps(ctx) {
+  let leveled = false;
+  while (ctx.player.exp >= ctx.player.nextExp) {
+    ctx.player.exp -= ctx.player.nextExp;
+    ctx.player.level++;
+    ctx.player.maxHp += BALANCE_CONFIG.levelHpGain;
+    ctx.player.hp = ctx.player.maxHp;
+    ctx.player.nextExp = expToNextLevel(ctx.player.level);
+    leveled = true;
+  }
+  if (leveled) addLog(ctx, `LEVEL UP! Reached Level ${ctx.player.level}!`);
+}
+
+function createShopInventory(ctx) {
+  const shopDepth = Math.max(1, ctx.maxReachedDepth, Math.floor(ctx.player.level / BALANCE_CONFIG.recommendedLevelPerFloor));
+  const normalWeapon = generateRandomEquipment(shopDepth, 'weapon', 1.04);
+  const premiumWeapon = generateRandomEquipment(shopDepth + 4, 'weapon', 1.12);
+  const normalArmor = generateRandomEquipment(shopDepth, 'armor', 1.04);
+  const premiumArmor = generateRandomEquipment(shopDepth + 4, 'armor', 1.12);
+  return [
+    { name: 'Travel Bread', type: 'food', hunger: 45, heal: 4, value: 8, stock: 5 },
+    { name: 'Boar Jerky', type: 'food', hunger: 68, heal: 10, value: 16, stock: 3 },
+    { name: 'Hunter Stew', type: 'food', hunger: 100, heal: 28, value: 28, stock: 2 },
+    { name: 'Healing Flask', type: 'potion', heal: 45 + ctx.player.level * 2, hunger: 0, value: 24 + ctx.player.level, stock: 3 },
+    { name: 'Full Recovery Tonic', type: 'full_restore', value: 55 + ctx.player.level * 2, stock: 1 },
+    { ...normalWeapon, value: Math.floor(normalWeapon.value * 0.9), stock: 1 },
+    { ...premiumWeapon, value: Math.floor(premiumWeapon.value * 1.15), stock: 1 },
+    { ...normalArmor, value: Math.floor(normalArmor.value * 0.9), stock: 1 },
+    { ...premiumArmor, value: Math.floor(premiumArmor.value * 1.15), stock: 1 },
+    { name: 'Veteran Training Manual', type: 'training', exp: Math.floor(ctx.player.nextExp * 0.45), value: 45 + ctx.player.level * 3, stock: 1 },
+    { name: 'Blast Range Amplifier', type: 'bomb_range', value: 650 + ctx.player.bombRangeShopPurchases * 850, stock: ctx.player.bombRangeShopPurchases < 3 ? 1 : 0 },
+    { name: 'Bomb Harness Upgrade', type: 'bomb_capacity', value: 2200, stock: ctx.player.bombCapacityShopPurchases < 1 ? 1 : 0 }
+  ];
+}
+
+const BOMB_CONFIG = {
+  fuseTurns: 5,
+  baseDamage: 55,
+  playerDamageRatio: 0.55,
+  bossDamageRatio: 0.72,
+  maxCapacity: 5,
+  maxRange: 8
+};
+
+const TREASURE_CONFIG = {
+  chestSpawnChance: 0.10,
+  rangeUpgradeChance: 0.015,
+  capacityUpgradeChance: 0.003
+};
+
+function generateTreasureChestReward(ctx, roll = Math.random()) {
+  if (roll < TREASURE_CONFIG.capacityUpgradeChance && ctx.player.bombCapacity < BOMB_CONFIG.maxCapacity) {
+    return withItemRarity({ name: "Infinite Chamber Core", type: "bomb_capacity" }, "ultra_rare");
+  }
+  if (roll < TREASURE_CONFIG.capacityUpgradeChance + TREASURE_CONFIG.rangeUpgradeChance && ctx.player.bombRange < BOMB_CONFIG.maxRange) {
+    return withItemRarity({ name: "Blast Radius Crystal", type: "bomb_range" }, "very_rare");
+  }
+  if (roll < 0.28) return withItemRarity({ name: "Treasure Gold", type: "gold", amount: 80 + ctx.depth * 12 }, "common");
+  if (roll < 0.62) return generateConsumable(ctx.depth);
+  const eqType = Math.random() > 0.5 ? "weapon" : "armor";
+  return generateRandomEquipment(ctx.depth + 3, eqType, 1.14);
+}
+
+function createTreasureChest(ctx, roll = Math.random()) {
+  const reward = generateTreasureChestReward(ctx, roll);
+  return withItemRarity({ name: "Ancient Treasure Chest", type: "chest", reward }, reward.rarity || 'common');
+}
+
+
+function applyTreasureReward(ctx, reward) {
+  if (reward.type === "bomb_range") {
+    ctx.player.bombRange = Math.min(BOMB_CONFIG.maxRange, ctx.player.bombRange + 1);
+    addLog(ctx, `VERY RARE! Blast range increased to ${ctx.player.bombRange}.`);
+  } else if (reward.type === "bomb_capacity") {
+    ctx.player.bombCapacity = Math.min(BOMB_CONFIG.maxCapacity, ctx.player.bombCapacity + 1);
+    addLog(ctx, `ULTRA RARE! Bomb capacity increased to ${ctx.player.bombCapacity}.`);
+  } else if (reward.type === "gold") {
+    ctx.player.gold += reward.amount;
+    addLog(ctx, `The chest contained ${reward.amount} gold.`);
+  } else if (reward.type === "food" || reward.type === "potion") {
+    ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + (reward.heal || 0));
+    ctx.player.hunger = Math.min(BALANCE_CONFIG.fullHunger, ctx.player.hunger + (reward.hunger || 0));
+    addLog(ctx, `The chest contained ${reward.name}. It was used immediately.`);
+  } else if (reward.type === "elixir") {
+    ctx.player.maxHp += reward.maxHp;
+    ctx.player.hp = ctx.player.maxHp;
+    addLog(ctx, `The chest contained ${reward.name}. Max HP increased by ${reward.maxHp}.`);
+  } else if (reward.type === "weapon") {
+    if (reward.atk > ctx.player.weapon.atk) ctx.player.weapon = reward;
+    else ctx.player.gold += Math.floor(reward.value / 2);
+    addLog(ctx, `The chest contained ${reward.name}.`);
+  } else if (reward.type === "armor") {
+    if (reward.def > ctx.player.armor.def) ctx.player.armor = reward;
+    else ctx.player.gold += Math.floor(reward.value / 2);
+    addLog(ctx, `The chest contained ${reward.name}.`);
+  }
+}
+
+function isBombAt(ctx, x, y) {
+  return ctx.bombs.some(bomb => bomb.x === x && bomb.y === y);
+}
+
+function bombDamage(ctx) {
+  return BOMB_CONFIG.baseDamage + ctx.player.level * 9 + ctx.player.weapon.atk * 2;
+}
+
+function rollEnemyDropRarity(enemy, roll = Math.random()) {
+  const rarity = enemy.rarity || 'common';
+  const distributions = {
+    common: [0.82, 0.17, 0.01, 0.0],
+    rare: [0.28, 0.62, 0.095, 0.005],
+    very_rare: [0.05, 0.48, 0.44, 0.03],
+    ultra_rare: [0.0, 0.12, 0.68, 0.20]
+  };
+  let cumulative = 0;
+  const row = distributions[rarity];
+  for (let index = 0; index < row.length; index++) {
+    cumulative += row[index];
+    if (roll < cumulative) return RARITY_ORDER[index];
+  }
+  return 'common';
+}
+
+function createEnemyDrop(ctx, enemy) {
+  const enemyRarity = enemy.rarity || 'common';
+  const dropChance = { common: 0.18, rare: 0.72, very_rare: 1.0, ultra_rare: 1.0 }[enemyRarity];
+  if (Math.random() >= dropChance) return null;
+  const rarity = rollEnemyDropRarity(enemy);
+  const quality = RARITY_DEFINITIONS[rarity].dropQuality;
+  if (Math.random() < 0.28) return generateConsumable(ctx.depth, rarity);
+  return generateRandomEquipment(ctx.depth + (enemy.isBoss ? 5 : 0), Math.random() < 0.5 ? 'weapon' : 'armor', quality, rarity);
+}
+
+function defeatEnemy(ctx, target, source = 'combat') {
+  addLog(ctx, `${target.name} was defeated by ${source}! Gained +${target.exp} EXP.`);
+  ctx.player.gold += Math.floor(Math.random() * 10) + Math.max(1, ctx.depth) * 5;
+  ctx.player.exp += target.exp;
+  ctx.enemies = ctx.enemies.filter(enemy => enemy.id !== target.id);
+  if (target.isFoodEnemy && target.foodDrop) {
+    ctx.items.push({ x: target.x, y: target.y, ...target.foodDrop });
+    addLog(ctx, `${target.name} dropped ${target.foodDrop.name}.`);
+  }
+  const rarityDrop = target.isFoodEnemy ? null : createEnemyDrop(ctx, target);
+  if (rarityDrop) {
+    ctx.items.push({ x: target.x, y: target.y, ...rarityDrop });
+    addLog(ctx, `${rarityLabel(rarityDrop.rarity)} drop: ${rarityDrop.name}.`);
+  }
+  if (target.isBoss) {
+    if (!ctx.defeatedBossFloors.includes(target.bossFloor)) ctx.defeatedBossFloors.push(target.bossFloor);
+    addLog(ctx, `Guardian of B${target.bossFloor} defeated! The downward stairs are now unlocked.`);
+  }
+  applyLevelUps(ctx);
+}
+
+function resolveItemsInBlastCell(ctx, x, y) {
+  const survivors = [];
+  for (const item of ctx.items) {
+    if (item.x !== x || item.y !== y) { survivors.push(item); continue; }
+    if (item.type === 'chest') {
+      const reward = item.reward;
+      if ((reward.rarity || 'common') === 'ultra_rare') {
+        survivors.push({ x, y, ...reward });
+        addLog(ctx, `The chest broke open, but Ultra Rare ${reward.name} resisted the blast.`);
+      } else {
+        addLog(ctx, `The blast destroyed the chest and its ${rarityLabel(reward.rarity)} reward.`);
+      }
+      continue;
+    }
+    if (RARITY_DEFINITIONS[item.rarity || 'common'].blastProof) {
+      survivors.push(item);
+      addLog(ctx, `Ultra Rare ${item.name} resisted the blast.`);
+    } else {
+      addLog(ctx, `The blast destroyed ${rarityLabel(item.rarity)} ${item.name}.`);
+    }
+  }
+  ctx.items = survivors;
+}
+
+function applyBlastDamage(ctx, x, y, damage) {
+  const target = ctx.enemies.find(enemy => enemy.x === x && enemy.y === y);
+  if (target) {
+    const applied = Math.max(1, Math.floor(damage * (target.isBoss ? BOMB_CONFIG.bossDamageRatio : 1)));
+    target.provoked = true;
+    target.hasDetectedPlayer = true;
+    target.hp -= applied;
+    addLog(ctx, `${target.name} took ${applied} bomb damage!`);
+    if (target.hp <= 0) defeatEnemy(ctx, target, 'a bomb blast');
+  }
+  if (ctx.player.x === x && ctx.player.y === y) {
+    const selfDamage = Math.max(1, Math.floor(damage * BOMB_CONFIG.playerDamageRatio) - ctx.player.armor.def);
+    ctx.player.hp = Math.max(0, ctx.player.hp - selfDamage);
+    addLog(ctx, `You were caught in the blast for ${selfDamage} damage!`);
+  }
+}
+
+function detonateBomb(ctx, bombId, detonated = new Set(), affected = new Set()) {
+  if (detonated.has(bombId)) return;
+  const bomb = ctx.bombs.find(candidate => candidate.id === bombId);
+  if (!bomb) return;
+  detonated.add(bombId);
+  ctx.bombs = ctx.bombs.filter(candidate => candidate.id !== bombId);
+  const damage = bombDamage(ctx);
+  const blastCells = [{ x: bomb.x, y: bomb.y }];
+  const directions = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (const [dx, dy] of directions) {
+    for (let distance = 1; distance <= bomb.range; distance++) {
+      const x = bomb.x + dx * distance;
+      const y = bomb.y + dy * distance;
+      if (ctx.grid[y][x] === 2) break;
+      blastCells.push({ x, y });
+      if (ctx.grid[y][x] === 1) {
+        ctx.grid[y][x] = 0;
+        addLog(ctx, `The blast shattered a rock at ${x},${y}.`);
+        break;
+      }
+    }
+  }
+  for (const cell of blastCells) {
+    const key = coordinateKey(cell.x, cell.y);
+    if (!ctx.explosionCells.includes(key)) ctx.explosionCells.push(key);
+    const chained = ctx.bombs.find(candidate => candidate.x === cell.x && candidate.y === cell.y);
+    if (chained) detonateBomb(ctx, chained.id, detonated, affected);
+    if (!affected.has(key)) {
+      affected.add(key);
+      resolveItemsInBlastCell(ctx, cell.x, cell.y);
+      applyBlastDamage(ctx, cell.x, cell.y, damage);
+    }
+  }
+  addLog(ctx, 'BOOM! The bomb exploded in a cross-shaped blast.');
+}
+
+function resolveBombsOnMapExit(ctx, destinationLabel) {
+  const abandonedCount = ctx.bombs.length;
+  if (abandonedCount <= 0) return 0;
+  ctx.bombs = [];
+  ctx.explosionCells = [];
+  addLog(ctx, `${abandonedCount} armed bomb${abandonedCount === 1 ? "" : "s"} detonated behind you after leaving for ${destinationLabel}.`);
+  return abandonedCount;
+}
+
+function processBombLifecycle(ctx) {
+  ctx.explosionCells = [];
+  ctx.bombs.forEach(bomb => {
+    if (bomb.placedTurn === undefined || bomb.placedTurn < ctx.turnCount) bomb.fuse -= 1;
+  });
+  const ready = ctx.bombs.filter(bomb => bomb.fuse <= 0).map(bomb => bomb.id);
+  const detonated = new Set();
+  const affected = new Set();
+  ready.forEach(id => detonateBomb(ctx, id, detonated, affected));
+}
+
+function warningCellsForSpell(spell) {
+  const cells = [];
+  if (spell.type === 'area') {
+    cells.push({x: spell.x, y: spell.y});
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => cells.push({x: spell.x+dx, y: spell.y+dy}));
+  } else if (spell.type === 'line') {
+    for (let i = 0; i <= spell.range; i++) cells.push({x: spell.x + spell.dx*i, y: spell.y + spell.dy*i});
+  }
+  return cells.filter(cell => cell.x >= 1 && cell.x <= 13 && cell.y >= 1 && cell.y <= 13);
+}
+
+function resolvePendingSpell(ctx, enemy) {
+  const spell = enemy.pendingSpell;
+  if (!spell) return false;
+  const cells = warningCellsForSpell(spell);
+  let hitPlayer = false;
+  cells.forEach(cell => {
+    if (ctx.grid[cell.y][cell.x] === 1) ctx.grid[cell.y][cell.x] = 0;
+    if (ctx.player.x === cell.x && ctx.player.y === cell.y) hitPlayer = true;
+  });
+  if (hitPlayer) {
+    const damage = Math.max(1, Math.floor(enemy.atk * 0.9) - Math.floor(ctx.player.armor.def * 0.5));
+    ctx.player.hp = Math.max(0, ctx.player.hp - damage);
+    addLog(ctx, `${enemy.name}'s rock-breaking magic hit you for ${damage}!`);
+  } else {
+    addLog(ctx, `${enemy.name}'s spell smashed the marked ground, but you escaped.`);
+  }
+  enemy.pendingSpell = null;
+  return true;
+}
+
+function prepareEnemySpell(ctx, enemy) {
+  if (!enemy.magicType || ctx.turnCount % enemy.magicEvery !== 0) return false;
+  if (enemy.magicType === 'line') {
+    const sameRow = enemy.y === ctx.player.y;
+    const sameColumn = enemy.x === ctx.player.x;
+    if (!sameRow && !sameColumn) return false;
+    enemy.pendingSpell = {
+      type: 'line', x: enemy.x, y: enemy.y,
+      dx: sameRow ? Math.sign(ctx.player.x - enemy.x) : 0,
+      dy: sameColumn ? Math.sign(ctx.player.y - enemy.y) : 0,
+      range: 8
+    };
+    addLog(ctx, `${enemy.name} marks a rock-breaking magic line. Move now!`);
+    return true;
+  }
+  enemy.pendingSpell = { type: 'area', x: ctx.player.x, y: ctx.player.y };
+  addLog(ctx, `${enemy.name} marks a cross-shaped annihilation zone. Move now!`);
+  return true;
+}
+
+function enemyVisionRange(enemy) {
+  const rarityBonus = { common: 0, rare: 1, very_rare: 2, ultra_rare: 3 }[enemy.rarity || 'common'] || 0;
+  const base = enemy.isBoss ? 9 : (enemy.magicType ? 8 : (enemy.isFoodEnemy ? 5 : 6));
+  return base + rarityBonus;
+}
+
+function hasClearSightToPlayer(ctx, enemy) {
+  let x0 = enemy.x;
+  let y0 = enemy.y;
+  const x1 = ctx.player.x;
+  const y1 = ctx.player.y;
+  const dx = Math.abs(x1 - x0);
+  const sx = x0 < x1 ? 1 : -1;
+  const dy = -Math.abs(y1 - y0);
+  const sy = y0 < y1 ? 1 : -1;
+  let error = dx + dy;
+
+  while (!(x0 === x1 && y0 === y1)) {
+    const doubled = 2 * error;
+    if (doubled >= dy) { error += dy; x0 += sx; }
+    if (doubled <= dx) { error += dx; y0 += sy; }
+    if (x0 === x1 && y0 === y1) return true;
+    if (!ctx.grid[y0] || ctx.grid[y0][x0] !== 0) return false;
+  }
+  return true;
+}
+
+function playerAttackPower(ctx) {
+  return Math.max(1, Math.floor(ctx.player.level * BALANCE_CONFIG.playerLevelAttack + ctx.player.weapon.atk));
+}
+
+function enemyThreatScore(ctx, enemy) {
+  // Threat presentation is deliberately based on full-health combat potential.
+  // Damage taken during the current fight must not make the same enemy change color.
+  const attack = playerAttackPower(ctx);
+  const hitsToDefeat = Math.max(1, Math.ceil(Math.max(1, enemy.maxHp || enemy.hp) / attack));
+  const incomingPerHit = Math.max(1, enemy.atk - ctx.player.armor.def);
+  const retaliationHits = Math.max(0, hitsToDefeat - 1);
+  const magicPressure = enemy.magicType ? incomingPerHit * 0.90 : 0;
+  const expectedDamage = retaliationHits * incomingPerHit + magicPressure;
+  return expectedDamage / Math.max(1, ctx.player.maxHp);
+}
+
+function enemyThreatBand(ctx, enemy) {
+  if (enemy.isFoodEnemy && !enemy.provoked) return 'neutral';
+  const score = enemyThreatScore(ctx, enemy);
+  if (score <= 0.16) return 'safe';
+  if (score <= 0.34) return 'even';
+  if (score <= 0.68) return 'dangerous';
+  return 'deadly';
+}
+
+function minimumThreatMix(profile, regularCount) {
+  // Threat counts are cumulative. Keep some green enemies for pacing, while
+  // making yellow/orange enemies a visible part of every normal floor.
+  const ratios = {
+    calm: { even: 0.42, dangerous: 0.16, deadly: 0.00 },
+    standard: { even: 0.52, dangerous: 0.24, deadly: 0.00 },
+    dangerous: { even: 0.62, dangerous: 0.34, deadly: 0.08 },
+    deadly: { even: 0.72, dangerous: 0.46, deadly: 0.16 }
+  }[profile.id] || { even: 0.52, dangerous: 0.24, deadly: 0.00 };
+  const atLeast = (ratio, minimum) => Math.min(regularCount, Math.max(minimum, Math.ceil(regularCount * ratio)));
+  return {
+    even: atLeast(ratios.even, 2),
+    dangerous: atLeast(ratios.dangerous, 1),
+    deadly: ratios.deadly > 0 ? atLeast(ratios.deadly, 1) : 0
+  };
+}
+
+function minimumEvenThreatCount(profile, regularCount) {
+  return minimumThreatMix(profile, regularCount).even;
+}
+
+function fortifyEnemyToThreatBand(ctx, enemy, targetBand = 'even') {
+  const targetScores = { even: 0.161, dangerous: 0.341, deadly: 0.681 };
+  const targetScore = targetScores[targetBand] || targetScores.even;
+  if (enemyThreatScore(ctx, enemy) >= targetScore) return false;
+  const originalHp = enemy.maxHp;
+  const originalAtk = enemy.atk;
+  let multiplier = 1.0;
+  while (enemyThreatScore(ctx, enemy) < targetScore && multiplier < 3.60) {
+    multiplier += 0.08;
+    enemy.maxHp = Math.max(1, Math.ceil(originalHp * multiplier));
+    enemy.hp = enemy.maxHp;
+    enemy.atk = Math.max(1, Math.ceil(originalAtk * (1 + (multiplier - 1) * 0.72)));
+  }
+  if (enemyThreatScore(ctx, enemy) < targetScore) return false;
+  enemy.exp = Math.max(1, Math.ceil(enemy.exp * multiplier));
+  enemy.isMapElite = true;
+  if (!enemy.name.startsWith('Veteran ')) enemy.name = `Veteran ${enemy.name}`;
+  return true;
+}
+
+function enforceMapThreatColorMix(ctx, profile) {
+  const regulars = ctx.enemies.filter(enemy => !enemy.isBoss && !enemy.isFoodEnemy);
+  const required = minimumThreatMix(profile, regulars.length);
+  const rank = { safe: 0, even: 1, dangerous: 2, deadly: 3 };
+  const countAtLeast = band => regulars.filter(enemy => rank[enemyThreatBand(ctx, enemy)] >= rank[band]).length;
+
+  let deadlyCount = countAtLeast('deadly');
+  if (deadlyCount < required.deadly) {
+    const candidates = [...regulars].sort((a, b) => enemyThreatScore(ctx, b) - enemyThreatScore(ctx, a));
+    for (const enemy of candidates) {
+      if (rank[enemyThreatBand(ctx, enemy)] >= rank.deadly) continue;
+      if (fortifyEnemyToThreatBand(ctx, enemy, 'deadly')) deadlyCount++;
+      if (deadlyCount >= required.deadly) break;
+    }
+  }
+
+  let dangerousCount = countAtLeast('dangerous');
+  if (dangerousCount < required.dangerous) {
+    const candidates = [...regulars].sort((a, b) => enemyThreatScore(ctx, b) - enemyThreatScore(ctx, a));
+    for (const enemy of candidates) {
+      if (rank[enemyThreatBand(ctx, enemy)] >= rank.dangerous) continue;
+      if (fortifyEnemyToThreatBand(ctx, enemy, 'dangerous')) dangerousCount++;
+      if (dangerousCount >= required.dangerous) break;
+    }
+  }
+
+  let evenCount = countAtLeast('even');
+  if (evenCount < required.even) {
+    const candidates = [...regulars].sort((a, b) => enemyThreatScore(ctx, b) - enemyThreatScore(ctx, a));
+    for (const enemy of candidates) {
+      if (rank[enemyThreatBand(ctx, enemy)] >= rank.even) continue;
+      if (fortifyEnemyToThreatBand(ctx, enemy, 'even')) evenCount++;
+      if (evenCount >= required.even) break;
     }
   }
 }
 
-// ハクスラ用：武器・防具のランダム生成エンジン
-function generateRandomEquipment(depth, type) {
-  const prefixes = ["Bronze", "Iron", "Steel", "Chitin", "Mithril", "Demonic"];
-  const ranks = ["E", "D", "C", "B", "A", "S"];
-  
-  // 階層(depth)をベースにランダムな揺らぎを与える
-  const roll = Math.min(5, Math.max(0, Math.floor(depth - 1 + Math.random() * 2)));
-  const prefix = prefixes[roll];
-  const rank = ranks[roll];
-  
-  const bonus = Math.floor(Math.random() * (depth + 1));
-  const name = `${prefix} ${type === 'weapon' ? 'Sword' : 'Shield'} +${bonus}`;
-  const power = (roll + 1) * 4 + bonus * 2;
-  const value = (roll + 1) * 25 + bonus * 10;
+function updateEnemyDetection(ctx, enemy) {
+  if (enemy.isFoodEnemy && !enemy.provoked) {
+    enemy.hasDetectedPlayer = false;
+    enemy.pendingSpell = null;
+    return false;
+  }
+  if (enemy.isFoodEnemy && enemy.provoked) {
+    enemy.hasDetectedPlayer = true;
+    return true;
+  }
+  if (enemy.pendingSpell) {
+    enemy.hasDetectedPlayer = true;
+    return true;
+  }
+  const distance = Math.abs(ctx.player.x - enemy.x) + Math.abs(ctx.player.y - enemy.y);
+  const visionRange = enemyVisionRange(enemy);
+  if (distance <= visionRange && hasClearSightToPlayer(ctx, enemy)) {
+    enemy.hasDetectedPlayer = true;
+  } else if (enemy.hasDetectedPlayer && distance > visionRange + 3) {
+    enemy.hasDetectedPlayer = false;
+  }
+  return enemy.hasDetectedPlayer === true;
+}
 
-  return type === 'weapon' 
-    ? { name, type, atk: power, rank, value } 
-    : { name, type, def: power, rank, value };
+function isCombatActive(ctx) {
+  return ctx.enemies.some(enemy => enemy.hasDetectedPlayer === true || enemy.pendingSpell);
 }
 
 // ==========================================
@@ -298,10 +1194,13 @@ function generateRandomEquipment(depth, type) {
 // ==========================================
 const guards = {
   is_player_dead:    (ctx) => ctx.player.hp <= 0,
-  is_player_won:     (ctx) => ctx.bossKilled && ctx.depth === 0, // ボスを倒して町に無事帰還
-  is_player_alive:   (ctx) => ctx.player.hp > 0 && !(ctx.bossKilled && ctx.depth === 0),
-  
+  is_player_won:     () => false,
+  is_player_alive:   (ctx) => ctx.player.hp > 0,
+
   is_on_stairs:      (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs",
+  has_discovered_warps_at_town_stairs: (ctx) => ctx.currentMapType === "town" && ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs" && ctx.discoveredWarpFloors.length > 0,
+  can_use_stairs:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs" && !ctx.enemies.some(e => e.isBoss),
+  is_on_town_warp:   (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "town_warp",
   is_on_shop_tile:   (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "shop",
   is_on_inn_tile:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "inn",
   is_on_bar_tile:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "bar",
@@ -316,9 +1215,11 @@ const guards = {
 
   can_afford_shop_item: (ctx) => {
     const item = ctx.shopInventory[ctx.shopSelectedIndex];
-    return item && ctx.player.gold >= item.value;
+    return item && item.stock > 0 && ctx.player.gold >= item.value;
   },
-  can_afford_inn: (ctx) => ctx.player.gold >= 20
+  can_afford_inn: (ctx) => ctx.player.gold >= 20,
+  has_selected_warp_destination: (ctx) => ctx.warpDestinations.length > 0,
+  can_place_bomb: (ctx) => ctx.currentMapType === "dungeon" && ctx.bombs.length < ctx.player.bombCapacity && !isBombAt(ctx, ctx.player.x, ctx.player.y)
 };
 
 // ==========================================
@@ -327,117 +1228,212 @@ const guards = {
 const actions = {
   init_game_data: (ctx) => {
     ctx.player = {
-      x: 7, y: 12, hp: 100, maxHp: 100, hunger: 100, gold: 60,
-      level: 1, exp: 0, nextExp: 20,
+      x: 7, y: 12, hp: 100, maxHp: 100, hunger: 100.999999, gold: 60,
+      level: 1, exp: 0, nextExp: expToNextLevel(1),
       weapon: { name: "Rusty Sword", atk: 4, rank: "E" },
-      armor: { name: "Ragged Cloth", def: 1, rank: "E" }
+      armor: { name: "Ragged Cloth", def: 1, rank: "E" },
+      bombCapacity: 1, bombRange: 1, bombRangeShopPurchases: 0, bombCapacityShopPurchases: 0,
+      statusEffects: { poisonTurns: 0 }, hpFlow: "stable"
     };
     ctx.currentMapType = "town";
     ctx.depth = 0;
     ctx.timePhase = 0;
     ctx.turnCount = 0;
-    ctx.bossKilled = false;
+    ctx.defeatedBossFloors = [];
+    ctx.discoveredWarpFloors = [];
+    ctx.warpDestinations = [1];
+    ctx.warpSelectedIndex = 0;
+    ctx.maxReachedDepth = 0;
+    ctx.bombs = [];
+    ctx.explosionCells = [];
+    ctx.deathSummary = null;
     ctx.logs = [];
-    addLog(ctx, "Welcome to SFA Freeway Sequel: SFA Rogue!");
+    addLog(ctx, "Welcome to SFA Rogue.");
+    addLog(ctx, "Descend, survive, and reshape the dungeon with bombs.");
+  },
+
+  apply_death_penalty: (ctx) => {
+    const deathFloor = ctx.depth;
+    const goldLost = Math.floor(ctx.player.gold * 0.25);
+    const expLost = Math.floor(ctx.player.exp * 0.20);
+    ctx.player.gold = Math.max(0, ctx.player.gold - goldLost);
+    ctx.player.exp = Math.max(0, ctx.player.exp - expLost);
+    ctx.player.hp = Math.max(1, Math.floor(ctx.player.maxHp * 0.50));
+    ctx.player.hunger = 50.999999;
+    ctx.player.statusEffects = { poisonTurns: 0 };
+    ctx.player.hpFlow = "stable";
+    ctx.currentMapType = "town";
+    ctx.depth = 0;
+    ctx.timePhase = 0;
+    ctx.bombs = [];
+    ctx.explosionCells = [];
+    ctx.enemies = [];
+    ctx.items = [];
+    ctx.tiles = {};
+    ctx.deathSummary = {
+      deathFloor,
+      goldLost,
+      expLost,
+      level: ctx.player.level,
+      weaponName: ctx.player.weapon.name,
+      armorName: ctx.player.armor.name,
+      bombRange: ctx.player.bombRange,
+      bombCapacity: ctx.player.bombCapacity,
+      warpCount: ctx.discoveredWarpFloors.length
+    };
+  },
+
+  return_to_town_after_death: (ctx) => {
+    addLog(ctx, `Rescued from B${ctx.deathSummary ? ctx.deathSummary.deathFloor : 0}.`);
+    addLog(ctx, "Your level, equipment, bomb upgrades, and discovered warps were preserved.");
   },
 
   execute_map_generation: (ctx) => {
-    ctx.grid = Array(15).fill(null).map(() => Array(15).fill(0));
     ctx.tiles = {};
     ctx.enemies = [];
     ctx.items = [];
-
-    // 外周を壁にする
-    for(let i=0; i<15; i++) {
-        ctx.grid[0][i] = 1; ctx.grid[14][i] = 1;
-        ctx.grid[i][0] = 1; ctx.grid[i][14] = 1;
-    }
+    ctx.bombs = [];
+    ctx.explosionCells = [];
 
     if (ctx.currentMapType === "town") {
-        // --- 町のマップ構成 ---
-        ctx.player.x = 7; ctx.player.y = 12;
-        // 各種施設タイルの設置
-        ctx.tiles["3,3"] = "inn";    ctx.grid[3][3] = 0;
-        ctx.tiles["11,3"] = "shop";  ctx.grid[3][11] = 0;
-        ctx.tiles["3,11"] = "bar";   ctx.grid[11][3] = 0;
-        ctx.tiles["11,11"] = "stairs"; ctx.grid[11][11] = 0; // ダンジョンへの階段
-
-        // 飾り用の内壁（町並み）
-        for(let x=5; x<=9; x++) ctx.grid[6][x] = 1;
-
-        // 夜間の場合は町にも徘徊ゾンビをスポーン
-        if (ctx.timePhase >= 3) {
-            for(let i=0; i<3; i++) {
-                const pos = getEmptyFloorPos(ctx);
-                ctx.enemies.push({ id: i, name: "Town Ghoul", x: pos.x, y: pos.y, hp: 15, maxHp: 15, atk: 5, exp: 4 });
-            }
-            addLog(ctx, "Be careful. Ghouls roam the town at night!");
+      ctx.grid = Array(15).fill(null).map(() => Array(15).fill(0));
+      for(let i=0; i<15; i++) {
+        ctx.grid[0][i] = 2; ctx.grid[14][i] = 2;
+        ctx.grid[i][0] = 2; ctx.grid[i][14] = 2;
+      }
+      ctx.player.x = 7; ctx.player.y = 12;
+      ctx.tiles["3,3"] = "inn";
+      ctx.tiles["11,3"] = "shop";
+      ctx.tiles["3,11"] = "bar";
+      ctx.tiles["11,11"] = "stairs";
+      for(let x=5; x<=9; x++) ctx.grid[6][x] = 2;
+      if (ctx.timePhase >= 3) {
+        for(let i=0; i<3; i++) {
+          const pos = getEmptyFloorPos(ctx);
+          if (!pos) break;
+          ctx.enemies.push({ ...createEnemy(1, i), name: "Town Ghoul", x: pos.x, y: pos.y });
         }
-    } else {
-        // --- ダンジョンのマップ構成 ---
-        ctx.player.x = 2; ctx.player.y = 2;
-        // ランダムに内壁を配置
-        for (let r = 1; r < 14; r++) {
-            for (let c = 1; c < 14; c++) {
-                if ((r !== 2 || c !== 2) && Math.random() < 0.18) {
-                    ctx.grid[r][c] = 1;
-                }
-            }
-        }
-        // 下層（または街へ戻る）階段の設置
-        ctx.tiles["12,12"] = "stairs"; ctx.grid[12][12] = 0;
+        addLog(ctx, "Be careful. Ghouls roam the town at night!");
+      }
+      return;
+    }
 
-        if (ctx.depth === 5) {
-            // 最深階：ボスフロア
-            ctx.enemies.push({ 
-                id: 999, name: "SFA OVERLORD [BOSS]", 
-                x: 8, y: 8, hp: 120, maxHp: 120, atk: 15, exp: 100, isBoss: true 
-            });
-            ctx.grid[8][8] = 0;
-            addLog(ctx, "Alert: The Overlord resides on this floor!");
-        } else {
-            // 通常階層：深さに応じてスケールされた敵のスポーン
-            const enemyCount = 2 + ctx.depth;
-            for(let i=0; i<enemyCount; i++) {
-                const pos = getEmptyFloorPos(ctx);
-                const hpBoost = ctx.depth * 8;
-                const atkBoost = ctx.depth * 2;
-                ctx.enemies.push({ 
-                    id: i, name: `Dungeon Fiend Lvl.${ctx.depth}`, 
-                    x: pos.x, y: pos.y, hp: 20 + hpBoost, maxHp: 20 + hpBoost, atk: 4 + atkBoost, exp: 5 * ctx.depth 
-                });
-            }
-            // ハクスラ戦利品のランダムドロップ配置
-            for(let i=0; i<2; i++) {
-                const pos = getEmptyFloorPos(ctx);
-                const isPotion = Math.random() > 0.5;
-                if (isPotion) {
-                    ctx.items.push({ x: pos.x, y: pos.y, name: "Ration Potion", type: "potion" });
-                } else {
-                    const eqType = Math.random() > 0.5 ? 'weapon' : 'armor';
-                    const eq = generateRandomEquipment(ctx.depth, eqType);
-                    ctx.items.push({ x: pos.x, y: pos.y, ...eq });
-                }
-            }
-        }
+    const start = { x: 2, y: 2 };
+    const stairs = { x: 12, y: 12 };
+    ctx.player.x = start.x;
+    ctx.player.y = start.y;
+    ctx.grid = generateReachableDungeonGrid(start, stairs, ctx.depth);
+    ctx.tiles[coordinateKey(stairs.x, stairs.y)] = "stairs";
+    ctx.grid[stairs.y][stairs.x] = 0;
+    ctx.maxReachedDepth = Math.max(ctx.maxReachedDepth, ctx.depth);
+
+    const isBossFloor = ctx.depth % 5 === 0;
+    if (isBossFloor) {
+      const warp = { x: 2, y: 12 };
+      carveGuaranteedPath(ctx.grid, start, warp);
+      ctx.tiles[coordinateKey(warp.x, warp.y)] = "town_warp";
+      ctx.grid[warp.y][warp.x] = 0;
+
+      const bossPos = getEmptyReachableFloorPos(ctx) || { x: 8, y: 8 };
+      ctx.grid[bossPos.y][bossPos.x] = 0;
+      ctx.enemies.push({ ...createBoss(ctx, ctx.depth), x: bossPos.x, y: bossPos.y });
+      if (ctx.defeatedBossFloors.includes(ctx.depth)) {
+        addLog(ctx, `The B${ctx.depth} guardian has returned with the reconstructed floor. Defeat it again to descend.`);
+      } else {
+        addLog(ctx, `A floor guardian blocks descent on B${ctx.depth}. Defeat it or use the cyan warp to retreat.`);
+      }
+    }
+
+    const foodEnemyCount = Math.min(BALANCE_CONFIG.maxFoodEnemies, BALANCE_CONFIG.minFoodEnemies + Math.floor(ctx.depth / 120));
+    for (let i = 0; i < foodEnemyCount; i++) {
+      const pos = getEmptyReachableFloorPos(ctx);
+      if (!pos) break;
+      ctx.enemies.push({ ...createFoodEnemy(ctx, ctx.depth, ctx.depth * 1000 + i), x: pos.x, y: pos.y });
+    }
+
+    const threatProfile = rollMapThreatProfile();
+    ctx.mapThreatProfile = threatProfile.id;
+    let remainingThreat = regularEnemyBudget(ctx.depth, threatProfile, isBossFloor);
+    const archetypeCounts = {};
+    let regularIndex = 0;
+    while (remainingThreat >= 0.55 && regularIndex < BALANCE_CONFIG.maxRegularEnemies) {
+      const base = chooseEnemyArchetype(ctx.depth, archetypeCounts);
+      if (base.threatCost > remainingThreat && regularIndex >= 3) break;
+      const pos = getEmptyReachableFloorPos(ctx);
+      if (!pos) break;
+      const enemy = createEnemy(ctx, ctx.depth, ctx.depth * 100 + regularIndex, null, base);
+      ctx.enemies.push({ ...enemy, x: pos.x, y: pos.y });
+      archetypeCounts[base.name] = (archetypeCounts[base.name] || 0) + 1;
+      remainingThreat -= base.threatCost;
+      regularIndex++;
+    }
+    enforceMapThreatColorMix(ctx, threatProfile);
+    if (!isBossFloor && threatProfile.id !== 'standard') {
+      addLog(ctx, `${threatProfile.label} floor: enemy force ${regularIndex}, threat budget ${regularEnemyBudget(ctx.depth, threatProfile, false).toFixed(1)}.`);
+    }
+
+    const shouldSpawnChest = isBossFloor || Math.random() < TREASURE_CONFIG.chestSpawnChance;
+    if (shouldSpawnChest) {
+      const chestPos = getEmptyReachableFloorPos(ctx);
+      if (chestPos) ctx.items.push({ x: chestPos.x, y: chestPos.y, ...createTreasureChest(ctx) });
+    }
+
+    const itemCount = Math.min(5, 2 + Math.floor(ctx.depth / 80));
+    for(let i=0; i<itemCount; i++) {
+      const pos = getEmptyReachableFloorPos(ctx);
+      if (!pos) break;
+      if (Math.random() < 0.55) {
+        ctx.items.push({ x: pos.x, y: pos.y, ...generateConsumable(ctx.depth) });
+      } else {
+        const eqType = Math.random() > 0.5 ? 'weapon' : 'armor';
+        ctx.items.push({ x: pos.x, y: pos.y, ...generateRandomEquipment(ctx.depth, eqType) });
+      }
+    }
+
+    if (!hasWalkablePath(ctx.grid, start, stairs)) {
+      carveGuaranteedPath(ctx.grid, start, stairs);
+      addLog(ctx, "Map validator repaired an unreachable stair route.");
     }
   },
 
   trigger_stairs: (ctx) => {
     if (ctx.currentMapType === "town") {
-        ctx.currentMapType = "dungeon";
-        ctx.depth = 1;
-        addLog(ctx, "You entered the dark Underworld...");
+      ctx.currentMapType = "dungeon";
+      ctx.depth = 1;
+      addLog(ctx, "You entered the endlessly shifting Underworld...");
     } else {
-        if (ctx.depth === 5 || ctx.bossKilled) {
-            ctx.currentMapType = "town";
-            ctx.depth = 0;
-            addLog(ctx, "You escaped back to the safety of the town!");
-        } else {
-            ctx.depth++;
-            addLog(ctx, `Descended deeper into Floor B${ctx.depth}.`);
-        }
+      const nextDepth = ctx.depth + 1;
+      resolveBombsOnMapExit(ctx, `B${nextDepth}`);
+      ctx.depth = nextDepth;
+      addLog(ctx, `Descended deeper into Floor B${ctx.depth}.`);
+      if (ctx.depth === 1000) addLog(ctx, "MILESTONE: You reached the legendary B1000 floor!");
     }
+  },
+
+  trigger_town_warp: (ctx) => {
+    const departedFloor = ctx.depth;
+    resolveBombsOnMapExit(ctx, "Town");
+    if (!ctx.discoveredWarpFloors.includes(departedFloor)) {
+      ctx.discoveredWarpFloors.push(departedFloor);
+      ctx.discoveredWarpFloors.sort((a, b) => a - b);
+    }
+    ctx.currentMapType = "town";
+    ctx.depth = 0;
+    addLog(ctx, `Warp B${departedFloor} registered. You can revisit it from the town entrance.`);
+  },
+
+  prepare_warp_menu: (ctx) => {
+    ctx.warpDestinations = [1, ...ctx.discoveredWarpFloors];
+    ctx.warpSelectedIndex = Math.max(0, ctx.warpDestinations.indexOf(Math.max(...ctx.warpDestinations)));
+  },
+  warp_cursor_up: (ctx) => { ctx.warpSelectedIndex = Math.max(0, ctx.warpSelectedIndex - 1); },
+  warp_cursor_down: (ctx) => { ctx.warpSelectedIndex = Math.min(ctx.warpDestinations.length - 1, ctx.warpSelectedIndex + 1); },
+  enter_selected_warp: (ctx) => {
+    const destination = ctx.warpDestinations[ctx.warpSelectedIndex] || 1;
+    resolveBombsOnMapExit(ctx, `B${destination}`);
+    ctx.currentMapType = "dungeon";
+    ctx.depth = destination;
+    addLog(ctx, destination === 1 ? "You entered the Underworld from B1." : `The town gate reconstructed a new B${destination} map. Its guardian will return.`);
   },
 
   increment_depth: (ctx) => { /* 遷移定義側の補完用 */ },
@@ -447,27 +1443,39 @@ const actions = {
   player_move_left:  (ctx) => { resolvePlayerMovement(ctx, -1,  0); },
   player_move_right: (ctx) => { resolvePlayerMovement(ctx,  1,  0); },
   player_pass_turn:  (ctx) => { addLog(ctx, "You wait and brace yourself."); },
+  place_bomb: (ctx) => {
+    const id = `${ctx.turnCount}-${ctx.player.x}-${ctx.player.y}-${ctx.bombs.length}`;
+    ctx.bombs.push({ id, x: ctx.player.x, y: ctx.player.y, fuse: BOMB_CONFIG.fuseTurns, range: ctx.player.bombRange, placedTurn: ctx.turnCount + 1 });
+    addLog(ctx, `Bomb placed. Detonation in ${BOMB_CONFIG.fuseTurns} turns. (${ctx.bombs.length}/${ctx.player.bombCapacity})`);
+  },
 
   execute_enemy_ai: (ctx) => {
-    ctx.enemies.forEach(enemy => {
+    [...ctx.enemies].forEach(enemy => {
+        if (!ctx.enemies.includes(enemy)) return;
+        if (!updateEnemyDetection(ctx, enemy)) return;
+        if (resolvePendingSpell(ctx, enemy)) return;
+        if (prepareEnemySpell(ctx, enemy)) return;
+
         const dx = Math.sign(ctx.player.x - enemy.x);
         const dy = Math.sign(ctx.player.y - enemy.y);
         const isAdjacent = Math.abs(ctx.player.x - enemy.x) + Math.abs(ctx.player.y - enemy.y) === 1;
 
         if (isAdjacent) {
-            // プレイヤーへの攻撃（防御力補正のハクスラ計算）
-            const rawDmg = enemy.atk;
-            const finalDmg = Math.max(1, rawDmg - ctx.player.armor.def);
+            const finalDmg = Math.max(1, enemy.atk - ctx.player.armor.def);
             ctx.player.hp = Math.max(0, ctx.player.hp - finalDmg);
+            ctx.player.hpFlow = "damaged";
             addLog(ctx, `${enemy.name} strikes you for ${finalDmg} damage!`);
+            if (enemy.archetype === "Venom Bat" && Math.random() < 0.22) {
+              ctx.player.statusEffects = ctx.player.statusEffects || { poisonTurns: 0 };
+              ctx.player.statusEffects.poisonTurns = Math.max(ctx.player.statusEffects.poisonTurns || 0, 5);
+              addLog(ctx, "Venom courses through your body!");
+            }
         } else {
-            // プレイヤーへの単純な追従アプローチ
             let nx = enemy.x + dx;
             let ny = enemy.y;
-            if (ctx.grid[ny][nx] === 1 || ctx.enemies.some(e => e.x === nx && e.y === ny)) {
-                nx = enemy.x; ny = enemy.y + dy;
-            }
-            if (ctx.grid[ny][nx] === 0 && !(ctx.player.x === nx && ctx.player.y === ny) && !ctx.enemies.some(e => e.x === nx && e.y === ny)) {
+            const blocked = (x, y) => ctx.grid[y][x] !== 0 || isBombAt(ctx, x, y) || ctx.enemies.some(e => e !== enemy && e.x === x && e.y === y);
+            if (blocked(nx, ny)) { nx = enemy.x; ny = enemy.y + dy; }
+            if (!blocked(nx, ny) && !(ctx.player.x === nx && ctx.player.y === ny)) {
                 enemy.x = nx; enemy.y = ny;
             }
         }
@@ -476,74 +1484,107 @@ const actions = {
 
   process_turn_lifecycle: (ctx) => {
     ctx.turnCount++;
+    processBombLifecycle(ctx);
     // 12ターン毎に朝・昼・夕・夜がシフト変化する
     if (ctx.turnCount % 12 === 0) {
         ctx.timePhase = (ctx.timePhase + 1) % 6;
         addLog(ctx, `The environment shifts into [${TIME_NAMES[ctx.timePhase]}].`);
-        
+
         // 夜になった瞬間、もし町にいたらゾンビを急襲スポーンさせるためのマップ動的再構築
         if (ctx.currentMapType === "town" && ctx.timePhase === 3) {
             for(let i=0; i<3; i++) {
-                const pos = getEmptyFloorPos(ctx);
+                const pos = getEmptyReachableFloorPos(ctx);
+                if (!pos) break;
                 ctx.enemies.push({ id: i, name: "Town Ghoul", x: pos.x, y: pos.y, hp: 15, maxHp: 15, atk: 5, exp: 4 });
             }
             addLog(ctx, "Night falls. Dark entities manifest around town!");
         }
     }
 
-    // 空腹度(Hunger)のスリップダメージ処理
-    ctx.player.hunger = Math.max(0, ctx.player.hunger - 1);
-    if (ctx.player.hunger === 0) {
-        ctx.player.hp = Math.max(0, ctx.player.hp - 5);
-        addLog(ctx, "You are starving to death! HP decreased.");
+    // HPは小数で保持し、最大HPに対する割合で回復・継続ダメージを解決する。
+    ctx.player.hpFlow = "stable";
+    ctx.player.statusEffects = ctx.player.statusEffects || { poisonTurns: 0 };
+    ctx.player.hunger = Math.max(0, ctx.player.hunger - BALANCE_CONFIG.hungerPerTurn);
+
+    const poisonActive = ctx.player.statusEffects.poisonTurns > 0;
+    if (poisonActive) {
+      const poisonDamage = ctx.player.maxHp * BALANCE_CONFIG.poisonDamageRate;
+      ctx.player.hp = Math.max(0, ctx.player.hp - poisonDamage);
+      ctx.player.statusEffects.poisonTurns -= 1;
+      ctx.player.hpFlow = "poisoned";
+      if (ctx.turnCount % 3 === 0) addLog(ctx, `Poison drained ${poisonDamage.toFixed(2)} HP.`);
+    }
+
+    if (ctx.player.hunger <= 0) {
+      const starvationDamage = ctx.player.maxHp * BALANCE_CONFIG.starvationDamageRate;
+      ctx.player.hp = Math.max(0, ctx.player.hp - starvationDamage);
+      if (ctx.player.hpFlow !== "poisoned") ctx.player.hpFlow = "starving";
+      if (ctx.turnCount % 3 === 0) addLog(ctx, `Starvation drained ${starvationDamage.toFixed(2)} HP.`);
+    } else if (!poisonActive && !isCombatActive(ctx) && ctx.player.hp < ctx.player.maxHp) {
+      const recovery = ctx.player.maxHp * BALANCE_CONFIG.satiatedRegenRate;
+      const beforeHp = ctx.player.hp;
+      ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + recovery);
+      if (ctx.player.hp > beforeHp) {
+        ctx.player.hpFlow = "recovering";
+        if (ctx.turnCount % 5 === 0) addLog(ctx, `Out of combat, satiation restored ${(ctx.player.hp - beforeHp).toFixed(2)} HP.`);
+      }
     }
   },
 
   // --- ショップロジック群 ---
   generate_shop_stock: (ctx) => {
     ctx.shopSelectedIndex = 0;
-    // プレイヤーのレベルに基づき、ランダム補正をかけた商品カタログの生成
-    ctx.shopInventory = [
-        { name: "Sustenance Potion", type: "potion", value: 15 },
-        generateRandomEquipment(ctx.player.level, "weapon"),
-        generateRandomEquipment(ctx.player.level, "armor")
-    ];
+    ctx.shopInventory = createShopInventory(ctx);
   },
   shop_cursor_up:   (ctx) => { ctx.shopSelectedIndex = Math.max(0, ctx.shopSelectedIndex - 1); },
   shop_cursor_down: (ctx) => { ctx.shopSelectedIndex = Math.min(ctx.shopInventory.length - 1, ctx.shopSelectedIndex + 1); },
   execute_buy: (ctx) => {
     const item = ctx.shopInventory[ctx.shopSelectedIndex];
+    if (!item || item.stock <= 0) return;
     ctx.player.gold -= item.value;
-    if (item.type === "potion") {
-        ctx.player.hunger = Math.min(100, ctx.player.hunger + 50);
-        ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + 30);
-        addLog(ctx, "Bought and consumed Potion!");
+    if (item.type === "food" || item.type === "potion") {
+      ctx.player.hunger = Math.min(BALANCE_CONFIG.fullHunger, ctx.player.hunger + (item.hunger || 0));
+      ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + (item.heal || 0));
+      addLog(ctx, `Used ${item.name}.`);
+    } else if (item.type === "full_restore") {
+      ctx.player.hp = ctx.player.maxHp;
+      ctx.player.hunger = BALANCE_CONFIG.fullHunger;
+      addLog(ctx, "Fully restored HP and hunger.");
     } else if (item.type === "weapon") {
-        ctx.player.weapon = item;
-        addLog(ctx, `Equipped new weapon: ${item.name}!`);
+      ctx.player.weapon = item;
+      addLog(ctx, `Equipped new weapon: ${item.name}!`);
     } else if (item.type === "armor") {
-        ctx.player.armor = item;
-        addLog(ctx, `Equipped new armor: ${item.name}!`);
+      ctx.player.armor = item;
+      addLog(ctx, `Equipped new armor: ${item.name}!`);
+    } else if (item.type === "training") {
+      ctx.player.exp += item.exp;
+      addLog(ctx, `Studied ${item.name}. Gained ${item.exp} EXP.`);
+      applyLevelUps(ctx);
+    } else if (item.type === "bomb_range") {
+      ctx.player.bombRange = Math.min(BOMB_CONFIG.maxRange, ctx.player.bombRange + 1);
+      ctx.player.bombRangeShopPurchases++;
+      addLog(ctx, `Purchased blast range upgrade ${ctx.player.bombRangeShopPurchases}/3. Range is now ${ctx.player.bombRange}.`);
+    } else if (item.type === "bomb_capacity") {
+      ctx.player.bombCapacity = Math.min(BOMB_CONFIG.maxCapacity, ctx.player.bombCapacity + 1);
+      ctx.player.bombCapacityShopPurchases++;
+      addLog(ctx, `Purchased the town's only bomb harness upgrade. Capacity is now ${ctx.player.bombCapacity}.`);
     }
-    // 購入したスロットを「売り切れ」としてダミー化
-    ctx.shopInventory[ctx.shopSelectedIndex] = { name: "[ Sold Out ]", type: "none", value: 9999 };
+    item.stock--;
+    if (item.stock <= 0) item.name = `[ Sold Out ] ${item.name}`;
   },
 
   // --- 宿屋・酒場ロジック ---
   execute_inn_rest: (ctx) => {
     ctx.player.gold -= 20;
     ctx.player.hp = ctx.player.maxHp;
-    ctx.player.hunger = 100;
+    ctx.player.hunger = BALANCE_CONFIG.fullHunger;
     ctx.timePhase = 0; // 強制的に安全な「朝」に戻す
     ctx.enemies = []; // 町の夜襲ゾンビを完全消去して安全確保
     addLog(ctx, "You rested well at the Inn. Morning has come.");
   },
   gather_bar_rumor: (ctx) => {
-    if (!ctx.bossKilled) {
-        ctx.barMessage = `"Listen closely traveler. On the deepest B5 floor, the SFA Overlord hoards legendary randomized artifacts. Defeat him and return here to secure victory!"`;
-    } else {
-        ctx.barMessage = `"Unbelievable! You actually felled the Overlord! Quickly, step out into the town square to claim your absolute historical victory!"`;
-    }
+    const nextBoss = Math.max(5, Math.ceil(Math.max(1, ctx.maxReachedDepth + 1) / 5) * 5);
+    ctx.barMessage = `"Every fifth floor has a guardian and a cyan return warp. Your deepest record is B${ctx.maxReachedDepth}; the next guardian waits on B${nextBoss}."`;
   }
 };
 
@@ -553,40 +1594,26 @@ function resolvePlayerMovement(ctx, dx, dy) {
     const ny = ctx.player.y + dy;
 
     // 1. 壁の衝突判定
-    if (ctx.grid[ny][nx] === 1) {
-        addLog(ctx, "Ouch! You hit a rigid stone structure.");
+    if (ctx.grid[ny][nx] !== 0) {
+        addLog(ctx, ctx.grid[ny][nx] === 1 ? "A destructible rock blocks the way." : "An indestructible wall blocks the way.");
+        return;
+    }
+    if (isBombAt(ctx, nx, ny)) {
+        addLog(ctx, "The armed bomb blocks that tile.");
         return;
     }
 
     // 2. 敵との接触（戦闘解決フェーズ）
     const target = ctx.enemies.find(e => e.x === nx && e.y === ny);
     if (target) {
-        const playerAtk = ctx.player.level * 2 + ctx.player.weapon.atk;
+        const playerAtk = playerAttackPower(ctx);
+        target.provoked = true;
+        target.hasDetectedPlayer = true;
         target.hp -= playerAtk;
         addLog(ctx, `You slash ${target.name} for ${playerAtk} damage!`);
-        
-        if (target.hp <= 0) {
-            addLog(ctx, `Defeated ${target.name}! Gained +${target.exp} EXP.`);
-            ctx.player.gold += Math.floor(Math.random() * 10) + ctx.depth * 5;
-            ctx.player.exp += target.exp;
-            ctx.enemies = ctx.enemies.filter(e => e.id !== target.id);
-            
-            if (target.isBoss) {
-                ctx.bossKilled = true;
-                addLog(ctx, "The Overlord has fallen! Escape back to the Town!");
-            }
-            
-            // レベルアップの判定処理
-            if (ctx.player.exp >= ctx.player.nextExp) {
-                ctx.player.level++;
-                ctx.player.exp -= ctx.player.nextExp;
-                ctx.player.maxHp += 15;
-                ctx.player.hp = ctx.player.maxHp;
-                ctx.player.nextExp = ctx.player.level * 25;
-                addLog(ctx, `LEVEL UP! Reached Level ${ctx.player.level}!`);
-            }
-        }
-        return; 
+
+        if (target.hp <= 0) defeatEnemy(ctx, target, 'your blade');
+        return;
     }
 
     // 3. 通常床の移動
@@ -597,10 +1624,23 @@ function resolvePlayerMovement(ctx, dx, dy) {
     const itemIdx = ctx.items.findIndex(i => i.x === nx && i.y === ny);
     if (itemIdx !== -1) {
         const item = ctx.items[itemIdx];
-        if (item.type === "potion") {
-            ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + 20);
-            ctx.player.hunger = Math.min(100, ctx.player.hunger + 30);
-            addLog(ctx, `Found a Ration Potion! Recovered vitals.`);
+        if (item.type === "potion" || item.type === "food") {
+            ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + (item.heal || 20));
+            ctx.player.hunger = Math.min(BALANCE_CONFIG.fullHunger, ctx.player.hunger + (item.hunger || 30));
+            addLog(ctx, `Consumed ${item.name}. Recovered HP/Hunger.`);
+        } else if (item.type === "elixir") {
+            ctx.player.maxHp += item.maxHp;
+            ctx.player.hp = ctx.player.maxHp;
+            addLog(ctx, `Consumed ${item.name}. Max HP increased by ${item.maxHp}.`);
+        } else if (item.type === "chest") {
+            addLog(ctx, "You opened an Ancient Treasure Chest.");
+            applyTreasureReward(ctx, item.reward);
+        } else if (item.type === "bomb_range") {
+            ctx.player.bombRange = Math.min(BOMB_CONFIG.maxRange, ctx.player.bombRange + 1);
+            addLog(ctx, `Blast Radius Crystal installed. Range is now ${ctx.player.bombRange}.`);
+        } else if (item.type === "bomb_capacity") {
+            ctx.player.bombCapacity = Math.min(BOMB_CONFIG.maxCapacity, ctx.player.bombCapacity + 1);
+            addLog(ctx, `Infinite Chamber Core installed. Capacity is now ${ctx.player.bombCapacity}.`);
         } else if (item.type === "weapon") {
             if (item.atk > ctx.player.weapon.atk) {
                 ctx.player.weapon = item;
@@ -644,7 +1684,7 @@ class SFAEngine {
 
     for (const trans of matchedTransitions) {
       const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
-      
+
       if (isAllowed) {
         if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
         if (trans.action) this.actions[trans.action](this.context);
@@ -671,7 +1711,7 @@ class SFAEngine {
 
     for (const trans of autoTransitions) {
       const isAllowed = !trans.guard || this.guards[trans.guard](this.context);
-      
+
       if (isAllowed) {
         if (stateDef.on_exit) this.actions[stateDef.on_exit](this.context);
         if (trans.action) this.actions[trans.action](this.context);
@@ -682,9 +1722,9 @@ class SFAEngine {
         if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
 
         this.onTransitioned(this.currentState, this.context);
-        
+
         await this.handleAutoTransition();
-        return; 
+        return;
       }
     }
   }
@@ -693,53 +1733,87 @@ class SFAEngine {
 // ==========================================
 // 6. UI レンダラー (等幅グリッド ＆ モード別メニューオーバレイ描画)
 // ==========================================
+function getHpPresentation(player) {
+  const ratio = player.maxHp > 0 ? player.hp / player.maxHp : 0;
+  const poisonActive = (player.statusEffects?.poisonTurns || 0) > 0 || player.hpFlow === "poisoned";
+  let className;
+  if (poisonActive) className = "hp-poisoned";
+  else if (player.hpFlow === "starving") className = "hp-starving";
+  else if (ratio <= 0.25) className = "hp-critical";
+  else if (ratio <= 0.50) className = "hp-wounded";
+  else if (ratio <= 0.75) className = "hp-light";
+  else className = "hp-vital";
+
+  let marker = "";
+  let markerClass = "";
+  if (player.hpFlow === "recovering") { marker = "+"; markerClass = "hp-flow-positive"; }
+  else if (["starving", "poisoned"].includes(player.hpFlow)) { marker = "-"; markerClass = "hp-flow-negative"; }
+  return { className, marker, markerClass };
+}
+
 function render(state, ctxGame) {
   // 時間帯に応じてブラウザ全体の背景色(グラデーション)を変え、夜の深さを情緒的に演出
   document.body.style.backgroundColor = TIME_BG_COLORS[ctxGame.timePhase];
 
   let boardHtml = "";
   const isTown = ctxGame.currentMapType === "town";
+  const playerHpPresentation = getHpPresentation(ctxGame.player);
 
   for (let r = 0; r < 15; r++) {
     for (let c = 0; c < 15; c++) {
       // 1. ベースマスの決定
-      let symbol = ctxGame.grid[r][c] === 1 ? "＃" : "・";
-      let className = ctxGame.grid[r][c] === 1 ? "wall" : (isTown ? "town-floor" : "floor");
+      let symbol = ctxGame.grid[r][c] === 2 ? "＃" : (ctxGame.grid[r][c] === 1 ? "＃" : "・");
+      let className = ctxGame.grid[r][c] === 2 ? "wall" : (ctxGame.grid[r][c] === 1 ? "rock" : (isTown ? "town-floor" : "floor"));
 
       // 特別な環境施設の配置・マッピング
       const tileKey = `${c},${r}`;
       if (ctxGame.tiles[tileKey] === "inn")     { symbol = "Ｈ"; className = "tile-inn"; }
       if (ctxGame.tiles[tileKey] === "shop")    { symbol = "Ｓ"; className = "tile-shop"; }
       if (ctxGame.tiles[tileKey] === "bar")     { symbol = "Ｂ"; className = "tile-bar"; }
-      if (ctxGame.tiles[tileKey] === "stairs")  { symbol = "＞"; className = "tile-stairs"; }
+      if (ctxGame.tiles[tileKey] === "stairs")    { symbol = "＞"; className = "tile-stairs"; }
+      if (ctxGame.tiles[tileKey] === "town_warp") { symbol = "◎"; className = "tile-warp"; }
 
       // 2. 動的エンティティの上書き配置（ペインターレイヤー法）
+      const warning = ctxGame.enemies.some(enemy => enemy.pendingSpell && warningCellsForSpell(enemy.pendingSpell).some(cell => cell.x === c && cell.y === r));
+      if (warning) { symbol = "！"; className = "magic-warning"; }
+
       const item = ctxGame.items.find(i => i.x === c && i.y === r);
       if (item) {
-         symbol = item.type === "potion" ? "Ｐ" : (item.type === "weapon" ? "Ｗ" : "Ａ");
-         className = "item";
+         symbol = item.type === "chest" ? "Ｔ" : (item.type === "food" ? "Ｆ" : (item.type === "potion" ? "Ｐ" : (item.type === "elixir" ? "Ｅ" : ((item.type === "bomb_capacity" || item.type === "bomb_range") ? "Ｃ" : (item.type === "weapon" ? "Ｗ" : "Ａ")))));
+         className = `item rarity-${(item.rarity || 'common').replace('_', '-')}`;
       }
 
+      const bomb = ctxGame.bombs.find(b => b.x === c && b.y === r);
+      if (bomb) { symbol = String(Math.max(1, bomb.fuse)); className = "bomb"; }
+
+      if (ctxGame.explosionCells.includes(tileKey)) { symbol = "※"; className = "explosion"; }
+
       const enemy = ctxGame.enemies.find(e => e.x === c && e.y === r);
-      if (enemy) { 
-         symbol = enemy.isBoss ? "👹" : "Ｅ"; 
-         className = enemy.isBoss ? "boss" : "enemy"; 
+      if (enemy) {
+         symbol = enemy.symbol || (enemy.isBoss ? "👹" : "Ｅ");
+         const rarityClass = `rarity-${(enemy.rarity || 'common').replace('_', '-')}`;
+         const threatBand = enemyThreatBand(ctxGame, enemy);
+         const threatClass = threatBand === 'neutral' ? 'food-neutral' : `threat-${threatBand}`;
+         className = `${enemy.isBoss ? 'boss' : 'enemy'} ${rarityClass} ${threatClass}`;
       }
 
       if (ctxGame.player.x === c && ctxGame.player.y === r) {
-        symbol = "＠"; className = "player";
+        symbol = "＠"; className = `player ${playerHpPresentation.className}`;
       }
 
       boardHtml += `<span class="${className}">${symbol}</span>`;
     }
   }
   document.getElementById("board").innerHTML = boardHtml;
-  
+
   // HUD文字列の更新
-  document.getElementById("location").textContent = isTown ? "LOCATION: Town square" : `LOCATION: Dungeon B${ctxGame.depth}F`;
+  document.getElementById("location").textContent = isTown ? "LOCATION: Town square" : `LOCATION: Dungeon B${ctxGame.depth}F (Best B${ctxGame.maxReachedDepth})`;
   document.getElementById("timephase").textContent = `TIME: ${TIME_NAMES[ctxGame.timePhase]} (Turn ${ctxGame.turnCount})`;
-  document.getElementById("hp").textContent = `HP: ${ctxGame.player.hp}/${ctxGame.player.maxHp} (Hng:${ctxGame.player.hunger})`;
-  document.getElementById("gold").textContent = `GOLD: ${ctxGame.player.gold}g`;
+  const hpElement = document.getElementById("hp");
+  const hpPresentation = getHpPresentation(ctxGame.player);
+  hpElement.className = hpPresentation.className;
+  hpElement.innerHTML = `HP: ${Math.floor(ctxGame.player.hp)}/${Math.floor(ctxGame.player.maxHp)}${hpPresentation.marker ? `<span class="hp-flow ${hpPresentation.markerClass}">${hpPresentation.marker}</span>` : ""} (Hng:${Math.min(100, Math.floor(ctxGame.player.hunger))})`;
+  document.getElementById("gold").textContent = `GOLD: ${ctxGame.player.gold}g BOMB:∞ SET:${ctxGame.bombs.length}/${ctxGame.player.bombCapacity} RNG:${ctxGame.player.bombRange}`;
   document.getElementById("player-lvl").textContent = `LV: ${ctxGame.player.level} (${ctxGame.player.exp}/${ctxGame.player.nextExp})`;
 
   // ログウィンドウの更新
@@ -751,22 +1825,27 @@ function render(state, ctxGame) {
   const overlay = document.getElementById("overlay");
   if (state === "FE_TITLE") {
     overlay.style.display = "flex";
-    overlay.innerHTML = `<h1 style='color:#00ffcc; font-size:36px; margin:0;'>SFA FREEWAY II</h1><h2 style='color:#ff00ff; font-size:18px; margin:0 0 20px 0;'>- SFA ROGUE -</h2><p style='font-size:12px; color:#aaa; line-height:1.6;'>Weapon Hack & Slash / Day-Night Cycles<br>Engine Core Powered by SFA Architecture</p><p style='font-size:14px; color:#fff; margin-top:30px; animation: blink 1s infinite;'>Press [ENTER] to Venture</p>`;
+    overlay.innerHTML = `<h1 style='color:#00ffcc; font-size:36px; margin:0;'>SFA ROGUE</h1><h2 style='color:#ff00ff; font-size:16px; margin:4px 0 20px 0;'>STATE-FIRST BOMBER ROGUELIKE</h2><p style='font-size:12px; color:#aaa; line-height:1.6;'>Bomb Combat / Dungeon Exploration / Boss Rematches<br>Powered by State-First Architecture</p><p style='font-size:14px; color:#fff; margin-top:30px; animation: blink 1s infinite;'>Press [ENTER] to Venture</p>`;
   } else if (state === "FE_SHOP_MENU") {
     overlay.style.display = "flex";
     let menuItemsHtml = ctxGame.shopInventory.map((item, idx) => {
-        return `<div class="menu-item ${idx === ctxGame.shopSelectedIndex ? 'selected' : ''}">${item.name} (${item.value}g)</div>`;
+        return `<div class="menu-item ${idx === ctxGame.shopSelectedIndex ? 'selected' : ''}">${item.name} (${item.value}g / stock:${item.stock})</div>`;
     }).join("");
     overlay.innerHTML = `<div class="menu-title">MERCHANT SHOP</div><div style='width:100%; margin-bottom:20px;'>${menuItemsHtml}</div><p style='font-size:10px; color:#888;'>[↑/↓]: Cursor | [Enter]: Purchase | [Esc]: Exit</p>`;
+  } else if (state === "FE_WARP_MENU") {
+    overlay.style.display = "flex";
+    const destinations = ctxGame.warpDestinations.map((floor, idx) => `<div class="menu-item ${idx === ctxGame.warpSelectedIndex ? 'selected' : ''}">Enter B${floor} (new map)</div>`).join("");
+    overlay.innerHTML = `<div class="menu-title">DISCOVERED WARP GATE</div><div style='width:100%; margin-bottom:20px;'>${destinations}</div><p style='font-size:10px; color:#888;'>[↑/↓]: Destination | [Enter]: Enter | [Esc]: Cancel</p>`;
   } else if (state === "FE_INN_MENU") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<div class="menu-title">TOWN INN</div><p style='font-size:13px; margin-bottom:20px;'>Stay overnight for <span style='color:#ffff00;'>20 gold</span>?<br>(Fully restores HP/Hunger and resets to Morning)</p><div class="menu-item selected">Rest and Sleep</div><p style='font-size:10px; color:#888; margin-top:20px;'>[Enter]: Pay & Stay | [Esc]: Exit</p>`;
   } else if (state === "FE_BAR_MENU") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<div class="menu-title">TAVERN RUMORS</div><p style='font-size:12px; color:#e0e0f0; line-height:1.6; padding: 0 10px;'>${ctxGame.barMessage}</p><p style='font-size:11px; color:#ff00ff; margin-top:30px;'>[Esc/Enter]: Close Discussion</p>`;
-  } else if (state === "FE_GAMEOVER") {
+  } else if (state === "FE_DEATH_SUMMARY") {
     overlay.style.display = "flex";
-    overlay.innerHTML = `<h1 style='color:#ff3333; font-size:32px;'>YOU PERISHED</h1><p style='font-size:12px; color:#aaa;'>The Abyss claimed your soul.</p><p style='font-size:14px; color:#00ffcc; margin-top:30px;'>Press [ENTER] to Retry</p>`;
+    const summary = ctxGame.deathSummary || { deathFloor: 0, goldLost: 0, expLost: 0, level: ctxGame.player.level, weaponName: ctxGame.player.weapon.name, armorName: ctxGame.player.armor.name, bombRange: ctxGame.player.bombRange, bombCapacity: ctxGame.player.bombCapacity, warpCount: ctxGame.discoveredWarpFloors.length };
+    overlay.innerHTML = `<h1 style='color:#ff9933; font-size:28px; margin-bottom:8px;'>YOU WERE RESCUED</h1><p style='font-size:12px; color:#aaa; margin:0 0 12px;'>The town rescue party recovered you from B${summary.deathFloor}.</p><div style='font-size:11px; line-height:1.6; text-align:left; width:88%;'><div style='color:#ff7777;'>Lost: ${summary.goldLost} gold / ${summary.expLost} current EXP / current floor progress</div><div style='color:#77ff99;'>Preserved: LV ${summary.level}, ${summary.weaponName}, ${summary.armorName}</div><div style='color:#77ff99;'>Bomb RNG ${summary.bombRange}, capacity ${summary.bombCapacity}, discovered warps ${summary.warpCount}</div><div style='color:#aabbee;'>Recovery: HP 50% / Hunger 50 / Morning</div></div><p style='font-size:14px; color:#00ffcc; margin-top:24px;'>Press [ENTER] to Return to Town</p>`;
   } else if (state === "FE_VICTORY") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<h1 style='color:#ffff00; font-size:32px; text-shadow:0 0 10px #ffff00;'>VICTORY CONCLUDED</h1><p style='font-size:13px; color:#33ff33;'>You successfully slayed the Overlord<br>and returned alive to the Town!</p><p style='font-size:14px; color:#00ffcc; margin-top:30px;'>Press [ESC] to Return to Main Title</p>`;
@@ -785,7 +1864,7 @@ document.addEventListener("keydown", (e) => {
   const state = engine.currentState;
 
   // 各種メニュー状態と通常ターン状態でのキーコンフィグ分離をエンジン経由で安全に紐付け
-  if (state === "FE_SHOP_MENU") {
+  if (state === "FE_SHOP_MENU" || state === "FE_WARP_MENU") {
       if (e.key === "ArrowUp")    sfaEvent = "MENU_UP";
       if (e.key === "ArrowDown")  sfaEvent = "MENU_DOWN";
       if (e.key === "Enter")      sfaEvent = "SELECT";
@@ -799,21 +1878,25 @@ document.addEventListener("keydown", (e) => {
       if (e.key === "ArrowDown")  sfaEvent = "MOVE_DOWN";
       if (e.key === "ArrowLeft")  sfaEvent = "MOVE_LEFT";
       if (e.key === "ArrowRight") sfaEvent = "MOVE_RIGHT";
-      if (e.key === " ")          sfaEvent = "PASS";
+      if (e.key === " ")          sfaEvent = "PLACE_BOMB";
+      if (e.key === ".")          sfaEvent = "PASS";
       if (e.key === "Enter")      sfaEvent = "INTERACT"; // 施設マスの上で決定キーを押すと侵入
       if (e.key === "Escape")     sfaEvent = "ESCAPE";
   }
 
   // タイトル等でのグローバルスタート
-  if (e.key === "Enter" && (state === "FE_TITLE" || state === "FE_GAMEOVER" || state === "FE_VICTORY")) {
+  if (e.key === "Enter" && (state === "FE_TITLE" || state === "FE_VICTORY")) {
       sfaEvent = "START";
   }
-  if (e.key === "Escape" && (state === "FE_GAMEOVER" || state === "FE_VICTORY")) {
+  if (e.key === "Enter" && state === "FE_DEATH_SUMMARY") {
+      sfaEvent = "RETURN_TO_TOWN";
+  }
+  if (e.key === "Escape" && (state === "FE_DEATH_SUMMARY" || state === "FE_VICTORY")) {
       sfaEvent = "ESCAPE";
   }
 
   if (sfaEvent) {
-    e.preventDefault(); 
+    e.preventDefault();
     engine.transition(sfaEvent);
   }
 });
