@@ -31,7 +31,7 @@
         .menu-container {
             display: flex;
             gap: 30px;
-            flex-wrap: wrap; 
+            flex-wrap: wrap;
             justify-content: center;
             max-width: 1300px;
         }
@@ -178,6 +178,12 @@ const SFA_GAMES_REGISTRY = [
         url: "sfa_space.html",
         description: "A real-time space warfare game featuring formation switching, level-scaled burst fire, evasion, shields, and deterministic state transitions.",
         theme: "theme-orange"
+    },
+    {
+        title: "SFA Protocol Cards",
+        url: "sfa_protocol_cards.html",
+        description: "A state-machine card battle where enemy transitions can be interrupted, rewritten, locked, or accelerated.",
+        theme: "theme-yellow"
     }
 ];
 
@@ -189,8 +195,8 @@ function generateGameGrid(gamesList) {
     if (!container) return;
 
     container.innerHTML = gamesList.map(game => {
-        const themeClass = game.theme || "theme-cyan"; 
-        
+        const themeClass = game.theme || "theme-cyan";
+
         return `
             <a href="${game.url}" class="menu-card ${themeClass}">
                 <h2>${game.title}</h2>

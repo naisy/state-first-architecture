@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SFA Protocol Cards</title>
+<style>
+:root{--bg:#070914;--panel:#0e1324;--cyan:#00ffcc;--magenta:#ff3bd4;--yellow:#ffe65a;--red:#ff5577;--text:#d9e3f0;--muted:#7f8da3}
+*{box-sizing:border-box} body{margin:0;min-height:100vh;background:radial-gradient(circle at top,#151b38 0,#070914 55%);color:var(--text);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;display:flex;align-items:center;justify-content:center;padding:18px}
+#app{width:min(1080px,100%);border:2px solid var(--cyan);background:rgba(5,8,20,.96);box-shadow:0 0 28px #00ffcc33;padding:16px}
+header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #24304d;padding-bottom:12px;margin-bottom:14px} h1{margin:0;color:var(--cyan);font-size:26px}.sub{color:var(--muted);font-size:12px;margin-top:5px}.state{color:var(--yellow);font-size:12px;text-align:right}
+.grid{display:grid;grid-template-columns:1fr 1.4fr;gap:14px}.panel{background:var(--panel);border:1px solid #263250;padding:14px;min-height:170px}.panel h2{font-size:14px;margin:0 0 10px;color:var(--magenta)}
+.status-row{display:flex;justify-content:space-between;margin:8px 0}.bar{height:12px;background:#241321;border:1px solid #4b2c45}.fill{height:100%;transition:width .2s}.hp{background:linear-gradient(90deg,#ff335f,#ff7c8f)}.enemyhp{background:linear-gradient(90deg,#ff9b38,#ffe45c)}.block{color:#69bfff}.energy{color:var(--yellow)}
+.timeline{display:flex;gap:8px;flex-wrap:wrap}.node{padding:10px 12px;border:1px solid #425070;background:#10172a;min-width:95px;text-align:center;font-size:12px}.node.current{border-color:var(--magenta);box-shadow:0 0 12px #ff3bd455;color:#fff}.arrow{align-self:center;color:#5c6b88}.intent{margin-top:12px;padding:10px;border-left:3px solid var(--yellow);background:#151a2c;font-size:13px}
+#log{height:132px;overflow:hidden;font-size:12px;line-height:1.55;color:#aeb9ca}.log-new{color:#fff}
+.hand-wrap{margin-top:14px}.hand{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}.card{min-height:150px;background:linear-gradient(180deg,#171f38,#0d1222);border:1px solid #3a4868;color:var(--text);padding:10px;text-align:left;cursor:pointer;transition:.15s}.card:hover:not(:disabled){transform:translateY(-4px);border-color:var(--cyan);box-shadow:0 0 14px #00ffcc33}.card:disabled{opacity:.35;cursor:not-allowed}.cost{float:right;color:var(--yellow);font-weight:bold}.card h3{font-size:13px;margin:0 0 12px;color:var(--cyan)}.card p{font-size:11px;line-height:1.5;margin:0;color:#b5c0d0}.type{font-size:10px;color:var(--magenta);margin-top:10px}
+.controls{display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:10px}.btn{background:#10182c;border:1px solid var(--cyan);color:var(--cyan);padding:10px 18px;font:inherit;cursor:pointer}.btn:hover:not(:disabled){background:var(--cyan);color:#051014}.btn:disabled{opacity:.35;cursor:not-allowed}.hint{font-size:11px;color:var(--muted)}
+.overlay{position:absolute;inset:0;background:rgba(4,6,15,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}.stage{position:relative}.overlay h2{font-size:34px;color:var(--cyan);margin:0 0 12px}.overlay p{max-width:650px;color:#aeb8ca;line-height:1.7}.hidden{display:none}
+@media(max-width:800px){.grid{grid-template-columns:1fr}.hand{grid-template-columns:repeat(2,1fr)}header{gap:12px}.state{text-align:left}}
+</style>
+</head>
+<body>
+<div id="app" class="stage">
+<header><div><h1>SFA PROTOCOL CARDS</h1><div class="sub">Read the enemy state flow, then interrupt, rewrite, or fast-forward it to win.</div></div><div id="stateLabel" class="state"></div></header>
+<div class="grid">
+<section class="panel"><h2>PLAYER SYSTEM</h2><div class="status-row"><span>HP</span><span id="playerHpText"></span></div><div class="bar"><div id="playerHpBar" class="fill hp"></div></div><div class="status-row"><span>BLOCK</span><span id="blockText" class="block"></span></div><div class="status-row"><span>ENERGY</span><span id="energyText" class="energy"></span></div><div class="status-row"><span>TURN</span><span id="turnText"></span></div></section>
+<section class="panel"><h2>ENEMY STATE MACHINE</h2><div class="status-row"><span>CLOCKWORK KNIGHT HP</span><span id="enemyHpText"></span></div><div class="bar"><div id="enemyHpBar" class="fill enemyhp"></div></div><div id="timeline" class="timeline"></div><div id="intent" class="intent"></div></section>
+<section class="panel"><h2>COMBAT LOG</h2><div id="log"></div></section>
+<section class="panel"><h2>PROTOCOL STATUS</h2><div class="status-row"><span>DRAW PILE</span><span id="drawCount"></span></div><div class="status-row"><span>DISCARD</span><span id="discardCount"></span></div><div class="status-row"><span>NEXT ENEMY ACTION</span><span id="nextAction"></span></div><div class="status-row"><span>LOCK</span><span id="lockStatus"></span></div></section>
+</div>
+<div class="hand-wrap"><div id="hand" class="hand"></div></div>
+<div class="controls"><div class="hint">Click a card to play / Enter: Start or rematch / Esc: Return to title</div><button id="endTurnBtn" class="btn">END TURN</button></div>
+<div id="overlay" class="overlay"><h2 id="overlayTitle">SFA PROTOCOL CARDS</h2><p id="overlayText">The enemy follows <b>IDLE → CHARGE → ATTACK → RECOVER</b>. Interrupt its transitions, rewrite ATTACK into MISFIRE, and defeat it.</p><button id="startBtn" class="btn">START BATTLE</button></div>
+</div>
+<script>
+const SFA_DEFINITIONS={
+ FE_TITLE:{role:'frontend',next_transitions:[{event:'START',action:'reset_battle',target_state:'FE_BATTLE_SETUP'}]},
+ FE_BATTLE_SETUP:{role:'frontend',next_transitions:[{event:'AUTO',target_state:'FE_PLAYER_DRAW'}]},
+ FE_PLAYER_DRAW:{role:'frontend',on_enter:'prepare_player_turn',next_transitions:[{event:'AUTO',guard:'is_enemy_dead',target_state:'FE_VICTORY'},{event:'AUTO',guard:'is_player_dead',target_state:'FE_GAMEOVER'},{event:'AUTO',target_state:'FE_PLAYER_MAIN'}]},
+ FE_PLAYER_MAIN:{role:'frontend',next_transitions:[
+  {event:'PLAY_CARD',guard:'can_play_selected_card',action:'resolve_selected_card',target_state:'FE_CARD_RESOLVE'},
+  {event:'END_TURN',target_state:'FE_ENEMY_RESOLVE'},
+  {event:'ESCAPE',target_state:'FE_TITLE'}]},
+ FE_CARD_RESOLVE:{role:'frontend',next_transitions:[{event:'AUTO',guard:'is_enemy_dead',target_state:'FE_VICTORY'},{event:'AUTO',guard:'is_player_dead',target_state:'FE_GAMEOVER'},{event:'AUTO',target_state:'FE_PLAYER_MAIN'}]},
+ FE_ENEMY_RESOLVE:{role:'frontend',on_enter:'resolve_enemy_turn',next_transitions:[{event:'AUTO',target_state:'FE_STATUS_RESOLVE'}]},
+ FE_STATUS_RESOLVE:{role:'frontend',on_enter:'resolve_statuses',next_transitions:[{event:'AUTO',guard:'is_enemy_dead',target_state:'FE_VICTORY'},{event:'AUTO',guard:'is_player_dead',target_state:'FE_GAMEOVER'},{event:'AUTO',target_state:'FE_TURN_END'}]},
+ FE_TURN_END:{role:'frontend',on_enter:'advance_turn',next_transitions:[{event:'AUTO',target_state:'FE_PLAYER_DRAW'}]},
+ FE_VICTORY:{role:'frontend',next_transitions:[{event:'START',action:'reset_battle',target_state:'FE_BATTLE_SETUP'},{event:'ESCAPE',target_state:'FE_TITLE'}]},
+ FE_GAMEOVER:{role:'frontend',next_transitions:[{event:'START',action:'reset_battle',target_state:'FE_BATTLE_SETUP'},{event:'ESCAPE',target_state:'FE_TITLE'}]}
+};
+const CARD_LIBRARY={
+ strike:{name:'STRIKE',cost:1,type:'ATTACK',text:'Deal 6 damage to the enemy.',effect:c=>{c.enemy.hp-=6;addLog(c,'Strike: Deal 6 damage to the enemy.')}},
+ guard:{name:'GUARD',cost:1,type:'DEFENSE',text:'Gain 7 Block.',effect:c=>{c.player.block+=7;addLog(c,'Guard: Gained 7 Block.')}},
+ stop:{name:'EMERGENCY STOP',cost:1,type:'INTERRUPT',text:'If the enemy is in CHARGE or ATTACK, change it to STUN.',canUse:c=>['CHARGE','ATTACK'].includes(c.enemy.state),effect:c=>{c.enemy.state='STUN';addLog(c,'Emergency Stop: Changed the enemy state to STUN.')}},
+ rewrite:{name:'ROUTE REWRITE',cost:2,type:'REWRITE',text:'Rewrite ATTACK into MISFIRE.',canUse:c=>c.enemy.state==='ATTACK',effect:c=>{c.enemy.state='MISFIRE';addLog(c,'Route Rewrite: Changed ATTACK into MISFIRE.')}},
+ fast:{name:'FAST FORWARD',cost:1,type:'CONTROL',text:'Resolve the enemy current state immediately and advance it.',effect:c=>{resolveEnemyState(c,true)}},
+ deadlock:{name:'DEADLOCK',cost:1,type:'CONTROL',text:'Cancel the next enemy action and state advance.',canUse:c=>!c.enemy.locked,effect:c=>{c.enemy.locked=true;addLog(c,'Deadlock: Locked the next enemy resolution.')}},
+ patch:{name:'PATCH',cost:1,type:'RECOVERY',text:'Restore 4 HP.',canUse:c=>c.player.hp<c.player.maxHp,effect:c=>{const before=c.player.hp;c.player.hp=Math.min(c.player.maxHp,c.player.hp+4);addLog(c,`Patch: Restored ${c.player.hp-before} HP.`)}},
+ overclock:{name:'OVERCLOCK',cost:0,type:'RISK',text:'Gain 1 Energy and lose 2 HP.',effect:c=>{c.player.energy+=1;c.player.hp-=2;addLog(c,'Overclock: Energy +1 / HP -2.')}}
+};
+const STARTING_DECK=['strike','strike','strike','guard','guard','guard','stop','rewrite','fast','deadlock','patch','overclock'];
+const ENEMY_FLOW={IDLE:'CHARGE',CHARGE:'ATTACK',ATTACK:'RECOVER',MISFIRE:'RECOVER',RECOVER:'IDLE',STUN:'IDLE'};
+const context={player:{hp:30,maxHp:30,block:0,energy:3},enemy:{hp:42,maxHp:42,state:'IDLE',locked:false},turn:1,drawPile:[],discard:[],hand:[],selectedCardIndex:null,logs:[]};
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function addLog(c,msg){c.logs.push(msg);if(c.logs.length>7)c.logs.shift()}
+const guards={is_enemy_dead:c=>c.enemy.hp<=0,is_player_dead:c=>c.player.hp<=0,can_play_selected_card:c=>{const i=c.selectedCardIndex;if(i===null||!c.hand[i])return false;const card=CARD_LIBRARY[c.hand[i]];return c.player.energy>=card.cost&&(!card.canUse||card.canUse(c))}};
+function drawCards(c,n){for(let k=0;k<n;k++){if(c.drawPile.length===0){if(c.discard.length===0)return;c.drawPile=shuffle([...c.discard]);c.discard=[];addLog(c,'Rebuilt the draw pile from the discard pile.')}c.hand.push(c.drawPile.pop())}}
+function enemyIntent(state){return({IDLE:'Waiting. Advances to CHARGE next.',CHARGE:'Preparing an attack. ATTACK comes next.',ATTACK:'Deals 10 damage.',MISFIRE:'Malfunctions and takes 5 damage.',RECOVER:'Cooling down. Does not attack.',STUN:'Disabled. Does not attack.'})[state]}
+function resolveEnemyState(c,isFast=false){if(c.enemy.locked){c.enemy.locked=false;addLog(c,'Deadlock canceled the enemy action.');return}const s=c.enemy.state;if(s==='ATTACK'){let dmg=10;const absorbed=Math.min(c.player.block,dmg);c.player.block-=absorbed;dmg-=absorbed;c.player.hp-=dmg;addLog(c,`Enemy ATTACK: ${absorbed} Block absorbed, ${dmg} damage taken.`)}else if(s==='MISFIRE'){c.enemy.hp-=5;addLog(c,'Enemy MISFIRE: The enemy took 5 damage.')}else if(s==='CHARGE')addLog(c,'The enemy charged its attack.');else if(s==='RECOVER')addLog(c,'The enemy is cooling down.');else if(s==='STUN')addLog(c,'The enemy is disabled by STUN.');else addLog(c,'The enemy waited.');c.enemy.state=ENEMY_FLOW[s]||'IDLE';if(isFast)addLog(c,'Fast Forward advanced the enemy state immediately.')}
+const actions={
+ reset_battle:c=>{c.player={hp:30,maxHp:30,block:0,energy:3};c.enemy={hp:42,maxHp:42,state:'IDLE',locked:false};c.turn=1;c.drawPile=shuffle([...STARTING_DECK]);c.discard=[];c.hand=[];c.selectedCardIndex=null;c.logs=[];addLog(c,'Battle started against the Clockwork Knight.')},
+ prepare_player_turn:c=>{c.player.energy=3;c.player.block=0;while(c.hand.length<5)drawCards(c,1);addLog(c,`TURN ${c.turn}: Player phase.`)},
+ resolve_selected_card:c=>{const i=c.selectedCardIndex;const key=c.hand[i];const card=CARD_LIBRARY[key];c.player.energy-=card.cost;card.effect(c);c.hand.splice(i,1);c.discard.push(key);c.selectedCardIndex=null},
+ resolve_enemy_turn:c=>resolveEnemyState(c,false),
+ resolve_statuses:c=>{c.enemy.hp=Math.max(0,c.enemy.hp);c.player.hp=Math.max(0,c.player.hp)},
+ advance_turn:c=>{c.turn++;c.discard.push(...c.hand);c.hand=[];c.selectedCardIndex=null}
+};
+class SFAEngine{constructor(defs,initial,ctx,guards,actions,onTransitioned){this.defs=defs;this.currentState=initial;this.context=ctx;this.guards=guards;this.actions=actions;this.onTransitioned=onTransitioned;this.enter(initial)}enter(state){this.currentState=state;const d=this.defs[state];if(d.on_enter)this.actions[d.on_enter](this.context);this.onTransitioned(state,this.context);this.handleAuto()}transition(event){const d=this.defs[this.currentState];const candidates=(d.next_transitions||[]).filter(t=>t.event===event);for(const t of candidates){if(!t.guard||this.guards[t.guard](this.context)){if(d.on_exit)this.actions[d.on_exit](this.context);if(t.action)this.actions[t.action](this.context);this.enter(t.target_state);return true}}return false}handleAuto(){const d=this.defs[this.currentState];for(const t of (d.next_transitions||[]).filter(t=>t.event==='AUTO')){if(!t.guard||this.guards[t.guard](this.context)){if(d.on_exit)this.actions[d.on_exit](this.context);if(t.action)this.actions[t.action](this.context);this.enter(t.target_state);return}}}}
+const $=id=>document.getElementById(id);
+function previewStates(state,count=4){const out=[];let s=state;for(let i=0;i<count;i++){out.push(s);s=ENEMY_FLOW[s]||'IDLE'}return out}
+function render(state,c){$('stateLabel').textContent=`STATE: ${state}`;$('playerHpText').textContent=`${c.player.hp}/${c.player.maxHp}`;$('playerHpBar').style.width=`${100*c.player.hp/c.player.maxHp}%`;$('blockText').textContent=c.player.block;$('energyText').textContent=`${c.player.energy}/3`;$('turnText').textContent=c.turn;$('enemyHpText').textContent=`${c.enemy.hp}/${c.enemy.maxHp}`;$('enemyHpBar').style.width=`${100*c.enemy.hp/c.enemy.maxHp}%`;$('drawCount').textContent=c.drawPile.length;$('discardCount').textContent=c.discard.length;$('nextAction').textContent=c.enemy.state;$('lockStatus').textContent=c.enemy.locked?'ACTIVE':'NONE';
+ const seq=previewStates(c.enemy.state);$('timeline').innerHTML=seq.map((s,i)=>`${i?'<span class="arrow">→</span>':''}<div class="node ${i===0?'current':''}">${s}</div>`).join('');$('intent').textContent=enemyIntent(c.enemy.state);
+ $('log').innerHTML=c.logs.map((x,i)=>`<div class="${i===c.logs.length-1?'log-new':''}">${x}</div>`).join('');
+ const playable=state==='FE_PLAYER_MAIN';$('hand').innerHTML=c.hand.map((key,i)=>{const card=CARD_LIBRARY[key];const ok=playable&&c.player.energy>=card.cost&&(!card.canUse||card.canUse(c));return `<button class="card" data-index="${i}" ${ok?'':'disabled'}><span class="cost">${card.cost}EN</span><h3>${card.name}</h3><p>${card.text}</p><div class="type">${card.type}</div></button>`}).join('');document.querySelectorAll('.card').forEach(b=>b.addEventListener('click',()=>{c.selectedCardIndex=Number(b.dataset.index);engine.transition('PLAY_CARD')}));$('endTurnBtn').disabled=!playable;
+ const overlay=$('overlay');if(state==='FE_TITLE'){overlay.classList.remove('hidden');$('overlayTitle').textContent='SFA PROTOCOL CARDS';$('overlayText').innerHTML='A card battle where you read, interrupt, rewrite, and fast-forward the enemy state flow.';$('startBtn').textContent='START BATTLE'}else if(state==='FE_VICTORY'){overlay.classList.remove('hidden');$('overlayTitle').textContent='PROTOCOL OVERRIDDEN';$('overlayText').textContent=`TURN ${c.turn}: Clockwork Knight has been shut down.`;$('startBtn').textContent='REMATCH'}else if(state==='FE_GAMEOVER'){overlay.classList.remove('hidden');$('overlayTitle').textContent='SYSTEM FAILURE';$('overlayText').textContent='Combine defense and transition control, then try again.';$('startBtn').textContent='RETRY'}else overlay.classList.add('hidden')}
+const engine=new SFAEngine(SFA_DEFINITIONS,'FE_TITLE',context,guards,actions,render);
+$('startBtn').addEventListener('click',()=>engine.transition('START'));$('endTurnBtn').addEventListener('click',()=>engine.transition('END_TURN'));document.addEventListener('keydown',e=>{if(e.key==='Enter'&&['FE_TITLE','FE_VICTORY','FE_GAMEOVER'].includes(engine.currentState))engine.transition('START');if(e.key==='Escape')engine.transition('ESCAPE')});
+</script>
+</body>
+</html>
