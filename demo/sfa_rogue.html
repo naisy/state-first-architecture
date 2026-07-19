@@ -67,9 +67,15 @@
         .tile-inn { color: #ff9933; font-weight: bold; }
         .tile-shop { color: #3399ff; font-weight: bold; }
         .tile-bar { color: #cc66ff; font-weight: bold; }
+        .tile-home { color: #66e3a4; font-weight: bold; }
+        .tile-home-sale { color: #9aa7b5; font-weight: bold; }
+        .tile-smith { color: #ffcc66; font-weight: bold; text-shadow: 0 0 6px #ff8800; }
+        .tile-smith-closed { color: #6f6655; font-weight: bold; }
+        .tile-abyss { color: #ff66cc; font-weight: bold; text-shadow: 0 0 8px #cc00ff; }
         .tile-stairs { color: #ffffff; font-weight: bold; text-decoration: underline; }
         .tile-warp { color: #00ffff; font-weight: bold; text-shadow: 0 0 8px #00ffff; }
         .bomb { color: #ff9f1c; font-weight: bold; text-shadow: 0 0 8px #ff6b00; }
+        .mirror-bomb { color: #ff66ff; font-weight: bold; text-shadow: 0 0 8px #ff00ff; }
         .explosion { color: #fff200; font-weight: bold; text-shadow: 0 0 10px #ff3300; }
         .magic-warning { color: #ff66ff; font-weight: bold; text-shadow: 0 0 8px #ff00ff; }
 
@@ -128,6 +134,13 @@
         .menu-item { font-size: 13px; margin: 6px 0; width: 100%; text-align: left; padding-left: 40px; box-sizing: border-box;}
         .selected { color: #ffff00; font-weight: bold; }
         .selected::before { content: "> "; }
+        .inventory-panel { width: 100%; text-align: left; font-size: 11px; line-height: 1.45; }
+        .inventory-equipped { border-bottom: 1px solid #3b3b4f; padding-bottom: 8px; margin-bottom: 8px; }
+        .inventory-list { max-height: 180px; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; padding-right: 4px; }
+        .inventory-item { padding: 2px 6px; white-space: nowrap; }
+        .inventory-comparison { color: #aabbee; margin-top: 8px; min-height: 32px; }
+        .inventory-positive { color: #66e3a4; }
+        .inventory-negative { color: #ff7777; }
     </style>
 </head>
 <body>
@@ -137,20 +150,22 @@
         <div id="overlay"></div>
     </div>
 
-    <div>
-        <div id="hud-top">
-            <span id="location">LOCATION: Town</span>
-            <span id="timephase">TIME: Morning</span>
+    <div id="game-information">
+        <div id="game-status-information">
+            <div id="hud-top">
+                <span id="location">LOCATION: Town</span>
+                <span id="timephase">TIME: Morning</span>
+            </div>
+            <div id="hud">
+                <span id="hp"></span>
+                <span id="gold"></span>
+                <span id="player-lvl"></span>
+            </div>
+            <div id="log-window"></div>
         </div>
-        <div id="hud">
-            <span id="hp">HP: 100/100</span>
-            <span id="gold">GOLD: 50g</span>
-            <span id="player-lvl">LV: 1 (0/20)</span>
-        </div>
-        <div id="log-window"></div>
-        <p style="font-size: 11px; color: #666; text-align: center; margin-top: 10px;">
+        <p id="game-controls" style="font-size: 11px; color: #666; text-align: center; margin-top: 10px;">
             [Enter]: Select / Action | [Esc]: Title / Exit Menu <br>
-            [←/→/↑/↓]: Move & Attack | [Space]: Place Bomb | [.]: Pass 1 Turn
+            [←/→/↑/↓]: Move & Attack | [Space]: Place Bomb | [R]: Return Scroll | [.]: Pass 1 Turn | [I]: Equipment
         </p>
     </div>
 
@@ -182,6 +197,8 @@ const SFA_DEFINITIONS = {
       { event: "MOVE_RIGHT", action: "player_move_right", target_state: "FE_RESOLVE_PLAYER" },
       { event: "PASS",       action: "player_pass_turn",  target_state: "FE_RESOLVE_PLAYER" },
       { event: "PLACE_BOMB", guard: "can_place_bomb", action: "place_bomb", target_state: "FE_RESOLVE_PLAYER" },
+      { event: "OPEN_INVENTORY", action: "prepare_inventory_menu", target_state: "FE_INVENTORY_MENU" },
+      { event: "USE_RETURN_SCROLL", guard: "can_use_return_scroll", action: "use_return_scroll", target_state: "FE_GENERATE_MAP" },
 
       // 環境要素へのインタラクション遷移（特定のタイルの上でのみ発火可能）
       { event: "INTERACT", guard: "has_discovered_warps_at_town_stairs", action: "prepare_warp_menu", target_state: "FE_WARP_MENU" },
@@ -189,7 +206,13 @@ const SFA_DEFINITIONS = {
       { event: "INTERACT", guard: "is_on_town_warp", action: "trigger_town_warp", target_state: "FE_GENERATE_MAP" },
       { event: "INTERACT", guard: "is_on_shop_tile", action: "generate_shop_stock", target_state: "FE_SHOP_MENU" },
       { event: "INTERACT", guard: "is_on_inn_tile",  target_state: "FE_INN_MENU" },
-      { event: "INTERACT", guard: "is_on_bar_tile",  action: "gather_bar_rumor",  target_state: "FE_BAR_MENU" }
+      { event: "INTERACT", guard: "is_on_bar_tile",  action: "gather_bar_rumor",  target_state: "FE_BAR_MENU" },
+      { event: "INTERACT", guard: "is_on_unpurchased_home_tile", target_state: "FE_HOME_PURCHASE_MENU" },
+      { event: "INTERACT", guard: "is_on_home_tile", action: "prepare_home_menu", target_state: "FE_HOME_MENU" },
+      { event: "INTERACT", guard: "is_on_closed_smith_tile", target_state: "FE_BLACKSMITH_LOCKED_MENU" },
+      { event: "INTERACT", guard: "is_on_smith_tile", action: "prepare_blacksmith_menu", target_state: "FE_BLACKSMITH_MENU" },
+      { event: "INTERACT", guard: "is_on_dark_smith_tile", action: "prepare_dark_smith_menu", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "INTERACT", guard: "is_on_abyss_gate", target_state: "FE_ABYSS_ENTRY_MENU" }
     ]
   },
   FE_RESOLVE_PLAYER: {
@@ -234,6 +257,16 @@ const SFA_DEFINITIONS = {
       { event: "AUTO", target_state: "FE_DEATH_SUMMARY" }
     ]
   },
+  FE_INVENTORY_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP", action: "inventory_cursor_up", target_state: "FE_INVENTORY_MENU" },
+      { event: "MENU_DOWN", action: "inventory_cursor_down", target_state: "FE_INVENTORY_MENU" },
+      { event: "SELECT", guard: "has_selected_inventory_equipment", action: "equip_selected_inventory", target_state: "FE_INVENTORY_MENU" },
+      { event: "SELL", guard: "has_selected_inventory_equipment", action: "sell_selected_inventory", target_state: "FE_INVENTORY_MENU" },
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
   // --- 施設メニュー状態群 ---
   FE_SHOP_MENU: {
     role: "frontend",
@@ -267,6 +300,91 @@ const SFA_DEFINITIONS = {
       { event: "SELECT", target_state: "FE_PLAYER_TURN" }
     ]
   },
+  FE_HOME_PURCHASE_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "SELECT", guard: "can_afford_home_purchase", action: "purchase_home", target_state: "FE_GENERATE_MAP" },
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_BLACKSMITH_LOCKED_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "SELECT", target_state: "FE_PLAYER_TURN" },
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_HOME_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP", action: "home_cursor_up", target_state: "FE_HOME_MENU" },
+      { event: "MENU_DOWN", action: "home_cursor_down", target_state: "FE_HOME_MENU" },
+      { event: "SELECT", guard: "home_selected_carried_equipment", action: "deposit_home_equipment", target_state: "FE_HOME_MENU" },
+      { event: "SELECT", guard: "home_selected_stored_equipment", action: "withdraw_home_equipment", target_state: "FE_HOME_MENU" },
+      { event: "SELECT", guard: "home_selected_deposit_gold", action: "deposit_home_gold", target_state: "FE_HOME_MENU" },
+      { event: "SELECT", guard: "home_selected_withdraw_gold", action: "withdraw_home_gold", target_state: "FE_HOME_MENU" },
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_DARK_SMITH_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP", action: "dark_smith_cursor_up", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "MENU_DOWN", action: "dark_smith_cursor_down", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "SELECT", guard: "can_attempt_dark_smith_upgrade", action: "attempt_dark_smith_upgrade", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "OPEN_DISMANTLE", action: "prepare_dark_smith_dismantle_menu", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_DARK_SMITH_DISMANTLE_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP", action: "dark_smith_dismantle_cursor_up", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
+      { event: "MENU_DOWN", action: "dark_smith_dismantle_cursor_down", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
+      { event: "SELECT", guard: "has_selected_dark_smith_dismantle_item", target_state: "FE_DARK_SMITH_DISMANTLE_CONFIRM" },
+      { event: "ESCAPE", action: "prepare_dark_smith_menu", target_state: "FE_DARK_SMITH_MENU" }
+    ]
+  },
+  FE_DARK_SMITH_DISMANTLE_CONFIRM: {
+    role: "frontend",
+    next_transitions: [
+      { event: "SELECT", guard: "has_selected_dark_smith_dismantle_item", action: "dismantle_selected_dark_smith_item", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
+      { event: "ESCAPE", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" }
+    ]
+  },
+
+  FE_BLACKSMITH_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP", action: "blacksmith_cursor_up", target_state: "FE_BLACKSMITH_MENU" },
+      { event: "MENU_DOWN", action: "blacksmith_cursor_down", target_state: "FE_BLACKSMITH_MENU" },
+      { event: "SELECT", guard: "has_selected_blacksmith_item", action: "prepare_blacksmith_kind", target_state: "FE_BLACKSMITH_KIND_MENU" },
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_BLACKSMITH_KIND_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP", action: "blacksmith_kind_up", target_state: "FE_BLACKSMITH_KIND_MENU" },
+      { event: "MENU_DOWN", action: "blacksmith_kind_down", target_state: "FE_BLACKSMITH_KIND_MENU" },
+      { event: "SELECT", guard: "can_afford_blacksmith", action: "roll_blacksmith_proposal", target_state: "FE_BLACKSMITH_COMPARE" },
+      { event: "ESCAPE", target_state: "FE_BLACKSMITH_MENU" }
+    ]
+  },
+  FE_BLACKSMITH_COMPARE: {
+    role: "frontend",
+    next_transitions: [
+      { event: "SELECT", guard: "has_blacksmith_proposal", action: "accept_blacksmith_proposal", target_state: "FE_BLACKSMITH_MENU" },
+      { event: "ESCAPE", action: "reject_blacksmith_proposal", target_state: "FE_BLACKSMITH_MENU" }
+    ]
+  },
+  FE_ABYSS_ENTRY_MENU: {
+    role: "frontend",
+    next_transitions: [
+      { event: "SELECT", action: "enter_abyss_dungeon", target_state: "FE_GENERATE_MAP" },
+      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
   FE_DEATH_SUMMARY: {
     role: "frontend",
     next_transitions: [
@@ -283,11 +401,66 @@ const SFA_DEFINITIONS = {
   }
 };
 
+
 // ==========================================
-// 2. ゲームコンテキスト (状態データ構造)
+// 2. Projection Policy (state -> overlay/input mode)
+// ==========================================
+const PROJECTION_POLICY = {
+  FE_TITLE:                  { overlay: "title",         inputMode: "title" },
+  FE_GENERATE_MAP:           { overlay: null,            inputMode: "locked" },
+  FE_PLAYER_TURN:            { overlay: null,            inputMode: "gameplay" },
+  FE_RESOLVE_PLAYER:         { overlay: null,            inputMode: "locked" },
+  FE_ENEMY_TURN:             { overlay: null,            inputMode: "locked" },
+  FE_TURN_END:               { overlay: null,            inputMode: "locked" },
+  FE_PROCESS_TURN_LIFECYCLE: { overlay: null,            inputMode: "locked" },
+  FE_CHECK_TURN_OUTCOME:     { overlay: null,            inputMode: "locked" },
+  FE_DEATH_RESOLVE:          { overlay: null,            inputMode: "locked" },
+  FE_INVENTORY_MENU:        { overlay: "inventory",     inputMode: "inventory-menu" },
+  FE_SHOP_MENU:              { overlay: "shop",          inputMode: "list-menu" },
+  FE_WARP_MENU:              { overlay: "warp",          inputMode: "list-menu" },
+  FE_INN_MENU:               { overlay: "inn",           inputMode: "confirm-menu" },
+  FE_BAR_MENU:               { overlay: "bar",           inputMode: "confirm-menu" },
+  FE_HOME_PURCHASE_MENU:     { overlay: "home-purchase", inputMode: "confirm-menu" },
+  FE_BLACKSMITH_LOCKED_MENU:      { overlay: "smith-locked",  inputMode: "confirm-menu" },
+  FE_HOME_MENU:              { overlay: "home",          inputMode: "list-menu" },
+  FE_DARK_SMITH_MENU:             { overlay: "dark-smith", inputMode: "dark-smith-menu" },
+  FE_DARK_SMITH_DISMANTLE_MENU:   { overlay: "dark-smith-dismantle", inputMode: "list-menu" },
+  FE_DARK_SMITH_DISMANTLE_CONFIRM:{ overlay: "dark-smith-dismantle-confirm", inputMode: "confirm-menu" },
+  FE_BLACKSMITH_MENU:        { overlay: "blacksmith", inputMode: "list-menu" },
+  FE_BLACKSMITH_KIND_MENU:   { overlay: "blacksmith-kind", inputMode: "list-menu" },
+  FE_BLACKSMITH_COMPARE:     { overlay: "blacksmith-compare", inputMode: "confirm-menu" },
+  FE_ABYSS_ENTRY_MENU:       { overlay: "abyss-entry",   inputMode: "confirm-menu" },
+  FE_DEATH_SUMMARY:          { overlay: "death-summary", inputMode: "death-summary" },
+  FE_VICTORY:                { overlay: "victory",       inputMode: "victory" }
+};
+
+const INPUT_EVENT_BY_MODE = {
+  title: { Enter: "START" },
+  gameplay: {
+    ArrowUp: "MOVE_UP", ArrowDown: "MOVE_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT",
+    " ": "PLACE_BOMB", ".": "PASS", i: "OPEN_INVENTORY", I: "OPEN_INVENTORY", r: "USE_RETURN_SCROLL", R: "USE_RETURN_SCROLL", Enter: "INTERACT", Escape: "ESCAPE"
+  },
+  "inventory-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", s: "SELL", S: "SELL", Escape: "ESCAPE" },
+  "list-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
+  "dark-smith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", d: "OPEN_DISMANTLE", D: "OPEN_DISMANTLE", Escape: "ESCAPE" },
+  "confirm-menu": { Enter: "SELECT", Escape: "ESCAPE" },
+  "death-summary": { Enter: "RETURN_TO_TOWN", Escape: "ESCAPE" },
+  victory: { Enter: "START", Escape: "ESCAPE" },
+  locked: {}
+};
+
+function projectKeyToEvent(state, key) {
+  const policy = PROJECTION_POLICY[state];
+  if (!policy) return null;
+  return INPUT_EVENT_BY_MODE[policy.inputMode][key] || null;
+}
+
+// ==========================================
+// 3. ゲームコンテキスト (状態データ構造)
 // ==========================================
 const context = {
   currentMapType: "town",
+  dungeonMode: "standard",
   depth: 0,
   timePhase: 0,           // 0:Morning, 1:Noon, 2:Evening, 3:Night, 4:Midnight, 5:Dawn
   turnCount: 0,
@@ -295,10 +468,10 @@ const context = {
   tiles: {},              // 特別マスマップ {"x,y": "shop"など}
   player: {
     x: 0, y: 0, hp: 100, maxHp: 100, hunger: 100.999999, gold: 60,
-    level: 1, exp: 0, nextExp: 20,
-    weapon: { name: "Rusty Sword", atk: 4, rank: "E" },
-    armor: { name: "Ragged Cloth", def: 1, rank: "E" },
-    bombCapacity: 1, bombRange: 1, bombRangeShopPurchases: 0, bombCapacityShopPurchases: 0,
+    level: 1, exp: 0, nextExp: 20, permanentMaxHpBonus: 0,
+    weapon: { type: "weapon", name: "Rusty Sword", atk: 4, rank: "E", rarity: "common", value: 10 },
+    armor: { type: "armor", name: "Ragged Cloth", def: 1, rank: "E", rarity: "common", value: 8 },
+    bombCapacity: 1, bombRange: 1, bombRangeShopPurchases: 0, bombCapacityShopPurchases: 0, returnScrolls: 0,
     statusEffects: { poisonTurns: 0 }, hpFlow: "stable"
   },
   enemies: [],
@@ -307,19 +480,44 @@ const context = {
   explosionCells: [],
   shopInventory: [],
   shopSelectedIndex: 0,
+  equipmentInventory: [],
+  inventorySelectedIndex: 0,
+  inventoryCapacity: 8,
   warpDestinations: [1],
   warpSelectedIndex: 0,
   discoveredWarpFloors: [],
   barMessage: "",
+  homePurchased: false,
+  homeStorage: { equipment: [], gold: 0 },
+  homeMenuEntries: [],
+  homeSelectedIndex: 0,
+  darkSmithMenuEntries: [],
+  darkSmithSelectedIndex: 0,
+  darkSmithDismantleEntries: [],
+  darkSmithDismantleSelectedIndex: 0,
+  forgeShards: 0,
   logs: [],
   defeatedBossFloors: [],
+  defeatedAbyssBossFloors: [],
   maxReachedDepth: 0,
+  maxReachedAbyssDepth: 0,
   deathSummary: null
+};
+
+const AUTO_EQUIP_CONFIG = {
+  minimumAbsoluteGain: 2,
+  minimumRelativeGain: 0.10,
+  minimumAbsoluteLoss: 2,
+  minimumRelativeLoss: 0.10,
+  preserveOptionRarity: 'rare'
 };
 
 const TIME_NAMES = ["Morning", "Noon", "Evening", "Night", "Midnight", "Dawn"];
 const TIME_BG_COLORS = ["#121226", "#1a2634", "#2c1a12", "#070714", "#03030a", "#10101c"];
 
+// ------------------------------------------
+// 3A. Shared domain helpers
+// ------------------------------------------
 function addLog(ctx, msg) {
   ctx.logs.push(msg);
   if (ctx.logs.length > 4) ctx.logs.shift();
@@ -407,6 +605,9 @@ function carveGuaranteedPath(grid, start, goal) {
   }
 }
 
+// ------------------------------------------
+// 3B. Dungeon generation and reachability
+// ------------------------------------------
 function generateReachableDungeonGrid(start, stairs, depth) {
   const wallChance = Math.min(0.27, 0.14 + Math.log10(depth + 1) * 0.035);
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -458,7 +659,228 @@ const RARITY_DEFINITIONS = {
 };
 
 const RARITY_ORDER = ['common', 'rare', 'very_rare', 'ultra_rare'];
+const RARITY_RANK = Object.fromEntries(RARITY_ORDER.map((rarity, index) => [rarity, index]));
 
+const EQUIPMENT_OPTION_DEFINITIONS = {
+  weapon: [
+    { id: 'edge', name: 'Keen Edge' },
+    { id: 'slayer', name: 'Slayer Mark' },
+    { id: 'ruin', name: 'Ruin Engraving' }
+  ],
+  armor: [
+    { id: 'ward', name: 'Warding' },
+    { id: 'fortitude', name: 'Fortitude' },
+    { id: 'bastion', name: 'Bastion Seal' }
+  ]
+};
+
+function optionRarityProbabilities(itemRarity = 'common') {
+  const itemRank = RARITY_RANK[itemRarity] || 0;
+  const rare = 0.16 + itemRank * 0.055;
+  const veryRare = 0.035 + itemRank * 0.025;
+  const ultraRare = 0.005 + itemRank * 0.008;
+  return { common: 1 - rare - veryRare - ultraRare, rare, very_rare: veryRare, ultra_rare: ultraRare };
+}
+
+function rollEquipmentOptionRarity(itemRarity = 'common', roll = Math.random()) {
+  const probabilities = optionRarityProbabilities(itemRarity);
+  let cumulative = 0;
+  for (const rarity of RARITY_ORDER) {
+    cumulative += probabilities[rarity];
+    if (roll < cumulative) return rarity;
+  }
+  return 'common';
+}
+
+function deterministicEquipmentOptionRolls(depth, type, quality, itemRarity) {
+  const source = `${depth}|${type}|${quality.toFixed(8)}|${itemRarity}`;
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index++) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  const next = () => {
+    hash = (Math.imul(hash, 1664525) + 1013904223) >>> 0;
+    return hash / 0x100000000;
+  };
+  return { chance: next(), rarity: next(), kind: next() };
+}
+
+function createEquipmentOption(type, totalPower, itemRarity = 'common', rolls = {}) {
+  const chanceRoll = rolls.chance ?? Math.random();
+  const optionChance = 0.48 + (RARITY_RANK[itemRarity] || 0) * 0.10;
+  if (chanceRoll >= optionChance) return null;
+  const definitions = EQUIPMENT_OPTION_DEFINITIONS[type] || [];
+  if (definitions.length === 0) return null;
+  const rarity = rollEquipmentOptionRarity(itemRarity, rolls.rarity ?? Math.random());
+  const rarityMultiplier = { common: 0.08, rare: 0.12, very_rare: 0.17, ultra_rare: 0.23 }[rarity];
+  const value = Math.max(1, Math.min(Math.max(1, totalPower - 1), Math.round(totalPower * rarityMultiplier)));
+  const definition = definitions[Math.floor((rolls.kind ?? Math.random()) * definitions.length) % definitions.length];
+  return { id: definition.id, name: definition.name, rarity, effect: 'primary_stat', value, enhancementSuccesses: 0 };
+}
+
+function equipmentOptionSummary(item) {
+  const options = item?.options || [];
+  if (options.length === 0) return 'No option';
+  return options.map(option => {
+    const enhanced = option.enhancementSuccesses || 0;
+    return `${rarityLabel(option.rarity)} ${option.name} +${option.value}${enhanced > 0 ? ` (Forge +${enhanced})` : ''}`;
+  }).join(', ');
+}
+
+const HOME_CONFIG = { purchasePrice: 10000 };
+const BLACKSMITH_CONFIG = { rerollCost: 1000, rarityWeights: [0.45, 0.30, 0.18, 0.07] };
+const DARK_SMITH_CONFIG = {
+  guaranteedSuccesses: 10,
+  minimumSuccessRate: 0.10,
+  unlockBossFloor: 100,
+  dismantleYield: { rare: 1, very_rare: 3, ultra_rare: 8 }
+};
+const ABYSS_MIRROR_SPEC = {
+  bossFloor: 30,
+  reflectedBombChainReactive: true,
+  bidirectionalChainReaction: true,
+  damagesMirror: true,
+  reflectionFuseTurns: 3,
+  maximumReflectionsPerTurn: 1
+};
+
+const ABYSS_CONFIG = {
+  startDepth: 1,
+  enemyBudgetMultiplier: 2.35,
+  effectiveDepthBase: 100,
+  effectiveDepthPerFloor: 5,
+  maxRegularEnemies: 14,
+  bossInterval: 10,
+  returnWarpInterval: 5
+};
+
+function hasClearedBlacksmithMilestone(ctx) {
+  return (ctx.defeatedBossFloors || []).includes(DARK_SMITH_CONFIG.unlockBossFloor);
+}
+
+function isHighDifficultyDungeon(ctx) {
+  return ctx.currentMapType === 'dungeon' && ctx.dungeonMode === 'abyss';
+}
+
+function darkSmithSuccessRate(option) {
+  const successes = option?.enhancementSuccesses || 0;
+  if (successes < DARK_SMITH_CONFIG.guaranteedSuccesses) return 1;
+  return Math.max(DARK_SMITH_CONFIG.minimumSuccessRate, 1 - (successes - DARK_SMITH_CONFIG.guaranteedSuccesses + 1) * 0.01);
+}
+
+function darkSmithMaterialCost(option) {
+  return 1 + Math.floor((option?.enhancementSuccesses || 0) / 10);
+}
+
+function dismantleYield(item) {
+  return DARK_SMITH_CONFIG.dismantleYield[item?.rarity || 'common'] || 0;
+}
+
+function darkSmithDismantleEntries(ctx) {
+  return ctx.equipmentInventory
+    .map((item, index) => ({ index, item, yield: dismantleYield(item) }))
+    .filter(entry => entry.yield > 0);
+}
+
+function strengthenEquipmentOption(item, option) {
+  if (!item || !option) return;
+  option.value += 1;
+  option.enhancementSuccesses = (option.enhancementSuccesses || 0) + 1;
+  if (item.type === 'weapon') item.atk += 1;
+  else if (item.type === 'armor') item.def += 1;
+  item.value = (item.value || 0) + 2;
+}
+
+function darkSmithCandidateEntries(ctx) {
+  const entries = [
+    { source: 'weapon', item: ctx.player.weapon, label: 'Equipped weapon' },
+    { source: 'armor', item: ctx.player.armor, label: 'Equipped armor' },
+    ...ctx.equipmentInventory.map((item, index) => ({ source: 'inventory', index, item, label: `Bag ${index + 1}` }))
+  ];
+  return entries.filter(entry => (entry.item?.options || []).length > 0);
+}
+
+
+function blacksmithCandidateEntries(ctx) {
+  return [
+    { source: 'weapon', item: ctx.player.weapon, label: 'Equipped weapon' },
+    { source: 'armor', item: ctx.player.armor, label: 'Equipped armor' },
+    ...ctx.equipmentInventory.map((item, index) => ({ source: 'inventory', index, item, label: `Bag ${index + 1}` }))
+  ].filter(entry => Boolean(entry.item));
+}
+
+function rollBlacksmithRarity(roll = Math.random()) {
+  let cumulative = 0;
+  for (let index = 0; index < BLACKSMITH_CONFIG.rarityWeights.length; index++) {
+    cumulative += BLACKSMITH_CONFIG.rarityWeights[index];
+    if (roll < cumulative) return RARITY_ORDER[index];
+  }
+  return 'ultra_rare';
+}
+
+function equipmentBasePower(item) {
+  if (Number.isFinite(item?.basePower)) return item.basePower;
+  const statKey = item?.type === 'weapon' ? 'atk' : 'def';
+  const optionPower = (item?.options || []).reduce((sum, option) => sum + (option.value || 0), 0);
+  return Math.max(1, (item?.[statKey] || 1) - optionPower);
+}
+
+function synchronizeEquipmentPower(item) {
+  if (!item) return item;
+  const statKey = item.type === 'weapon' ? 'atk' : 'def';
+  const optionPower = (item.options || []).reduce((sum, option) => sum + (option.value || 0), 0);
+  item[statKey] = Math.max(1, equipmentBasePower(item) + optionPower);
+  return item;
+}
+
+function createBlacksmithProposal(entry, kind) {
+  if (!entry?.item) return null;
+  const original = entry.item;
+  const candidate = structuredClone(original);
+  candidate.basePower = equipmentBasePower(original);
+  if (kind === 'rarity') {
+    const nextRarity = rollBlacksmithRarity();
+    const oldQuality = RARITY_DEFINITIONS[original.rarity || 'common'].dropQuality;
+    const nextQuality = RARITY_DEFINITIONS[nextRarity].dropQuality;
+    candidate.rarity = nextRarity;
+    candidate.basePower = Math.max(1, Math.round(candidate.basePower * nextQuality / oldQuality));
+    candidate.value = Math.max(1, Math.round((original.value || 1) * nextQuality / oldQuality));
+    synchronizeEquipmentPower(candidate);
+  } else {
+    const totalPower = original.type === 'weapon' ? original.atk : original.def;
+    candidate.options = [createEquipmentOption(original.type, Math.max(2, totalPower), original.rarity || 'common', { chance: 0, rarity: Math.random(), kind: Math.random() })];
+    synchronizeEquipmentPower(candidate);
+  }
+  return { source: entry.source, index: entry.index, kind, original: structuredClone(original), candidate };
+}
+
+function applyBlacksmithProposal(ctx) {
+  const proposal = ctx.blacksmithProposal;
+  if (!proposal) return;
+  if (proposal.source === 'weapon') ctx.player.weapon = proposal.candidate;
+  else if (proposal.source === 'armor') ctx.player.armor = proposal.candidate;
+  else if (ctx.equipmentInventory[proposal.index]) ctx.equipmentInventory[proposal.index] = proposal.candidate;
+}
+
+function rebuildHomeMenuEntries(ctx) {
+  ctx.homeMenuEntries = [
+    ...ctx.equipmentInventory.map((item, index) => ({ kind: 'carried', index, item })),
+    ...ctx.homeStorage.equipment.map((item, index) => ({ kind: 'stored', index, item })),
+    { kind: 'deposit_gold', amount: Math.min(10, ctx.player.gold) },
+    { kind: 'withdraw_gold', amount: Math.min(10, ctx.homeStorage.gold) }
+  ];
+  ctx.homeSelectedIndex = Math.min(ctx.homeSelectedIndex, Math.max(0, ctx.homeMenuEntries.length - 1));
+}
+
+function hasPreservableEquipmentOption(item) {
+  const threshold = RARITY_RANK[AUTO_EQUIP_CONFIG.preserveOptionRarity] || 1;
+  return (item?.options || []).some(option => (RARITY_RANK[option.rarity] || 0) >= threshold);
+}
+
+// ------------------------------------------
+// 3C. Rarity, enemies, equipment, and economy
+// ------------------------------------------
 function levelSurplusForDepth(ctx, depth) {
   return Math.max(0, Math.min(30, ctx.player.level - recommendedLevelForDepth(depth)));
 }
@@ -491,6 +913,15 @@ function rarityLabel(rarity) {
   return RARITY_DEFINITIONS[rarity]?.label || RARITY_DEFINITIONS.common.label;
 }
 
+function rarityClassName(rarity) {
+  return `rarity-${(rarity || 'common').replace('_', '-')}`;
+}
+
+function coloredEquipmentName(item) {
+  if (!item) return '';
+  return `<span class="${rarityClassName(item.rarity)}">${item.name}</span>`;
+}
+
 function applyEnemyRarity(enemy, rarity) {
   const definition = RARITY_DEFINITIONS[rarity] || RARITY_DEFINITIONS.common;
   enemy.rarity = rarity;
@@ -519,6 +950,7 @@ const BALANCE_CONFIG = {
   satiatedRegenRate: 0.003,
   poisonDamageRate: 0.006,
   playerLevelAttack: 1.45,
+  playerBaseHp: 100,
   levelHpGain: 11,
   enemyHpMultiplier: 1.03,
   enemyAttackMultiplier: 1.03,
@@ -566,10 +998,11 @@ function rollMapThreatProfile(roll = Math.random()) {
   return MAP_THREAT_PROFILES[1];
 }
 
-function regularEnemyBudget(depth, profile, isBossFloor) {
+function regularEnemyBudget(depth, profile, isBossFloor, mode = 'standard') {
   const fiveFloorBand = Math.floor((depth - 1) / 5);
   const base = 3.9 + Math.log2(depth + 1) * 0.82 + Math.min(4.2, fiveFloorBand * 0.022);
-  return base * profile.budgetMultiplier * (isBossFloor ? 0.66 : 1.0);
+  const modeMultiplier = mode === 'abyss' ? ABYSS_CONFIG.enemyBudgetMultiplier : 1;
+  return base * profile.budgetMultiplier * (isBossFloor ? 0.66 : 1.0) * modeMultiplier;
 }
 
 function unlockedEnemyArchetypes(depth) {
@@ -595,10 +1028,102 @@ function chooseEnemyArchetype(depth, counts = {}, roll = Math.random()) {
   return choices[choices.length - 1].archetype;
 }
 
+const ABYSS_ENEMY_ARCHETYPES = [
+  { name: 'Abyss Warden', symbol: 'Ｗ', minDepth: 1, weight: 1.0, threatCost: 2.0, hpFactor: 1.85, atkFactor: 1.15, expFactor: 2.0, abyssRole: 'warden' },
+  { name: 'Abyss Seer', symbol: 'Ｓ', minDepth: 1, weight: 0.75, threatCost: 1.8, hpFactor: 0.95, atkFactor: 1.35, expFactor: 2.1, magicType: 'line', magicEvery: 3, abyssRole: 'seer', visionBonus: 4 },
+  { name: 'Abyss Sentinel', symbol: 'Ｎ', minDepth: 1, weight: 0.9, threatCost: 2.15, hpFactor: 1.25, atkFactor: 1.55, expFactor: 2.25, abyssRole: 'sentinel' },
+  { name: 'Abyss Binder', symbol: '縛', minDepth: 11, weight: 0.62, threatCost: 2.35, hpFactor: 1.10, atkFactor: 1.42, expFactor: 2.45, magicType: 'area', magicEvery: 3, abyssRole: 'binder' },
+  { name: 'Abyss Devourer', symbol: '喰', minDepth: 16, weight: 0.52, threatCost: 2.55, hpFactor: 1.55, atkFactor: 1.38, expFactor: 2.65, abyssRole: 'devourer' }
+];
+
+function abyssEffectiveDepth(abyssDepth) {
+  return ABYSS_CONFIG.effectiveDepthBase + Math.max(1, abyssDepth) * ABYSS_CONFIG.effectiveDepthPerFloor;
+}
+
+function chooseAbyssArchetype(counts = {}, roll = Math.random(), abyssDepth = 1) {
+  const choices = ABYSS_ENEMY_ARCHETYPES.filter(archetype => abyssDepth >= (archetype.minDepth || 1)).map(archetype => ({
+    archetype,
+    weight: archetype.weight * ((counts[archetype.name] || 0) >= 2 ? 0.35 : 1)
+  }));
+  const total = choices.reduce((sum, entry) => sum + entry.weight, 0);
+  let cursor = roll * total;
+  for (const entry of choices) {
+    cursor -= entry.weight;
+    if (cursor <= 0) return entry.archetype;
+  }
+  return choices[choices.length - 1].archetype;
+}
+
+function createAbyssEnemy(ctx, abyssDepth, id, archetype) {
+  const effectiveDepth = abyssEffectiveDepth(abyssDepth);
+  const recommended = recommendedLevelForDepth(effectiveDepth) + 6;
+  const stats = combatBaseForLevel(recommended);
+  const enemy = {
+    id,
+    name: `${archetype.name} [A${abyssDepth}]`,
+    symbol: archetype.symbol,
+    hp: Math.floor(stats.hp * archetype.hpFactor * 1.18),
+    maxHp: Math.floor(stats.hp * archetype.hpFactor * 1.18),
+    atk: Math.max(1, Math.floor(stats.atk * archetype.atkFactor * 1.16)),
+    exp: Math.floor(stats.exp * archetype.expFactor),
+    enemyLevel: recommended,
+    threatCost: archetype.threatCost,
+    archetype: archetype.name,
+    abyssRole: archetype.abyssRole,
+    visionBonus: archetype.visionBonus || 0,
+    magicType: archetype.magicType || null,
+    magicEvery: archetype.magicEvery || 4,
+    pendingSpell: null,
+    hasDetectedPlayer: false,
+    provoked: false,
+    isAbyssEnemy: true,
+    armorPiercing: 0.55
+  };
+  return applyEnemyRarity(enemy, rollRarity(ctx, effectiveDepth, false));
+}
+
+function createAbyssBoss(ctx, abyssDepth) {
+  const effectiveDepth = abyssEffectiveDepth(abyssDepth) + 12;
+  const recommended = recommendedLevelForDepth(effectiveDepth) + 10;
+  const stats = combatBaseForLevel(recommended);
+  const bossDefinition = abyssDepth === 10
+    ? { name: 'The Gatekeeper', symbol: '門', hpFactor: 9.2, atkFactor: 1.65, role: 'gatekeeper', magicType: 'area', magicEvery: 3, piercing: 0.65, rarity: 'very_rare' }
+    : abyssDepth === 20
+      ? { name: 'The Hunger', symbol: '飢', hpFactor: 10.4, atkFactor: 1.72, role: 'hunger', magicType: 'area', magicEvery: 3, piercing: 0.68, rarity: 'very_rare' }
+      : abyssDepth === 30
+        ? { name: 'The Mirror', symbol: '鏡', hpFactor: 11.2, atkFactor: 1.58, role: 'mirror', magicType: 'line', magicEvery: 4, piercing: 0.64, rarity: 'ultra_rare' }
+        : { name: `Abyss Sovereign ${abyssDepth}`, symbol: '王', hpFactor: 10.0, atkFactor: 1.70, role: 'sovereign', magicType: 'area', magicEvery: 3, piercing: 0.68, rarity: rollRarity(ctx, effectiveDepth, true) };
+  return applyEnemyRarity({
+    id: 800000 + abyssDepth,
+    name: `${bossDefinition.name} [A${abyssDepth} BOSS]`,
+    symbol: bossDefinition.symbol,
+    hp: Math.floor(stats.hp * bossDefinition.hpFactor),
+    maxHp: Math.floor(stats.hp * bossDefinition.hpFactor),
+    atk: Math.max(1, Math.floor(stats.atk * bossDefinition.atkFactor)),
+    exp: Math.floor(stats.exp * 14),
+    enemyLevel: recommended,
+    isBoss: true,
+    isAbyssBoss: true,
+    abyssBossFloor: abyssDepth,
+    abyssRole: bossDefinition.role,
+    magicType: bossDefinition.magicType,
+    magicEvery: bossDefinition.magicEvery,
+    pendingSpell: null,
+    hasDetectedPlayer: false,
+    provoked: false,
+    armorPiercing: bossDefinition.piercing
+  }, bossDefinition.rarity);
+}
+
+function promoteRarity(rarity) {
+  const index = Math.min(RARITY_ORDER.length - 1, Math.max(0, RARITY_ORDER.indexOf(rarity)) + 1);
+  return RARITY_ORDER[index];
+}
+
 const FOOD_ENEMY_ARCHETYPES = [
-  { name: 'Dungeon Rabbit', symbol: '兎', hpFactor: 0.42, atkFactor: 0.28, expFactor: 0.42, foodName: 'Rabbit Meat', hunger: 42, heal: 8 },
-  { name: 'Wild Boar', symbol: '猪', hpFactor: 0.78, atkFactor: 0.62, expFactor: 0.72, foodName: 'Boar Steak', hunger: 58, heal: 15 },
-  { name: 'Cave Bear', symbol: '熊', hpFactor: 1.2, atkFactor: 1.0, expFactor: 1.12, foodName: 'Bear Roast', hunger: 85, heal: 28 }
+  { name: 'Dungeon Rabbit', symbol: '兎', hpFactor: 0.42, atkFactor: 0.28, expFactor: 0.42, foodName: 'Rabbit Meat', hunger: 42, heal: 8, wanderChance: 0.72 },
+  { name: 'Wild Boar', symbol: '猪', hpFactor: 0.78, atkFactor: 0.62, expFactor: 0.72, foodName: 'Boar Steak', hunger: 58, heal: 15, wanderChance: 0.55 },
+  { name: 'Cave Bear', symbol: '熊', hpFactor: 1.2, atkFactor: 1.0, expFactor: 1.12, foodName: 'Bear Roast', hunger: 85, heal: 28, wanderChance: 0.36 }
 ];
 
 const TOWN_ENEMY_ARCHETYPES = [
@@ -630,6 +1155,16 @@ function recommendedLevelForDepth(depth) {
 
 function expToNextLevel(level) {
   return Math.floor(18 + 12 * Math.pow(level, 1.32));
+}
+
+function playerLevelMaxHp(level) {
+  return BALANCE_CONFIG.playerBaseHp + Math.max(0, level - 1) * BALANCE_CONFIG.levelHpGain;
+}
+
+function recomputePlayerMaxHp(ctx) {
+  const permanentBonus = Math.max(0, Number(ctx.player.permanentMaxHpBonus) || 0);
+  ctx.player.maxHp = playerLevelMaxHp(ctx.player.level) + permanentBonus;
+  return ctx.player.maxHp;
 }
 
 function combatBaseForLevel(level) {
@@ -692,6 +1227,7 @@ function createFoodEnemy(ctxOrDepth, depthOrId, idOrRarity = null, forcedRarity 
     exp: Math.max(1, Math.floor(stats.exp * base.expFactor)),
     isFoodEnemy: true,
     foodDrop: withItemRarity({ name: base.foodName, type: 'food', hunger: base.hunger, heal: base.heal }, 'common'),
+    passiveWanderChance: base.wanderChance,
     enemyLevel: recommended,
     hasDetectedPlayer: false,
     provoked: false
@@ -729,7 +1265,10 @@ function townSafeCorridorKeys() {
   const paths = [
     [{x:7,y:12},{x:3,y:3}],
     [{x:7,y:12},{x:11,y:3}],
-    [{x:7,y:12},{x:11,y:11}]
+    [{x:7,y:12},{x:11,y:11}],
+    [{x:7,y:12},{x:7,y:3}],
+    [{x:7,y:12},{x:7,y:11}],
+    [{x:7,y:12},{x:11,y:7}]
   ];
   for (const [start, goal] of paths) {
     let x=start.x, y=start.y;
@@ -742,7 +1281,7 @@ function townSafeCorridorKeys() {
 
 function availableTownEnemyPositions(ctx) {
   const safe = townSafeCorridorKeys();
-  const facilities = [{x:3,y:3},{x:11,y:3},{x:3,y:11},{x:11,y:11}];
+  const facilities = [{x:3,y:3},{x:11,y:3},{x:3,y:11},{x:11,y:11},{x:7,y:3},{x:7,y:11},{x:11,y:7}];
   return getReachableFloorPositions(ctx).filter(pos => {
     if (isReservedPosition(ctx, pos.x, pos.y)) return false;
     if (Math.abs(pos.x-ctx.player.x)+Math.abs(pos.y-ctx.player.y) < 4) return false;
@@ -817,11 +1356,16 @@ function generateRandomEquipment(depth, type, qualityBias = 1, rarity = 'common'
   const quality = Math.max(0.9, qualityBias * (0.94 + Math.random() * 0.18));
   const power = equipmentPowerForDepth(depth, type, quality);
   const enhancement = Math.max(0, Math.floor((quality - 0.9) * 20));
-  const value = Math.floor(18 + power * (type === 'weapon' ? 7 : 8));
+  const option = createEquipmentOption(type, power, rarity, deterministicEquipmentOptionRolls(depth, type, quality, rarity));
+  const options = option ? [option] : [];
+  const basePower = Math.max(1, power - options.reduce((sum, current) => sum + current.value, 0));
+  const optionValue = options.reduce((sum, current) => sum + current.value * (1 + RARITY_RANK[current.rarity]), 0);
+  const value = Math.floor(18 + power * (type === 'weapon' ? 7 : 8) + optionValue * 3);
   const name = `${prefixes[tier]} ${type === 'weapon' ? 'Blade' : 'Aegis'} +${enhancement}`;
+  const common = { name, type, rank: ranks[tier], value, rarity, options, basePower };
   return type === 'weapon'
-    ? withItemRarity({ name, type, atk: power, rank: ranks[tier], value }, rarity)
-    : withItemRarity({ name, type, def: power, rank: ranks[tier], value }, rarity);
+    ? { ...common, atk: power }
+    : { ...common, def: power };
 }
 
 function generateConsumable(depth, rarity = 'common') {
@@ -838,7 +1382,7 @@ function applyLevelUps(ctx) {
   while (ctx.player.exp >= ctx.player.nextExp) {
     ctx.player.exp -= ctx.player.nextExp;
     ctx.player.level++;
-    ctx.player.maxHp += BALANCE_CONFIG.levelHpGain;
+    recomputePlayerMaxHp(ctx);
     ctx.player.hp = ctx.player.maxHp;
     ctx.player.nextExp = expToNextLevel(ctx.player.level);
     leveled = true;
@@ -857,6 +1401,7 @@ function createShopInventory(ctx) {
     { name: 'Boar Jerky', type: 'food', hunger: 68, heal: 10, value: 16, stock: 3 },
     { name: 'Hunter Stew', type: 'food', hunger: 100, heal: 28, value: 28, stock: 2 },
     { name: 'Healing Flask', type: 'potion', heal: 45 + ctx.player.level * 2, hunger: 0, value: 24 + ctx.player.level, stock: 3 },
+    { name: 'Return to Town Scroll', type: 'return_scroll', value: 5000, stock: 1 },
     { name: 'Full Recovery Tonic', type: 'full_restore', value: 55 + ctx.player.level * 2, stock: 1 },
     { ...normalWeapon, value: Math.floor(normalWeapon.value * 0.9), stock: 1 },
     { ...premiumWeapon, value: Math.floor(premiumWeapon.value * 1.15), stock: 1 },
@@ -896,6 +1441,90 @@ function generateTreasureChestReward(ctx, roll = Math.random()) {
   return generateRandomEquipment(ctx.depth + 3, eqType, 1.14);
 }
 
+function equipmentPrimaryStat(item) {
+  if (!item) return 0;
+  return item.type === "weapon" ? (item.atk || 0) : (item.def || 0);
+}
+
+function isClearlyBetterEquipment(candidate, current) {
+  if (!candidate || !current || candidate.type !== current.type) return false;
+  const currentStat = equipmentPrimaryStat(current);
+  const candidateStat = equipmentPrimaryStat(candidate);
+  const requiredGain = Math.max(
+    AUTO_EQUIP_CONFIG.minimumAbsoluteGain,
+    Math.ceil(currentStat * AUTO_EQUIP_CONFIG.minimumRelativeGain)
+  );
+  return candidateStat - currentStat >= requiredGain;
+}
+
+function isClearlyWeakerEquipment(candidate, current) {
+  if (!candidate || !current || candidate.type !== current.type) return false;
+  const currentStat = equipmentPrimaryStat(current);
+  const candidateStat = equipmentPrimaryStat(candidate);
+  const requiredLoss = Math.max(
+    AUTO_EQUIP_CONFIG.minimumAbsoluteLoss,
+    Math.ceil(currentStat * AUTO_EQUIP_CONFIG.minimumRelativeLoss)
+  );
+  return currentStat - candidateStat >= requiredLoss;
+}
+
+function sellEquipmentAutomatically(ctx, equipment, reason) {
+  const saleValue = Math.max(0, Math.floor((equipment.value || 0) / 2));
+  ctx.player.gold += saleValue;
+  addLog(ctx, `Auto-sold ${equipment.name} for ${saleValue}g (${reason}).`);
+  return saleValue;
+}
+
+function shouldAutoSellEquipment(candidate, current) {
+  const isUltraRareEquipment = candidate?.rarity === 'ultra_rare';
+  return isClearlyWeakerEquipment(candidate, current)
+    && !isUltraRareEquipment
+    && !hasPreservableEquipmentOption(candidate);
+}
+
+function autoEquipOrStoreEquipment(ctx, item, floorPosition = null) {
+  const { x, y, ...equipment } = item;
+  const slot = equipment.type === "weapon" ? "weapon" : "armor";
+  const current = ctx.player[slot];
+
+  if (isClearlyBetterEquipment(equipment, current)) {
+    ctx.player[slot] = equipment;
+    if (shouldAutoSellEquipment(current, equipment)) {
+      sellEquipmentAutomatically(ctx, current, 'replaced by a clearly stronger item');
+      addLog(ctx, `Auto-equipped clearly better ${equipment.name}.`);
+      return { removeFloor: true, autoEquipped: true, autoSold: true };
+    }
+    if (ctx.equipmentInventory.length < ctx.inventoryCapacity) {
+      ctx.equipmentInventory.push(current);
+      ctx.inventorySelectedIndex = ctx.equipmentInventory.length - 1;
+      addLog(ctx, `Auto-equipped clearly better ${equipment.name}. Preserved ${current.name} for its option value.`);
+      return { removeFloor: true, autoEquipped: true };
+    }
+    if (floorPosition) {
+      Object.assign(item, current, floorPosition);
+      addLog(ctx, `Auto-equipped clearly better ${equipment.name}. ${current.name} remains on the floor.`);
+      return { removeFloor: false, autoEquipped: true };
+    }
+    ctx.player[slot] = current;
+  }
+
+  if (shouldAutoSellEquipment(equipment, current)) {
+    sellEquipmentAutomatically(ctx, equipment, 'clearly weaker and no Rare option');
+    return { removeFloor: true, autoEquipped: false, autoSold: true };
+  }
+
+  if (ctx.equipmentInventory.length >= ctx.inventoryCapacity) {
+    const reason = hasPreservableEquipmentOption(equipment) ? 'Rare option preserved' : 'player comparison required';
+    addLog(ctx, `Equipment inventory is full. ${equipment.name} remains on the floor (${reason}).`);
+    return { removeFloor: false, autoEquipped: false };
+  }
+  ctx.equipmentInventory.push(equipment);
+  ctx.inventorySelectedIndex = ctx.equipmentInventory.length - 1;
+  const preservation = hasPreservableEquipmentOption(equipment) ? ' Rare option preserved for future smithing.' : '';
+  addLog(ctx, `Stored ${equipment.name}.${preservation} Open Equipment with [I].`);
+  return { removeFloor: true, autoEquipped: false };
+}
+
 function createTreasureChest(ctx, roll = Math.random()) {
   const reward = generateTreasureChestReward(ctx, roll);
   return withItemRarity({ name: "Ancient Treasure Chest", type: "chest", reward }, reward.rarity || 'common');
@@ -903,34 +1532,84 @@ function createTreasureChest(ctx, roll = Math.random()) {
 
 
 function applyTreasureReward(ctx, reward) {
-  if (reward.type === "bomb_range") {
-    ctx.player.bombRange = Math.min(BOMB_CONFIG.maxRange, ctx.player.bombRange + 1);
-    addLog(ctx, `VERY RARE! Blast range increased to ${ctx.player.bombRange}.`);
-  } else if (reward.type === "bomb_capacity") {
-    ctx.player.bombCapacity = Math.min(BOMB_CONFIG.maxCapacity, ctx.player.bombCapacity + 1);
-    addLog(ctx, `ULTRA RARE! Bomb capacity increased to ${ctx.player.bombCapacity}.`);
-  } else if (reward.type === "gold") {
-    ctx.player.gold += reward.amount;
-    addLog(ctx, `The chest contained ${reward.amount} gold.`);
-  } else if (reward.type === "food" || reward.type === "potion") {
-    ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + (reward.heal || 0));
-    ctx.player.hunger = Math.min(BALANCE_CONFIG.fullHunger, ctx.player.hunger + (reward.hunger || 0));
-    addLog(ctx, `The chest contained ${reward.name}. It was used immediately.`);
-  } else if (reward.type === "elixir") {
-    ctx.player.maxHp += reward.maxHp;
-    ctx.player.hp = ctx.player.maxHp;
-    addLog(ctx, `The chest contained ${reward.name}. Max HP increased by ${reward.maxHp}.`);
-  } else if (reward.type === "weapon") {
-    if (reward.atk > ctx.player.weapon.atk) ctx.player.weapon = reward;
-    else ctx.player.gold += Math.floor(reward.value / 2);
-    addLog(ctx, `The chest contained ${reward.name}.`);
-  } else if (reward.type === "armor") {
-    if (reward.def > ctx.player.armor.def) ctx.player.armor = reward;
-    else ctx.player.gold += Math.floor(reward.value / 2);
-    addLog(ctx, `The chest contained ${reward.name}.`);
-  }
+  return executeTreasureRewardDispositionSfa(ctx, reward);
 }
 
+function playerBombs(ctx) {
+  return ctx.bombs.filter(bomb => (bomb.source || 'player') === 'player');
+}
+
+function findNearestOpenBombCell(ctx, originX, originY) {
+  const candidates = [{x: originX, y: originY}];
+  for (let radius = 1; radius <= 4; radius++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      candidates.push({x: originX + dx, y: originY - radius}, {x: originX + dx, y: originY + radius});
+    }
+    for (let dy = -radius + 1; dy < radius; dy++) {
+      candidates.push({x: originX - radius, y: originY + dy}, {x: originX + radius, y: originY + dy});
+    }
+  }
+  return candidates.find(cell => cell.x >= 1 && cell.x <= 13 && cell.y >= 1 && cell.y <= 13 && ctx.grid[cell.y][cell.x] === 0 && !isBombAt(ctx, cell.x, cell.y));
+}
+
+function armMirrorReflections(ctx, mirror) {
+  if (mirror.abyssRole !== 'mirror') return 0;
+  let armed = 0;
+  const candidates = playerBombs(ctx).filter(bomb => !(bomb.reflectedForBossIds || []).includes(mirror.id));
+  for (const sourceBomb of candidates) {
+    if (armed >= ABYSS_MIRROR_SPEC.maximumReflectionsPerTurn) break;
+    sourceBomb.reflectedForBossIds = [...(sourceBomb.reflectedForBossIds || []), mirror.id];
+    const reflectedX = 14 - sourceBomb.x;
+    const reflectedY = 14 - sourceBomb.y;
+    const target = findNearestOpenBombCell(ctx, reflectedX, reflectedY);
+    if (!target) continue;
+    ctx.bombs.push({
+      id: `mirror-${mirror.id}-${sourceBomb.id}`,
+      x: target.x,
+      y: target.y,
+      fuse: ABYSS_MIRROR_SPEC.reflectionFuseTurns,
+      range: sourceBomb.range,
+      placedTurn: ctx.turnCount,
+      source: 'mirror',
+      ownerId: mirror.id,
+      mirroredFromBombId: sourceBomb.id,
+      chainReactive: true
+    });
+    armed++;
+    addLog(ctx, `${mirror.name} reflected your bomb across the chamber!`);
+  }
+  return armed;
+}
+
+function resolveHungerRole(ctx, enemy) {
+  if (enemy.abyssRole !== 'hunger') return false;
+  const edibleIndex = ctx.items.findIndex(item => item.type === 'food' && (item.rarity || 'common') !== 'ultra_rare');
+  if (edibleIndex >= 0 && ctx.turnCount % 3 === 0) {
+    const [food] = ctx.items.splice(edibleIndex, 1);
+    const healed = Math.max(1, Math.floor(enemy.maxHp * 0.08));
+    enemy.hp = Math.min(enemy.maxHp, enemy.hp + healed);
+    addLog(ctx, `${enemy.name} devoured ${food.name} and restored ${healed} HP!`);
+    return true;
+  }
+  return false;
+}
+
+function resolveDevourerRole(ctx, enemy) {
+  if (enemy.abyssRole !== 'devourer' || ctx.turnCount % 4 !== 0) return false;
+  const edibleIndex = ctx.items.findIndex(item => item.type === 'food' && (item.rarity || 'common') !== 'ultra_rare');
+  if (edibleIndex < 0) return false;
+  const [food] = ctx.items.splice(edibleIndex, 1);
+  const healed = Math.max(1, Math.floor(enemy.maxHp * 0.12));
+  enemy.hp = Math.min(enemy.maxHp, enemy.hp + healed);
+  enemy.atk += 1;
+  addLog(ctx, `${enemy.name} consumed ${food.name}, healed ${healed} HP, and grew stronger.`);
+  return true;
+}
+
+// ------------------------------------------
+// 3D. Bomb lifecycle and blast resolution
+// The fundamental bomb rules remain fixed.
+// ------------------------------------------
 function isBombAt(ctx, x, y) {
   return ctx.bombs.some(bomb => bomb.x === x && bomb.y === y);
 }
@@ -939,16 +1618,21 @@ function bombDamage(ctx) {
   return BOMB_CONFIG.baseDamage + ctx.player.level * 9 + ctx.player.weapon.atk * 2;
 }
 
+const ENEMY_DROP_CONFIG = {
+  dropChance: { common: 0.18, rare: 1.0, very_rare: 1.0, ultra_rare: 1.0 },
+  equipmentChance: { common: 0.72, rare: 0.82, very_rare: 0.92, ultra_rare: 1.0 },
+  itemRarityDistribution: {
+    common: [0.82, 0.17, 0.01, 0.0],
+    rare: [0.08, 0.46, 0.31, 0.15],
+    very_rare: [0.0, 0.12, 0.53, 0.35],
+    ultra_rare: [0.0, 0.0, 0.20, 0.80]
+  }
+};
+
 function rollEnemyDropRarity(enemy, roll = Math.random()) {
   const rarity = enemy.rarity || 'common';
-  const distributions = {
-    common: [0.82, 0.17, 0.01, 0.0],
-    rare: [0.28, 0.62, 0.095, 0.005],
-    very_rare: [0.05, 0.48, 0.44, 0.03],
-    ultra_rare: [0.0, 0.12, 0.68, 0.20]
-  };
   let cumulative = 0;
-  const row = distributions[rarity];
+  const row = ENEMY_DROP_CONFIG.itemRarityDistribution[rarity];
   for (let index = 0; index < row.length; index++) {
     cumulative += row[index];
     if (roll < cumulative) return RARITY_ORDER[index];
@@ -958,17 +1642,20 @@ function rollEnemyDropRarity(enemy, roll = Math.random()) {
 
 function createEnemyDrop(ctx, enemy) {
   const enemyRarity = enemy.rarity || 'common';
-  const dropChance = { common: 0.18, rare: 0.72, very_rare: 1.0, ultra_rare: 1.0 }[enemyRarity];
-  if (Math.random() >= dropChance) return null;
+  if (Math.random() >= ENEMY_DROP_CONFIG.dropChance[enemyRarity]) return null;
   const rarity = rollEnemyDropRarity(enemy);
   const quality = RARITY_DEFINITIONS[rarity].dropQuality;
-  if (Math.random() < 0.28) return generateConsumable(ctx.depth, rarity);
+  if (Math.random() >= ENEMY_DROP_CONFIG.equipmentChance[enemyRarity]) return generateConsumable(ctx.depth, rarity);
   return generateRandomEquipment(ctx.depth + (enemy.isBoss ? 5 : 0), Math.random() < 0.5 ? 'weapon' : 'armor', quality, rarity);
+}
+
+function enemyGoldReward(depth, roll = Math.random()) {
+  return Math.floor(roll * 10) + Math.max(1, depth) * 5;
 }
 
 function defeatEnemy(ctx, target, source = 'combat') {
   addLog(ctx, `${target.name} was defeated by ${source}! Gained +${target.exp} EXP.`);
-  ctx.player.gold += Math.floor(Math.random() * 10) + Math.max(1, ctx.depth) * 5;
+  ctx.player.gold += enemyGoldReward(ctx.depth);
   ctx.player.exp += target.exp;
   ctx.enemies = ctx.enemies.filter(enemy => enemy.id !== target.id);
   if (target.isFoodEnemy && target.foodDrop) {
@@ -980,7 +1667,10 @@ function defeatEnemy(ctx, target, source = 'combat') {
     ctx.items.push({ x: target.x, y: target.y, ...rarityDrop });
     addLog(ctx, `${rarityLabel(rarityDrop.rarity)} drop: ${rarityDrop.name}.`);
   }
-  if (target.isBoss) {
+  if (target.isAbyssBoss) {
+    if (!ctx.defeatedAbyssBossFloors.includes(target.abyssBossFloor)) ctx.defeatedAbyssBossFloors.push(target.abyssBossFloor);
+    addLog(ctx, `Guardian of A${target.abyssBossFloor} defeated! The Abyss descent is unlocked.`);
+  } else if (target.isBoss) {
     if (!ctx.defeatedBossFloors.includes(target.bossFloor)) ctx.defeatedBossFloors.push(target.bossFloor);
     addLog(ctx, `Guardian of B${target.bossFloor} defeated! The downward stairs are now unlocked.`);
   }
@@ -1053,8 +1743,8 @@ function detonateBomb(ctx, bombId, detonated = new Set(), affected = new Set()) 
   for (const cell of blastCells) {
     const key = coordinateKey(cell.x, cell.y);
     if (!ctx.explosionCells.includes(key)) ctx.explosionCells.push(key);
-    const chained = ctx.bombs.find(candidate => candidate.x === cell.x && candidate.y === cell.y);
-    if (chained) detonateBomb(ctx, chained.id, detonated, affected);
+    const chainedBombs = ctx.bombs.filter(candidate => candidate.x === cell.x && candidate.y === cell.y && candidate.chainReactive !== false);
+    chainedBombs.forEach(chained => detonateBomb(ctx, chained.id, detonated, affected));
     if (!affected.has(key)) {
       affected.add(key);
       resolveItemsInBlastCell(ctx, cell.x, cell.y);
@@ -1073,17 +1763,82 @@ function resolveBombsOnMapExit(ctx, destinationLabel) {
   return abandonedCount;
 }
 
-function processBombLifecycle(ctx) {
-  ctx.explosionCells = [];
-  ctx.bombs.forEach(bomb => {
-    if (bomb.placedTurn === undefined || bomb.placedTurn < ctx.turnCount) bomb.fuse -= 1;
-  });
-  const ready = ctx.bombs.filter(bomb => bomb.fuse <= 0).map(bomb => bomb.id);
-  const detonated = new Set();
-  const affected = new Set();
-  ready.forEach(id => detonateBomb(ctx, id, detonated, affected));
+const BOMB_LIFECYCLE_SFA = Object.freeze({
+  BOMB_LIFECYCLE_REQUESTED: {
+    role: "shared",
+    next_transitions: [
+      { event: "PROCESS", action: "reset_bomb_explosion_projection", target_state: "BOMB_LIFECYCLE_FUSE_TICK" }
+    ]
+  },
+  BOMB_LIFECYCLE_FUSE_TICK: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", action: "tick_bomb_fuses", target_state: "BOMB_LIFECYCLE_READY_COLLECTION" }
+    ]
+  },
+  BOMB_LIFECYCLE_READY_COLLECTION: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", action: "collect_ready_bombs", target_state: "BOMB_LIFECYCLE_DETONATION" }
+    ]
+  },
+  BOMB_LIFECYCLE_DETONATION: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "bombs_are_ready", action: "detonate_ready_bombs", target_state: "BOMB_LIFECYCLE_DONE" },
+      { event: "AUTO", guard: "always", target_state: "BOMB_LIFECYCLE_DONE" }
+    ]
+  },
+  BOMB_LIFECYCLE_DONE: { role: "shared", next_transitions: [] }
+});
+
+function createBombLifecycleRuntime(ctx) {
+  return { ctx, readyBombIds: [], detonated: new Set(), affected: new Set(), trace: [] };
 }
 
+const bombLifecycleGuards = {
+  always: () => true,
+  bombs_are_ready: runtime => runtime.readyBombIds.length > 0
+};
+
+const bombLifecycleActions = {
+  reset_bomb_explosion_projection: runtime => {
+    runtime.ctx.explosionCells = [];
+  },
+  tick_bomb_fuses: runtime => {
+    runtime.ctx.bombs.forEach(bomb => {
+      if (bomb.placedTurn === undefined || bomb.placedTurn < runtime.ctx.turnCount) bomb.fuse -= 1;
+    });
+  },
+  collect_ready_bombs: runtime => {
+    runtime.readyBombIds = runtime.ctx.bombs.filter(bomb => bomb.fuse <= 0).map(bomb => bomb.id);
+  },
+  detonate_ready_bombs: runtime => {
+    runtime.readyBombIds.forEach(id => detonateBomb(runtime.ctx, id, runtime.detonated, runtime.affected));
+  }
+};
+
+function executeBombLifecycleSfa(ctx) {
+  const runtime = createBombLifecycleRuntime(ctx);
+  const result = runLocalSfa(BOMB_LIFECYCLE_SFA, 'BOMB_LIFECYCLE_REQUESTED', 'PROCESS', runtime, bombLifecycleGuards, bombLifecycleActions);
+  runtime.trace = result.trace;
+  ctx.lastBombLifecycleDecision = {
+    turn: ctx.turnCount,
+    readyBombIds: runtime.readyBombIds.slice(),
+    detonatedBombIds: Array.from(runtime.detonated),
+    affectedCellCount: runtime.affected.size,
+    trace: result.trace
+  };
+  return runtime;
+}
+
+function processBombLifecycle(ctx) {
+  return executeBombLifecycleSfa(ctx);
+}
+
+// ------------------------------------------
+// 3E. Enemy magic, detection, and threat projection
+// ------------------------------------------
 function warningCellsForSpell(spell) {
   const cells = [];
   if (spell.type === 'area') {
@@ -1166,12 +1921,18 @@ function playerAttackPower(ctx) {
   return Math.max(1, Math.floor(ctx.player.level * BALANCE_CONFIG.playerLevelAttack + ctx.player.weapon.atk));
 }
 
+function enemyDamageAgainstPlayer(ctx, enemy) {
+  const piercing = Math.max(0, Math.min(0.9, enemy.armorPiercing || 0));
+  const effectiveDefense = Math.floor(ctx.player.armor.def * (1 - piercing));
+  return Math.max(1, enemy.atk - effectiveDefense);
+}
+
 function enemyThreatScore(ctx, enemy) {
   // Threat presentation is deliberately based on full-health combat potential.
   // Damage taken during the current fight must not make the same enemy change color.
   const attack = playerAttackPower(ctx);
   const hitsToDefeat = Math.max(1, Math.ceil(Math.max(1, enemy.maxHp || enemy.hp) / attack));
-  const incomingPerHit = Math.max(1, enemy.atk - ctx.player.armor.def);
+  const incomingPerHit = enemyDamageAgainstPlayer(ctx, enemy);
   const retaliationHits = Math.max(0, hitsToDefeat - 1);
   const magicPressure = enemy.magicType ? incomingPerHit * 0.90 : 0;
   const expectedDamage = retaliationHits * incomingPerHit + magicPressure;
@@ -1280,135 +2041,569 @@ function updateEnemyDetection(ctx, enemy) {
     return true;
   }
   const distance = Math.abs(ctx.player.x - enemy.x) + Math.abs(ctx.player.y - enemy.y);
-  const visionRange = enemyVisionRange(enemy);
-  if (distance <= visionRange && hasClearSightToPlayer(ctx, enemy)) {
-    enemy.hasDetectedPlayer = true;
-  } else if (enemy.hasDetectedPlayer && distance > visionRange + 3) {
-    enemy.hasDetectedPlayer = false;
+  const canSeePlayer = distance <= enemyVisionRange(enemy) && hasClearSightToPlayer(ctx, enemy);
+  enemy.hasDetectedPlayer = canSeePlayer;
+  return canSeePlayer;
+}
+
+const ENEMY_MOVEMENT_POLICY = Object.freeze({
+  HORIZONTAL_FIRST: "HORIZONTAL_FIRST",
+  SHORTEST_PATH: "SHORTEST_PATH"
+});
+
+const ENEMY_TURN_POLICY = Object.freeze({
+  iterationOrder: "ENEMY_ARRAY_ORDER",
+  movementConflict: "FIRST_APPLIED_WINS",
+  actionCardinality: "AT_MOST_ONCE_PER_TURN"
+});
+
+const ENEMY_PATHFINDING_CONFIG = Object.freeze({
+  minimumRarity: "very_rare"
+});
+
+const ENEMY_MOVEMENT_POLICY_BY_ARCHETYPE = Object.freeze({
+  // Archetype overrides remain available for future enemy-specific behavior.
+  // The default population keeps the low-cost horizontal-first personality.
+  default: ENEMY_MOVEMENT_POLICY.HORIZONTAL_FIRST
+});
+
+function enemyQualifiesForAStar(enemy) {
+  if (enemy.isBoss) return true;
+  const minimumRank = RARITY_RANK[ENEMY_PATHFINDING_CONFIG.minimumRarity];
+  const enemyRank = RARITY_RANK[enemy.rarity || "common"] ?? 0;
+  return enemyRank >= minimumRank;
+}
+
+function enemyMovementPolicy(enemy) {
+  if (enemyQualifiesForAStar(enemy)) return ENEMY_MOVEMENT_POLICY.SHORTEST_PATH;
+  return ENEMY_MOVEMENT_POLICY_BY_ARCHETYPE[enemy.archetype] || ENEMY_MOVEMENT_POLICY_BY_ARCHETYPE.default;
+}
+
+function isEnemyMovementCellBlocked(ctx, enemy, x, y) {
+  if (x <= 0 || x >= 14 || y <= 0 || y >= 14) return true;
+  if (ctx.grid[y][x] !== 0 || isBombAt(ctx, x, y)) return true;
+  return ctx.enemies.some(other => other !== enemy && other.x === x && other.y === y);
+}
+
+function buildHorizontalFirstCandidates(ctx, enemy) {
+  const dx = Math.sign(ctx.player.x - enemy.x);
+  const dy = Math.sign(ctx.player.y - enemy.y);
+  const candidates = [];
+  if (dx !== 0) candidates.push({ x: enemy.x + dx, y: enemy.y, reason: "CHASE_HORIZONTAL" });
+  if (dy !== 0) candidates.push({ x: enemy.x, y: enemy.y + dy, reason: "CHASE_VERTICAL" });
+  return candidates;
+}
+
+function aStarHeuristic(x, y, targetX, targetY) {
+  return Math.abs(targetX - x) + Math.abs(targetY - y);
+}
+
+function pushAStarNode(heap, node) {
+  heap.push(node);
+  let index = heap.length - 1;
+  while (index > 0) {
+    const parent = Math.floor((index - 1) / 2);
+    const parentNode = heap[parent];
+    if (parentNode.f < node.f || (parentNode.f === node.f && parentNode.order <= node.order)) break;
+    heap[index] = parentNode;
+    index = parent;
   }
-  return enemy.hasDetectedPlayer === true;
+  heap[index] = node;
+}
+
+function popAStarNode(heap) {
+  if (heap.length === 0) return null;
+  const root = heap[0];
+  const tail = heap.pop();
+  if (heap.length === 0) return root;
+  let index = 0;
+  while (true) {
+    const left = index * 2 + 1;
+    const right = left + 1;
+    if (left >= heap.length) break;
+    let child = left;
+    if (right < heap.length) {
+      const leftNode = heap[left];
+      const rightNode = heap[right];
+      if (rightNode.f < leftNode.f || (rightNode.f === leftNode.f && rightNode.order < leftNode.order)) child = right;
+    }
+    const childNode = heap[child];
+    if (tail.f < childNode.f || (tail.f === childNode.f && tail.order <= childNode.order)) break;
+    heap[index] = childNode;
+    index = child;
+  }
+  heap[index] = tail;
+  return root;
+}
+
+function buildShortestPathCandidates(ctx, enemy) {
+  const startKey = `${enemy.x},${enemy.y}`;
+  const targetKey = `${ctx.player.x},${ctx.player.y}`;
+  if (startKey === targetKey) return [];
+
+  const directions = [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 }
+  ];
+  const openHeap = [];
+  const bestCost = new Map([[startKey, 0]]);
+  const previous = new Map();
+  let insertionOrder = 0;
+  pushAStarNode(openHeap, {
+    x: enemy.x,
+    y: enemy.y,
+    g: 0,
+    f: aStarHeuristic(enemy.x, enemy.y, ctx.player.x, ctx.player.y),
+    order: insertionOrder++
+  });
+
+  while (openHeap.length > 0) {
+    const current = popAStarNode(openHeap);
+    const currentKey = `${current.x},${current.y}`;
+    if (current.g !== bestCost.get(currentKey)) continue;
+
+    for (const direction of directions) {
+      const nextX = current.x + direction.x;
+      const nextY = current.y + direction.y;
+      const nextKey = `${nextX},${nextY}`;
+      const isPlayerCell = nextKey === targetKey;
+      if (!isPlayerCell && isEnemyMovementCellBlocked(ctx, enemy, nextX, nextY)) continue;
+
+      const nextCost = current.g + 1;
+      const knownCost = bestCost.get(nextKey);
+      if (knownCost !== undefined && knownCost <= nextCost) continue;
+      bestCost.set(nextKey, nextCost);
+      previous.set(nextKey, currentKey);
+
+      if (isPlayerCell) {
+        let stepKey = nextKey;
+        let parentKey = previous.get(stepKey);
+        while (parentKey && parentKey !== startKey) {
+          stepKey = parentKey;
+          parentKey = previous.get(stepKey);
+        }
+        const [x, y] = stepKey.split(',').map(Number);
+        return [{ x, y, reason: "A_STAR_SHORTEST_PATH" }];
+      }
+
+      pushAStarNode(openHeap, {
+        x: nextX,
+        y: nextY,
+        g: nextCost,
+        f: nextCost + aStarHeuristic(nextX, nextY, ctx.player.x, ctx.player.y),
+        order: insertionOrder++
+      });
+    }
+  }
+  return [];
+}
+
+const ENEMY_MOVEMENT_CANDIDATE_BUILDERS = Object.freeze({
+  [ENEMY_MOVEMENT_POLICY.HORIZONTAL_FIRST]: buildHorizontalFirstCandidates,
+  [ENEMY_MOVEMENT_POLICY.SHORTEST_PATH]: buildShortestPathCandidates
+});
+
+function chooseEnemyChaseStep(ctx, enemy, blastThreatened = () => false, policyId = enemyMovementPolicy(enemy)) {
+  const builder = ENEMY_MOVEMENT_CANDIDATE_BUILDERS[policyId];
+  if (!builder) throw new Error(`Unknown enemy movement policy: ${policyId}`);
+  const candidates = builder(ctx, enemy);
+  for (const next of candidates) {
+    const sentinelAvoidsBlast = enemy.abyssRole === 'sentinel' && blastThreatened(next.x, next.y);
+    if (!isEnemyMovementCellBlocked(ctx, enemy, next.x, next.y) && !sentinelAvoidsBlast) return next;
+  }
+  return null;
+}
+
+const ENEMY_DECISION_SFA = Object.freeze({
+  ENEMY_SENSE: {
+    role: "shared",
+    next_transitions: [
+      { event: "DECIDE", action: "evaluate_enemy_perception", target_state: "ENEMY_SENSE_EVALUATED" }
+    ]
+  },
+  ENEMY_SENSE_EVALUATED: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "enemy_is_detected", action: "apply_enemy_detected", target_state: "ENEMY_SELECT_INTENT" },
+      { event: "AUTO", guard: "enemy_is_passive_food", action: "set_enemy_passive_wander_mode", target_state: "ENEMY_EVALUATE_MOVE" },
+      { event: "AUTO", guard: "always", action: "apply_enemy_not_detected_and_wait", target_state: "ENEMY_DONE" }
+    ]
+  },
+  ENEMY_SELECT_INTENT: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "enemy_can_arm_mirror", action: "apply_enemy_mirror", target_state: "ENEMY_DONE" },
+      { event: "AUTO", guard: "enemy_can_resolve_hunger", action: "apply_enemy_hunger", target_state: "ENEMY_DONE" },
+      { event: "AUTO", guard: "enemy_can_resolve_devourer", action: "apply_enemy_devourer", target_state: "ENEMY_DONE" },
+      { event: "AUTO", guard: "enemy_has_pending_spell", action: "apply_enemy_pending_spell", target_state: "ENEMY_DONE" },
+      { event: "AUTO", guard: "enemy_can_prepare_spell", action: "apply_enemy_prepare_spell", target_state: "ENEMY_DONE" },
+      { event: "AUTO", guard: "enemy_is_adjacent", action: "set_enemy_attack_intent", target_state: "ENEMY_APPLY_INTENT" },
+      { event: "AUTO", guard: "enemy_can_attempt_move", target_state: "ENEMY_EVALUATE_MOVE" },
+      { event: "AUTO", guard: "always", action: "set_enemy_wait_intent", target_state: "ENEMY_DONE" }
+    ]
+  },
+  ENEMY_EVALUATE_MOVE: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", action: "evaluate_enemy_move_intent", target_state: "ENEMY_MOVE_EVALUATED" }
+    ]
+  },
+  ENEMY_MOVE_EVALUATED: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "enemy_intent_is_move", target_state: "ENEMY_APPLY_INTENT" },
+      { event: "AUTO", guard: "always", action: "set_enemy_wait_intent", target_state: "ENEMY_DONE" }
+    ]
+  },
+  ENEMY_APPLY_INTENT: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "enemy_intent_is_attack", action: "apply_enemy_attack_intent", target_state: "ENEMY_DONE" },
+      { event: "AUTO", guard: "enemy_intent_is_move", action: "apply_enemy_move_intent", target_state: "ENEMY_DONE" },
+      { event: "AUTO", guard: "always", action: "set_enemy_wait_intent", target_state: "ENEMY_DONE" }
+    ]
+  },
+  ENEMY_DONE: { role: "shared", next_transitions: [] }
+});
+
+function runLocalSfa(definitions, initialState, event, localContext, localGuards, localActions, maxTransitions = 32) {
+  let state = initialState;
+  let pendingEvent = event;
+  let transitionCount = 0;
+  const trace = [];
+  while (transitionCount < maxTransitions) {
+    const definition = definitions[state];
+    if (!definition) throw new Error(`Unknown local SFA state: ${state}`);
+    const candidates = (definition.next_transitions || []).filter(candidate => candidate.event === pendingEvent);
+    let selected = null;
+    for (const candidate of candidates) {
+      if (!candidate.guard || localGuards[candidate.guard](localContext)) { selected = candidate; break; }
+    }
+    if (!selected) break;
+    if (selected.action) localActions[selected.action](localContext);
+    trace.push({ from: state, event: pendingEvent, guard: selected.guard || null, action: selected.action || null, to: selected.target_state });
+    state = selected.target_state;
+    transitionCount += 1;
+    pendingEvent = "AUTO";
+  }
+  if (transitionCount >= maxTransitions) throw new Error(`Local SFA exceeded ${maxTransitions} transitions`);
+  return { state, trace };
+}
+
+function createEnemyDecisionRuntime(ctx, enemy, blastThreatened) {
+  return { ctx, enemy, blastThreatened, perception: null, movementMode: 'chase', intent: null, trace: [] };
+}
+
+function evaluateEnemyPerception(ctx, enemy) {
+  if (enemy.isFoodEnemy && !enemy.provoked) return { detected: false, clearPendingSpell: true };
+  if (enemy.isFoodEnemy && enemy.provoked) return { detected: true, clearPendingSpell: false };
+  if (enemy.pendingSpell) return { detected: true, clearPendingSpell: false };
+  const distance = Math.abs(ctx.player.x - enemy.x) + Math.abs(ctx.player.y - enemy.y);
+  return {
+    detected: distance <= enemyVisionRange(enemy) && hasClearSightToPlayer(ctx, enemy),
+    clearPendingSpell: false
+  };
+}
+
+const enemyDecisionGuards = {
+  always: () => true,
+  enemy_is_detected: runtime => Boolean(runtime.perception?.detected),
+  enemy_is_passive_food: runtime => runtime.enemy.isFoodEnemy === true && runtime.enemy.provoked !== true,
+  enemy_can_arm_mirror: runtime => runtime.enemy.abyssRole === 'mirror' && playerBombs(runtime.ctx).some(bomb => !(bomb.reflectedForBossIds || []).includes(runtime.enemy.id)),
+  enemy_can_resolve_hunger: runtime => runtime.enemy.abyssRole === 'hunger' && runtime.ctx.turnCount % 3 === 0 && runtime.ctx.items.some(item => item.type === 'food' && (item.rarity || 'common') !== 'ultra_rare'),
+  enemy_can_resolve_devourer: runtime => runtime.enemy.abyssRole === 'devourer' && runtime.ctx.turnCount % 4 === 0 && runtime.ctx.items.some(item => item.type === 'food' && (item.rarity || 'common') !== 'ultra_rare'),
+  enemy_has_pending_spell: runtime => Boolean(runtime.enemy.pendingSpell),
+  enemy_can_prepare_spell: runtime => canPrepareEnemySpell(runtime.ctx, runtime.enemy),
+  enemy_is_adjacent: runtime => Math.abs(runtime.ctx.player.x - runtime.enemy.x) + Math.abs(runtime.ctx.player.y - runtime.enemy.y) === 1,
+  enemy_can_attempt_move: runtime => !(runtime.enemy.abyssRole === 'warden' && Math.abs(runtime.ctx.player.x - runtime.enemy.x) + Math.abs(runtime.ctx.player.y - runtime.enemy.y) > 4),
+  enemy_intent_is_attack: runtime => runtime.intent?.type === 'ATTACK',
+  enemy_intent_is_move: runtime => runtime.intent?.type === 'MOVE'
+};
+
+function canPrepareEnemySpell(ctx, enemy) {
+  if (!enemy.magicType || enemy.pendingSpell || ctx.turnCount % enemy.magicEvery !== 0) return false;
+  if (enemy.magicType !== 'line') return true;
+  return enemy.y === ctx.player.y || enemy.x === ctx.player.x;
+}
+
+function buildEnemyMoveIntent(ctx, enemy, blastThreatened) {
+  const next = chooseEnemyChaseStep(ctx, enemy, blastThreatened);
+  if (!next || (ctx.player.x === next.x && ctx.player.y === next.y)) return null;
+  return { type: 'MOVE', to: { x: next.x, y: next.y }, reason: next.reason || enemyMovementPolicy(enemy) };
+}
+
+function buildPassiveFoodWanderIntent(ctx, enemy) {
+  const wanderChance = Math.max(0, Math.min(1, Number(enemy.passiveWanderChance) || 0));
+  if (Math.random() >= wanderChance) return null;
+  const directions = [
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+    { x: -1, y: 0 },
+    { x: 0, y: -1 }
+  ];
+  const startIndex = Math.floor(Math.random() * directions.length);
+  for (let offset = 0; offset < directions.length; offset++) {
+    const direction = directions[(startIndex + offset) % directions.length];
+    const nextX = enemy.x + direction.x;
+    const nextY = enemy.y + direction.y;
+    if (ctx.player.x === nextX && ctx.player.y === nextY) continue;
+    if (!isEnemyMovementCellBlocked(ctx, enemy, nextX, nextY)) {
+      return { type: 'MOVE', to: { x: nextX, y: nextY }, reason: 'PASSIVE_WANDER' };
+    }
+  }
+  return null;
+}
+
+const enemyDecisionActions = {
+  evaluate_enemy_perception: runtime => { runtime.perception = evaluateEnemyPerception(runtime.ctx, runtime.enemy); },
+  apply_enemy_detected: runtime => { runtime.enemy.hasDetectedPlayer = true; runtime.movementMode = 'chase'; },
+  set_enemy_passive_wander_mode: runtime => {
+    runtime.enemy.hasDetectedPlayer = false;
+    if (runtime.perception?.clearPendingSpell) runtime.enemy.pendingSpell = null;
+    runtime.movementMode = 'passive_wander';
+  },
+  apply_enemy_not_detected_and_wait: runtime => {
+    runtime.enemy.hasDetectedPlayer = false;
+    if (runtime.perception?.clearPendingSpell) runtime.enemy.pendingSpell = null;
+    runtime.intent = { type: 'WAIT', reason: 'NO_APPLICABLE_ACTION' };
+  },
+  set_enemy_wait_intent: runtime => { runtime.intent = { type: 'WAIT', reason: 'NO_APPLICABLE_ACTION' }; },
+  apply_enemy_mirror: runtime => { armMirrorReflections(runtime.ctx, runtime.enemy); },
+  apply_enemy_hunger: runtime => { resolveHungerRole(runtime.ctx, runtime.enemy); },
+  apply_enemy_devourer: runtime => { resolveDevourerRole(runtime.ctx, runtime.enemy); },
+  apply_enemy_pending_spell: runtime => { resolvePendingSpell(runtime.ctx, runtime.enemy); },
+  apply_enemy_prepare_spell: runtime => { prepareEnemySpell(runtime.ctx, runtime.enemy); },
+  set_enemy_attack_intent: runtime => { runtime.intent = { type: 'ATTACK', reason: 'ADJACENT_PLAYER' }; },
+  evaluate_enemy_move_intent: runtime => {
+    runtime.intent = runtime.movementMode === 'passive_wander'
+      ? buildPassiveFoodWanderIntent(runtime.ctx, runtime.enemy)
+      : buildEnemyMoveIntent(runtime.ctx, runtime.enemy, runtime.blastThreatened);
+  },
+  apply_enemy_attack_intent: runtime => {
+    const { ctx, enemy } = runtime;
+    const finalDmg = enemyDamageAgainstPlayer(ctx, enemy);
+    ctx.player.hp = Math.max(0, ctx.player.hp - finalDmg);
+    ctx.player.hpFlow = "damaged";
+    addLog(ctx, `${enemy.name} strikes you for ${finalDmg} damage!`);
+    if (enemy.abyssRole === 'hunger') {
+      const drained = Math.min(ctx.player.hunger, 8);
+      ctx.player.hunger = Math.max(0, ctx.player.hunger - drained);
+      const healed = Math.max(1, Math.floor(enemy.maxHp * 0.02));
+      enemy.hp = Math.min(enemy.maxHp, enemy.hp + healed);
+      addLog(ctx, `${enemy.name} drained ${drained.toFixed(1)} Hunger and restored ${healed} HP.`);
+    }
+    if (enemy.archetype === "Venom Bat" && Math.random() < 0.22) {
+      ctx.player.statusEffects = ctx.player.statusEffects || { poisonTurns: 0 };
+      ctx.player.statusEffects.poisonTurns = Math.max(ctx.player.statusEffects.poisonTurns || 0, 5);
+      addLog(ctx, "Venom courses through your body!");
+    }
+  },
+  apply_enemy_move_intent: runtime => {
+    runtime.enemy.x = runtime.intent.to.x;
+    runtime.enemy.y = runtime.intent.to.y;
+  }
+};
+
+function executeEnemyDecisionSfa(ctx, enemy, blastThreatened) {
+  const runtime = createEnemyDecisionRuntime(ctx, enemy, blastThreatened);
+  const result = runLocalSfa(ENEMY_DECISION_SFA, 'ENEMY_SENSE', 'DECIDE', runtime, enemyDecisionGuards, enemyDecisionActions);
+  runtime.trace = result.trace;
+  ctx.lastEnemyDecision = {
+    enemyId: enemy.id,
+    archetype: enemy.archetype,
+    movementPolicy: enemyMovementPolicy(enemy),
+    intent: runtime.intent ? { ...runtime.intent } : null,
+    trace: result.trace
+  };
+  return runtime;
 }
 
 function isCombatActive(ctx) {
   return ctx.enemies.some(enemy => enemy.hasDetectedPlayer === true || enemy.pendingSpell);
 }
 
-// ==========================================
-// 3. ガード（判定純粋関数群）
-// ==========================================
-const guards = {
-  is_player_dead:    (ctx) => ctx.player.hp <= 0,
-  is_player_won:     () => false,
-  is_player_alive:   (ctx) => ctx.player.hp > 0,
 
-  is_on_stairs:      (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs",
-  has_discovered_warps_at_town_stairs: (ctx) => ctx.currentMapType === "town" && ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs" && ctx.discoveredWarpFloors.length > 0,
-  can_use_stairs:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs" && !ctx.enemies.some(e => e.isBoss),
-  is_on_town_warp:   (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "town_warp",
-  is_on_shop_tile:   (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "shop",
-  is_on_inn_tile:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "inn",
-  is_on_bar_tile:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "bar",
+const TURN_LIFECYCLE_SFA = Object.freeze({
+  TURN_LIFECYCLE_REQUESTED: {
+    role: "shared",
+    next_transitions: [
+      { event: "PROCESS", action: "advance_turn_clock", target_state: "TURN_LIFECYCLE_BOMBS" }
+    ]
+  },
+  TURN_LIFECYCLE_BOMBS: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", action: "process_turn_bombs", target_state: "TURN_LIFECYCLE_STATUS_PREPARE" }
+    ]
+  },
+  TURN_LIFECYCLE_STATUS_PREPARE: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", action: "prepare_turn_status", target_state: "TURN_LIFECYCLE_POISON" }
+    ]
+  },
+  TURN_LIFECYCLE_POISON: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "turn_has_poison", action: "apply_turn_poison", target_state: "TURN_LIFECYCLE_HUNGER" },
+      { event: "AUTO", guard: "always", target_state: "TURN_LIFECYCLE_HUNGER" }
+    ]
+  },
+  TURN_LIFECYCLE_HUNGER: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "turn_is_starving", action: "apply_turn_starvation", target_state: "TURN_LIFECYCLE_RECOVERY" },
+      { event: "AUTO", guard: "always", target_state: "TURN_LIFECYCLE_RECOVERY" }
+    ]
+  },
+  TURN_LIFECYCLE_RECOVERY: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "turn_can_recover", action: "apply_turn_recovery", target_state: "TURN_LIFECYCLE_DONE" },
+      { event: "AUTO", guard: "always", target_state: "TURN_LIFECYCLE_DONE" }
+    ]
+  },
+  TURN_LIFECYCLE_DONE: { role: "shared", next_transitions: [] }
+});
 
-  should_enemies_act: (ctx) => {
-    // ダンジョン内、または夜間(Phase 3,4,5)の町なら敵が行動
-    return ctx.currentMapType === "dungeon" || (ctx.currentMapType === "town" && ctx.timePhase >= 3);
-  },
-  should_enemies_sleep: (ctx) => {
-    return ctx.currentMapType === "town" && ctx.timePhase < 3;
-  },
+function createTurnLifecycleRuntime(ctx) {
+  return { ctx, poisonWasActive: false, trace: [] };
+}
 
-  can_afford_shop_item: (ctx) => {
-    const item = ctx.shopInventory[ctx.shopSelectedIndex];
-    return item && item.stock > 0 && ctx.player.gold >= item.value;
-  },
-  can_afford_inn: (ctx) => ctx.player.gold >= 20,
-  has_selected_warp_destination: (ctx) => ctx.warpDestinations.length > 0,
-  can_place_bomb: (ctx) => ctx.currentMapType === "dungeon" && ctx.bombs.length < ctx.player.bombCapacity && !isBombAt(ctx, ctx.player.x, ctx.player.y)
+const turnLifecycleGuards = {
+  always: () => true,
+  turn_has_poison: runtime => runtime.poisonWasActive,
+  turn_is_starving: runtime => runtime.ctx.player.hunger <= 0,
+  turn_can_recover: runtime => !runtime.poisonWasActive && runtime.ctx.player.hunger > 0 && !isCombatActive(runtime.ctx) && runtime.ctx.player.hp < runtime.ctx.player.maxHp
 };
 
-// ==========================================
-// 4. アクション（副作用・データ書き換え関数群）
-// ==========================================
-const actions = {
-  init_game_data: (ctx) => {
-    ctx.player = {
-      x: 7, y: 12, hp: 100, maxHp: 100, hunger: 100.999999, gold: 60,
-      level: 1, exp: 0, nextExp: expToNextLevel(1),
-      weapon: { name: "Rusty Sword", atk: 4, rank: "E" },
-      armor: { name: "Ragged Cloth", def: 1, rank: "E" },
-      bombCapacity: 1, bombRange: 1, bombRangeShopPurchases: 0, bombCapacityShopPurchases: 0,
-      statusEffects: { poisonTurns: 0 }, hpFlow: "stable"
-    };
-    ctx.currentMapType = "town";
-    ctx.depth = 0;
-    ctx.timePhase = 0;
-    ctx.turnCount = 0;
-    ctx.defeatedBossFloors = [];
-    ctx.discoveredWarpFloors = [];
-    ctx.warpDestinations = [1];
-    ctx.warpSelectedIndex = 0;
-    ctx.maxReachedDepth = 0;
-    ctx.bombs = [];
-    ctx.explosionCells = [];
-    ctx.deathSummary = null;
-    ctx.logs = [];
-    addLog(ctx, "Welcome to SFA Rogue.");
-    addLog(ctx, "Descend, survive, and reshape the dungeon with bombs.");
-  },
-
-  apply_death_penalty: (ctx) => {
-    const deathFloor = ctx.depth;
-    const goldLost = Math.floor(ctx.player.gold * 0.25);
-    const expLost = Math.floor(ctx.player.exp * 0.20);
-    ctx.player.gold = Math.max(0, ctx.player.gold - goldLost);
-    const divineGoldGranted = ctx.player.gold < 20 ? 20 - ctx.player.gold : 0;
-    if (divineGoldGranted > 0) ctx.player.gold = 20;
-    ctx.player.exp = Math.max(0, ctx.player.exp - expLost);
-    ctx.player.hp = Math.max(1, Math.floor(ctx.player.maxHp * 0.50));
-    ctx.player.hunger = 50.999999;
-    ctx.player.statusEffects = { poisonTurns: 0 };
-    ctx.player.hpFlow = "stable";
-    ctx.currentMapType = "town";
-    ctx.depth = 0;
-    ctx.timePhase = 0;
-    ctx.bombs = [];
-    ctx.explosionCells = [];
-    ctx.enemies = [];
-    ctx.items = [];
-    ctx.tiles = {};
-    ctx.deathSummary = {
-      deathFloor,
-      goldLost,
-      divineGoldGranted,
-      goldAfterRescue: ctx.player.gold,
-      expLost,
-      level: ctx.player.level,
-      weaponName: ctx.player.weapon.name,
-      armorName: ctx.player.armor.name,
-      bombRange: ctx.player.bombRange,
-      bombCapacity: ctx.player.bombCapacity,
-      warpCount: ctx.discoveredWarpFloors.length
-    };
-  },
-
-  return_to_town_after_death: (ctx) => {
-    addLog(ctx, `Rescued from B${ctx.deathSummary ? ctx.deathSummary.deathFloor : 0}.`);
-    if (ctx.deathSummary && ctx.deathSummary.divineGoldGranted > 0) {
-      addLog(ctx, `The gods granted you ${ctx.deathSummary.divineGoldGranted} gold for one night at the Inn.`);
+const turnLifecycleActions = {
+  advance_turn_clock: runtime => {
+    const ctx = runtime.ctx;
+    ctx.turnCount++;
+    if (ctx.turnCount % 12 === 0) {
+      ctx.timePhase = (ctx.timePhase + 1) % 6;
+      addLog(ctx, `The environment shifts into [${TIME_NAMES[ctx.timePhase]}].`);
+      if (ctx.currentMapType === "town") {
+        if (ctx.timePhase >= 3) spawnTownNightForce(ctx, ctx.timePhase);
+        else ctx.enemies = ctx.enemies.filter(enemy => !enemy.isTownEnemy);
+      }
     }
-    addLog(ctx, "Your level, equipment, bomb upgrades, and discovered warps were preserved.");
   },
+  process_turn_bombs: runtime => { processBombLifecycle(runtime.ctx); },
+  prepare_turn_status: runtime => {
+    const ctx = runtime.ctx;
+    ctx.player.hpFlow = "stable";
+    ctx.player.statusEffects = ctx.player.statusEffects || { poisonTurns: 0 };
+    ctx.player.hunger = Math.max(0, ctx.player.hunger - BALANCE_CONFIG.hungerPerTurn);
+    runtime.poisonWasActive = ctx.player.statusEffects.poisonTurns > 0;
+  },
+  apply_turn_poison: runtime => {
+    const ctx = runtime.ctx;
+    const poisonDamage = ctx.player.maxHp * BALANCE_CONFIG.poisonDamageRate;
+    ctx.player.hp = Math.max(0, ctx.player.hp - poisonDamage);
+    ctx.player.statusEffects.poisonTurns -= 1;
+    ctx.player.hpFlow = "poisoned";
+    if (ctx.turnCount % 3 === 0) addLog(ctx, `Poison drained ${poisonDamage.toFixed(2)} HP.`);
+  },
+  apply_turn_starvation: runtime => {
+    const ctx = runtime.ctx;
+    const starvationDamage = ctx.player.maxHp * BALANCE_CONFIG.starvationDamageRate;
+    ctx.player.hp = Math.max(0, ctx.player.hp - starvationDamage);
+    if (ctx.player.hpFlow !== "poisoned") ctx.player.hpFlow = "starving";
+    if (ctx.turnCount % 3 === 0) addLog(ctx, `Starvation drained ${starvationDamage.toFixed(2)} HP.`);
+  },
+  apply_turn_recovery: runtime => {
+    const ctx = runtime.ctx;
+    const recovery = ctx.player.maxHp * BALANCE_CONFIG.satiatedRegenRate;
+    const beforeHp = ctx.player.hp;
+    ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + recovery);
+    if (ctx.player.hp > beforeHp) {
+      ctx.player.hpFlow = "recovering";
+      if (ctx.turnCount % 5 === 0) addLog(ctx, `Out of combat, satiation restored ${(ctx.player.hp - beforeHp).toFixed(2)} HP.`);
+    }
+  }
+};
 
-  execute_map_generation: (ctx) => {
+function executeTurnLifecycleSfa(ctx) {
+  const runtime = createTurnLifecycleRuntime(ctx);
+  const result = runLocalSfa(TURN_LIFECYCLE_SFA, "TURN_LIFECYCLE_REQUESTED", "PROCESS", runtime, turnLifecycleGuards, turnLifecycleActions);
+  runtime.trace = result.trace;
+  ctx.lastTurnLifecycleDecision = {
+    turn: ctx.turnCount,
+    poisonWasActive: runtime.poisonWasActive,
+    starving: ctx.player.hunger <= 0,
+    combatActive: isCombatActive(ctx),
+    hpFlow: ctx.player.hpFlow,
+    trace: result.trace.map(step => ({ ...step }))
+  };
+  return runtime;
+}
+
+
+const MAP_GENERATION_SFA = Object.freeze({
+  MAP_GENERATION_REQUESTED: {
+    next_transitions: [
+      { event: "GENERATE", action: "reset_and_generate_map_layout", target_state: "MAP_LAYOUT_GENERATED" }
+    ]
+  },
+  MAP_LAYOUT_GENERATED: {
+    next_transitions: [
+      { event: "AUTO", action: "place_map_entities", target_state: "MAP_ENTITIES_PLACED" }
+    ]
+  },
+  MAP_ENTITIES_PLACED: {
+    next_transitions: [
+      { event: "AUTO", action: "validate_map_route", target_state: "MAP_VALIDATED" }
+    ]
+  },
+  MAP_VALIDATED: {
+    next_transitions: [
+      { event: "AUTO", guard: "map_requires_repair", action: "repair_map_route", target_state: "MAP_REPAIRED" },
+      { event: "AUTO", guard: "always", target_state: "MAP_READY" }
+    ]
+  },
+  MAP_REPAIRED: {
+    next_transitions: [
+      { event: "AUTO", target_state: "MAP_READY" }
+    ]
+  },
+  MAP_READY: { next_transitions: [] }
+});
+
+function createMapGenerationRuntime(ctx) {
+  return {
+    ctx,
+    mapKind: ctx.currentMapType === "town" ? "town" : (isHighDifficultyDungeon(ctx) ? "abyss" : "standard"),
+    start: null,
+    stairs: null,
+    effectiveDepth: ctx.depth,
+    isBossFloor: false,
+    regularEnemyCount: 0,
+    routeReachable: true,
+    repairRequired: false,
+    trace: []
+  };
+}
+
+const mapGenerationGuards = {
+  always: () => true,
+  map_requires_repair: runtime => runtime.repairRequired
+};
+
+const mapGenerationActions = {
+  reset_and_generate_map_layout: runtime => {
+    const ctx = runtime.ctx;
     ctx.tiles = {};
     ctx.enemies = [];
     ctx.items = [];
     ctx.bombs = [];
     ctx.explosionCells = [];
-
-    if (ctx.currentMapType === "town") {
+    if (runtime.mapKind === "town") {
       ctx.grid = Array(15).fill(null).map(() => Array(15).fill(0));
-      for(let i=0; i<15; i++) {
+      for (let i = 0; i < 15; i++) {
         ctx.grid[0][i] = 2; ctx.grid[14][i] = 2;
         ctx.grid[i][0] = 2; ctx.grid[i][14] = 2;
       }
@@ -1417,27 +2612,96 @@ const actions = {
       ctx.tiles["11,3"] = "shop";
       ctx.tiles["3,11"] = "bar";
       ctx.tiles["11,11"] = "stairs";
-      for(let x=5; x<=9; x++) ctx.grid[6][x] = 2;
+      ctx.tiles["7,3"] = ctx.homePurchased ? "home" : "home_for_sale";
+      if (hasClearedBlacksmithMilestone(ctx)) {
+        ctx.tiles["7,11"] = "smith";
+        ctx.tiles["3,7"] = "dark_smith";
+        ctx.tiles["11,7"] = "abyss_gate";
+      } else {
+        ctx.tiles["7,11"] = "smith_closed";
+      }
+      for (let x = 5; x <= 9; x++) ctx.grid[6][x] = 2;
+      return;
+    }
+
+    runtime.start = { x: 2, y: 2 };
+    runtime.stairs = { x: 12, y: 12 };
+    ctx.player.x = runtime.start.x;
+    ctx.player.y = runtime.start.y;
+
+    if (runtime.mapKind === "abyss") {
+      runtime.effectiveDepth = abyssEffectiveDepth(ctx.depth);
+      runtime.isBossFloor = ctx.depth % ABYSS_CONFIG.bossInterval === 0;
+      ctx.grid = generateReachableDungeonGrid(runtime.start, runtime.stairs, runtime.effectiveDepth);
+      ctx.tiles[coordinateKey(runtime.stairs.x, runtime.stairs.y)] = "stairs";
+      ctx.grid[runtime.stairs.y][runtime.stairs.x] = 0;
+      ctx.maxReachedAbyssDepth = Math.max(ctx.maxReachedAbyssDepth, ctx.depth);
+      if (ctx.depth % ABYSS_CONFIG.returnWarpInterval === 0) {
+        const warp = { x: 2, y: 12 };
+        carveGuaranteedPath(ctx.grid, runtime.start, warp);
+        ctx.tiles[coordinateKey(warp.x, warp.y)] = "town_warp";
+        ctx.grid[warp.y][warp.x] = 0;
+      }
+      return;
+    }
+
+    runtime.isBossFloor = ctx.depth % 5 === 0;
+    ctx.grid = generateReachableDungeonGrid(runtime.start, runtime.stairs, ctx.depth);
+    ctx.tiles[coordinateKey(runtime.stairs.x, runtime.stairs.y)] = "stairs";
+    ctx.grid[runtime.stairs.y][runtime.stairs.x] = 0;
+    ctx.maxReachedDepth = Math.max(ctx.maxReachedDepth, ctx.depth);
+    if (runtime.isBossFloor) {
+      const warp = { x: 2, y: 12 };
+      carveGuaranteedPath(ctx.grid, runtime.start, warp);
+      ctx.tiles[coordinateKey(warp.x, warp.y)] = "town_warp";
+      ctx.grid[warp.y][warp.x] = 0;
+    }
+  },
+  place_map_entities: runtime => {
+    const ctx = runtime.ctx;
+    if (runtime.mapKind === "town") {
       if (ctx.timePhase >= 3) spawnTownNightForce(ctx, ctx.timePhase);
       return;
     }
 
-    const start = { x: 2, y: 2 };
-    const stairs = { x: 12, y: 12 };
-    ctx.player.x = start.x;
-    ctx.player.y = start.y;
-    ctx.grid = generateReachableDungeonGrid(start, stairs, ctx.depth);
-    ctx.tiles[coordinateKey(stairs.x, stairs.y)] = "stairs";
-    ctx.grid[stairs.y][stairs.x] = 0;
-    ctx.maxReachedDepth = Math.max(ctx.maxReachedDepth, ctx.depth);
+    if (runtime.mapKind === "abyss") {
+      if (runtime.isBossFloor) {
+        const bossPos = getEmptyReachableFloorPos(ctx) || { x: 8, y: 8 };
+        ctx.enemies.push({ ...createAbyssBoss(ctx, ctx.depth), x: bossPos.x, y: bossPos.y });
+        addLog(ctx, `${ctx.enemies[ctx.enemies.length - 1].name} blocks descent on A${ctx.depth}.`);
+      }
+      const profile = { id: "abyss", label: "Abyssal", budgetMultiplier: 1.0 };
+      let remainingThreat = regularEnemyBudget(runtime.effectiveDepth, profile, runtime.isBossFloor, "abyss");
+      const counts = {};
+      let index = 0;
+      while (remainingThreat >= 1.5 && index < ABYSS_CONFIG.maxRegularEnemies) {
+        const archetype = chooseAbyssArchetype(counts, Math.random(), ctx.depth);
+        const pos = getEmptyReachableFloorPos(ctx);
+        if (!pos) break;
+        ctx.enemies.push({ ...createAbyssEnemy(ctx, ctx.depth, 700000 + ctx.depth * 100 + index, archetype), x: pos.x, y: pos.y });
+        counts[archetype.name] = (counts[archetype.name] || 0) + 1;
+        remainingThreat -= archetype.threatCost;
+        index++;
+      }
+      runtime.regularEnemyCount = index;
+      const chestPos = getEmptyReachableFloorPos(ctx);
+      if (chestPos) ctx.items.push({ x: chestPos.x, y: chestPos.y, ...createTreasureChest(ctx) });
+      const itemCount = 3 + Math.min(3, Math.floor(ctx.depth / 10));
+      for (let i = 0; i < itemCount; i++) {
+        const pos = getEmptyReachableFloorPos(ctx);
+        if (!pos) break;
+        if (Math.random() < 0.42) ctx.items.push({ x: pos.x, y: pos.y, ...generateConsumable(runtime.effectiveDepth, "rare") });
+        else {
+          const type = Math.random() < 0.5 ? "weapon" : "armor";
+          const rarity = promoteRarity(rollRarity(ctx, runtime.effectiveDepth, false));
+          ctx.items.push({ x: pos.x, y: pos.y, ...generateRandomEquipment(runtime.effectiveDepth, type, 1.08, rarity) });
+        }
+      }
+      addLog(ctx, `A${ctx.depth}: ${index} abyss enemies patrol this unstable floor.`);
+      return;
+    }
 
-    const isBossFloor = ctx.depth % 5 === 0;
-    if (isBossFloor) {
-      const warp = { x: 2, y: 12 };
-      carveGuaranteedPath(ctx.grid, start, warp);
-      ctx.tiles[coordinateKey(warp.x, warp.y)] = "town_warp";
-      ctx.grid[warp.y][warp.x] = 0;
-
+    if (runtime.isBossFloor) {
       const bossPos = getEmptyReachableFloorPos(ctx) || { x: 8, y: 8 };
       ctx.grid[bossPos.y][bossPos.x] = 0;
       ctx.enemies.push({ ...createBoss(ctx, ctx.depth), x: bossPos.x, y: bossPos.y });
@@ -1457,7 +2721,7 @@ const actions = {
 
     const threatProfile = rollMapThreatProfile();
     ctx.mapThreatProfile = threatProfile.id;
-    let remainingThreat = regularEnemyBudget(ctx.depth, threatProfile, isBossFloor);
+    let remainingThreat = regularEnemyBudget(ctx.depth, threatProfile, runtime.isBossFloor, ctx.dungeonMode);
     const archetypeCounts = {};
     let regularIndex = 0;
     while (remainingThreat >= 0.55 && regularIndex < BALANCE_CONFIG.maxRegularEnemies) {
@@ -1471,57 +2735,251 @@ const actions = {
       remainingThreat -= base.threatCost;
       regularIndex++;
     }
+    runtime.regularEnemyCount = regularIndex;
     enforceMapThreatColorMix(ctx, threatProfile);
-    if (!isBossFloor && threatProfile.id !== 'standard') {
-      addLog(ctx, `${threatProfile.label} floor: enemy force ${regularIndex}, threat budget ${regularEnemyBudget(ctx.depth, threatProfile, false).toFixed(1)}.`);
+    if (!runtime.isBossFloor && threatProfile.id !== "standard") {
+      addLog(ctx, `${threatProfile.label} floor: enemy force ${regularIndex}, threat budget ${regularEnemyBudget(ctx.depth, threatProfile, false, ctx.dungeonMode).toFixed(1)}.`);
     }
 
-    const shouldSpawnChest = isBossFloor || Math.random() < TREASURE_CONFIG.chestSpawnChance;
+    const shouldSpawnChest = runtime.isBossFloor || Math.random() < TREASURE_CONFIG.chestSpawnChance;
     if (shouldSpawnChest) {
       const chestPos = getEmptyReachableFloorPos(ctx);
       if (chestPos) ctx.items.push({ x: chestPos.x, y: chestPos.y, ...createTreasureChest(ctx) });
     }
-
     const itemCount = Math.min(5, 2 + Math.floor(ctx.depth / 80));
-    for(let i=0; i<itemCount; i++) {
+    for (let i = 0; i < itemCount; i++) {
       const pos = getEmptyReachableFloorPos(ctx);
       if (!pos) break;
-      if (Math.random() < 0.55) {
-        ctx.items.push({ x: pos.x, y: pos.y, ...generateConsumable(ctx.depth) });
-      } else {
-        const eqType = Math.random() > 0.5 ? 'weapon' : 'armor';
+      if (Math.random() < 0.55) ctx.items.push({ x: pos.x, y: pos.y, ...generateConsumable(ctx.depth) });
+      else {
+        const eqType = Math.random() > 0.5 ? "weapon" : "armor";
         ctx.items.push({ x: pos.x, y: pos.y, ...generateRandomEquipment(ctx.depth, eqType) });
       }
     }
-
-    if (!hasWalkablePath(ctx.grid, start, stairs)) {
-      carveGuaranteedPath(ctx.grid, start, stairs);
-      addLog(ctx, "Map validator repaired an unreachable stair route.");
+  },
+  validate_map_route: runtime => {
+    if (runtime.mapKind === "town") {
+      runtime.routeReachable = true;
+      runtime.repairRequired = false;
+      return;
     }
+    runtime.routeReachable = hasWalkablePath(runtime.ctx.grid, runtime.start, runtime.stairs);
+    runtime.repairRequired = !runtime.routeReachable;
+  },
+  repair_map_route: runtime => {
+    const ctx = runtime.ctx;
+    carveGuaranteedPath(ctx.grid, runtime.start, runtime.stairs);
+    runtime.routeReachable = hasWalkablePath(ctx.grid, runtime.start, runtime.stairs);
+    runtime.repairRequired = false;
+    if (runtime.mapKind === "standard") addLog(ctx, "Map validator repaired an unreachable stair route.");
+  }
+};
+
+function executeMapGenerationSfa(ctx) {
+  const runtime = createMapGenerationRuntime(ctx);
+  const result = runLocalSfa(MAP_GENERATION_SFA, "MAP_GENERATION_REQUESTED", "GENERATE", runtime, mapGenerationGuards, mapGenerationActions);
+  runtime.trace = result.trace;
+  ctx.lastMapGenerationDecision = {
+    mapKind: runtime.mapKind,
+    depth: ctx.depth,
+    isBossFloor: runtime.isBossFloor,
+    regularEnemyCount: runtime.regularEnemyCount,
+    routeReachable: runtime.mapKind === "town" ? true : hasWalkablePath(ctx.grid, runtime.start, runtime.stairs),
+    trace: result.trace.map(step => ({ ...step }))
+  };
+  return runtime;
+}
+
+// ==========================================
+// 4. ガード（判定純粋関数群）
+// ==========================================
+const guards = {
+  is_player_dead:    (ctx) => ctx.player.hp <= 0,
+  is_player_won:     () => false,
+  is_player_alive:   (ctx) => ctx.player.hp > 0,
+
+  has_discovered_warps_at_town_stairs: (ctx) => ctx.currentMapType === "town" && ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs" && ctx.discoveredWarpFloors.length > 0,
+  can_use_stairs:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs" && !ctx.enemies.some(e => e.isBoss),
+  is_on_town_warp:   (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "town_warp",
+  is_on_shop_tile:   (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "shop",
+  is_on_inn_tile:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "inn",
+  is_on_bar_tile:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "bar",
+  is_on_unpurchased_home_tile: (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home_for_sale" && !ctx.homePurchased,
+  is_on_home_tile:   (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home" && ctx.homePurchased,
+  is_on_closed_smith_tile: (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "smith_closed" && !hasClearedBlacksmithMilestone(ctx),
+  is_on_smith_tile:  (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "smith" && hasClearedBlacksmithMilestone(ctx),
+  is_on_dark_smith_tile: (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "dark_smith" && hasClearedBlacksmithMilestone(ctx),
+  is_on_abyss_gate:  (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "abyss_gate" && hasClearedBlacksmithMilestone(ctx),
+
+  should_enemies_act: (ctx) => {
+    // ダンジョン内、または夜間(Phase 3,4,5)の町なら敵が行動
+    return ctx.currentMapType === "dungeon" || (ctx.currentMapType === "town" && ctx.timePhase >= 3);
+  },
+  should_enemies_sleep: (ctx) => {
+    return ctx.currentMapType === "town" && ctx.timePhase < 3;
+  },
+
+  can_afford_shop_item: (ctx) => {
+    const item = ctx.shopInventory[ctx.shopSelectedIndex];
+    return item && item.stock > 0 && ctx.player.gold >= item.value;
+  },
+  can_use_return_scroll: (ctx) => ctx.currentMapType === "dungeon" && ctx.player.returnScrolls > 0,
+  can_afford_inn: (ctx) => ctx.player.gold >= 20,
+  can_afford_home_purchase: (ctx) => !ctx.homePurchased && ctx.player.gold >= HOME_CONFIG.purchasePrice,
+  has_selected_warp_destination: (ctx) => ctx.warpDestinations.length > 0,
+  has_selected_inventory_equipment: (ctx) => Boolean(ctx.equipmentInventory[ctx.inventorySelectedIndex]),
+  home_selected_carried_equipment: (ctx) => ctx.homeMenuEntries[ctx.homeSelectedIndex]?.kind === 'carried',
+  home_selected_stored_equipment: (ctx) => ctx.homeMenuEntries[ctx.homeSelectedIndex]?.kind === 'stored' && ctx.equipmentInventory.length < ctx.inventoryCapacity,
+  home_selected_deposit_gold: (ctx) => ctx.homeMenuEntries[ctx.homeSelectedIndex]?.kind === 'deposit_gold' && ctx.player.gold > 0,
+  home_selected_withdraw_gold: (ctx) => ctx.homeMenuEntries[ctx.homeSelectedIndex]?.kind === 'withdraw_gold' && ctx.homeStorage.gold > 0,
+  can_attempt_dark_smith_upgrade: (ctx) => {
+    const entry = ctx.darkSmithMenuEntries[ctx.darkSmithSelectedIndex];
+    const option = entry?.item?.options?.[0];
+    return Boolean(entry && option && ctx.forgeShards >= darkSmithMaterialCost(option));
+  },
+  has_selected_dark_smith_dismantle_item: (ctx) => Boolean(ctx.darkSmithDismantleEntries[ctx.darkSmithDismantleSelectedIndex]),
+  has_selected_blacksmith_item: (ctx) => Boolean(ctx.blacksmithEntries[ctx.blacksmithSelectedIndex]),
+  can_afford_blacksmith: (ctx) => Boolean(ctx.blacksmithEntries[ctx.blacksmithSelectedIndex]) && ctx.player.gold >= BLACKSMITH_CONFIG.rerollCost,
+  has_blacksmith_proposal: (ctx) => Boolean(ctx.blacksmithProposal),
+  can_place_bomb: (ctx) => ctx.currentMapType === "dungeon" && playerBombs(ctx).length < ctx.player.bombCapacity && !isBombAt(ctx, ctx.player.x, ctx.player.y)
+};
+
+// ==========================================
+// 5. アクション（副作用・データ書き換え関数群）
+// ==========================================
+const actions = {
+  init_game_data: (ctx) => {
+    ctx.player = {
+      x: 7, y: 12, hp: 100, maxHp: 100, hunger: 100.999999, gold: 60,
+      level: 1, exp: 0, nextExp: expToNextLevel(1), permanentMaxHpBonus: 0,
+      weapon: { type: "weapon", name: "Rusty Sword", atk: 4, rank: "E", rarity: "common", value: 10 },
+      armor: { type: "armor", name: "Ragged Cloth", def: 1, rank: "E", rarity: "common", value: 8 },
+      bombCapacity: 1, bombRange: 1, bombRangeShopPurchases: 0, bombCapacityShopPurchases: 0, returnScrolls: 0,
+      statusEffects: { poisonTurns: 0 }, hpFlow: "stable"
+    };
+    ctx.currentMapType = "town";
+    ctx.dungeonMode = "standard";
+    ctx.depth = 0;
+    ctx.timePhase = 0;
+    ctx.turnCount = 0;
+    ctx.defeatedBossFloors = [];
+    ctx.defeatedAbyssBossFloors = [];
+    ctx.discoveredWarpFloors = [];
+    ctx.warpDestinations = [1];
+    ctx.warpSelectedIndex = 0;
+    ctx.maxReachedDepth = 0;
+    ctx.maxReachedAbyssDepth = 0;
+    ctx.bombs = [];
+    ctx.explosionCells = [];
+    ctx.deathSummary = null;
+    ctx.equipmentInventory = [];
+    ctx.inventorySelectedIndex = 0;
+    ctx.inventoryCapacity = 8;
+    ctx.homePurchased = false;
+    ctx.homeStorage = { equipment: [], gold: 0 };
+    ctx.homeMenuEntries = [];
+    ctx.homeSelectedIndex = 0;
+    ctx.darkSmithMenuEntries = [];
+    ctx.darkSmithSelectedIndex = 0;
+    ctx.darkSmithDismantleEntries = [];
+    ctx.darkSmithDismantleSelectedIndex = 0;
+    ctx.forgeShards = 0;
+    ctx.blacksmithEntries = [];
+    ctx.blacksmithSelectedIndex = 0;
+    ctx.blacksmithKindIndex = 0;
+    ctx.blacksmithProposal = null;
+    ctx.logs = [];
+    addLog(ctx, "Welcome to SFA Rogue.");
+    addLog(ctx, "Descend, survive, and reshape the dungeon with bombs.");
+  },
+
+  apply_death_penalty: (ctx) => {
+    const deathFloor = ctx.depth;
+    const deathDungeonMode = ctx.dungeonMode;
+    const goldLost = Math.floor(ctx.player.gold * 0.25);
+    const expLost = Math.floor(ctx.player.exp * 0.20);
+    ctx.player.gold = Math.max(0, ctx.player.gold - goldLost);
+    const divineGoldGranted = ctx.player.gold < 20 ? 20 - ctx.player.gold : 0;
+    if (divineGoldGranted > 0) ctx.player.gold = 20;
+    ctx.player.exp = Math.max(0, ctx.player.exp - expLost);
+    ctx.player.hp = Math.max(1, Math.floor(ctx.player.maxHp * 0.50));
+    ctx.player.hunger = 50.999999;
+    ctx.player.statusEffects = { poisonTurns: 0 };
+    ctx.player.hpFlow = "stable";
+    ctx.currentMapType = "town";
+    ctx.dungeonMode = "standard";
+    ctx.depth = 0;
+    ctx.timePhase = 0;
+    ctx.bombs = [];
+    ctx.explosionCells = [];
+    ctx.enemies = [];
+    ctx.items = [];
+    ctx.tiles = {};
+    ctx.deathSummary = {
+      deathFloor,
+      deathDungeonMode,
+      goldLost,
+      divineGoldGranted,
+      goldAfterRescue: ctx.player.gold,
+      expLost,
+      level: ctx.player.level,
+      weaponName: ctx.player.weapon.name,
+      armorName: ctx.player.armor.name,
+      bombRange: ctx.player.bombRange,
+      bombCapacity: ctx.player.bombCapacity,
+      warpCount: ctx.discoveredWarpFloors.length
+    };
+  },
+
+  return_to_town_after_death: (ctx) => {
+    addLog(ctx, `Rescued from ${ctx.deathSummary?.deathDungeonMode === 'abyss' ? 'A' : 'B'}${ctx.deathSummary ? ctx.deathSummary.deathFloor : 0}.`);
+    if (ctx.deathSummary && ctx.deathSummary.divineGoldGranted > 0) {
+      addLog(ctx, `The gods granted you ${ctx.deathSummary.divineGoldGranted} gold for one night at the Inn.`);
+    }
+    addLog(ctx, "Your level, equipment, bomb upgrades, and discovered warps were preserved.");
+  },
+
+  execute_map_generation: (ctx) => {
+    executeMapGenerationSfa(ctx);
   },
 
   trigger_stairs: (ctx) => {
     if (ctx.currentMapType === "town") {
       ctx.currentMapType = "dungeon";
+      ctx.dungeonMode = "standard";
       ctx.depth = 1;
       addLog(ctx, "You entered the endlessly shifting Underworld...");
     } else {
       const nextDepth = ctx.depth + 1;
-      resolveBombsOnMapExit(ctx, `B${nextDepth}`);
+      const label = ctx.dungeonMode === 'abyss' ? `A${nextDepth}` : `B${nextDepth}`;
+      resolveBombsOnMapExit(ctx, label);
       ctx.depth = nextDepth;
-      addLog(ctx, `Descended deeper into Floor B${ctx.depth}.`);
-      if (ctx.depth === 1000) addLog(ctx, "MILESTONE: You reached the legendary B1000 floor!");
+      if (ctx.dungeonMode === 'abyss') {
+        addLog(ctx, `Descended deeper into Abyss A${ctx.depth}.`);
+        if (ctx.depth === 1000) addLog(ctx, "MILESTONE: You reached Abyss A1000.");
+      } else {
+        addLog(ctx, `Descended deeper into Floor B${ctx.depth}.`);
+        if (ctx.depth === 1000) addLog(ctx, "MILESTONE: You reached the legendary B1000 floor!");
+      }
     }
   },
 
   trigger_town_warp: (ctx) => {
     const departedFloor = ctx.depth;
     resolveBombsOnMapExit(ctx, "Town");
+    if (ctx.dungeonMode === 'abyss') {
+      ctx.currentMapType = 'town';
+      ctx.dungeonMode = 'standard';
+      ctx.depth = 0;
+      addLog(ctx, `Returned safely from Abyss A${departedFloor}.`);
+      return;
+    }
     if (!ctx.discoveredWarpFloors.includes(departedFloor)) {
       ctx.discoveredWarpFloors.push(departedFloor);
       ctx.discoveredWarpFloors.sort((a, b) => a - b);
     }
     ctx.currentMapType = "town";
+    ctx.dungeonMode = "standard";
     ctx.depth = 0;
     addLog(ctx, `Warp B${departedFloor} registered. You can revisit it from the town entrance.`);
   },
@@ -1536,99 +2994,214 @@ const actions = {
     const destination = ctx.warpDestinations[ctx.warpSelectedIndex] || 1;
     resolveBombsOnMapExit(ctx, `B${destination}`);
     ctx.currentMapType = "dungeon";
+    ctx.dungeonMode = "standard";
     ctx.depth = destination;
     addLog(ctx, destination === 1 ? "You entered the Underworld from B1." : `The town gate reconstructed a new B${destination} map. Its guardian will return.`);
   },
-
-  increment_depth: (ctx) => { /* 遷移定義側の補完用 */ },
 
   player_move_up:    (ctx) => { resolvePlayerMovement(ctx,  0, -1); },
   player_move_down:  (ctx) => { resolvePlayerMovement(ctx,  0,  1); },
   player_move_left:  (ctx) => { resolvePlayerMovement(ctx, -1,  0); },
   player_move_right: (ctx) => { resolvePlayerMovement(ctx,  1,  0); },
-  player_pass_turn:  (ctx) => { addLog(ctx, "You wait and brace yourself."); },
+  player_pass_turn:  (ctx) => { pickupFloorItemAtPlayerPosition(ctx); addLog(ctx, "You wait and brace yourself."); },
+  use_return_scroll: (ctx) => {
+    if (ctx.currentMapType !== "dungeon" || ctx.player.returnScrolls <= 0) return;
+    const departedMode = ctx.dungeonMode;
+    const departedDepth = ctx.depth;
+    resolveBombsOnMapExit(ctx, "Town");
+    ctx.player.returnScrolls--;
+    ctx.currentMapType = "town";
+    ctx.dungeonMode = "standard";
+    ctx.depth = 0;
+    addLog(ctx, `The scroll carried you safely back from ${departedMode === "abyss" ? "A" : "B"}${departedDepth}.`);
+  },
   place_bomb: (ctx) => {
     const id = `${ctx.turnCount}-${ctx.player.x}-${ctx.player.y}-${ctx.bombs.length}`;
-    ctx.bombs.push({ id, x: ctx.player.x, y: ctx.player.y, fuse: BOMB_CONFIG.fuseTurns, range: ctx.player.bombRange, placedTurn: ctx.turnCount + 1 });
-    addLog(ctx, `Bomb placed. Detonation in ${BOMB_CONFIG.fuseTurns} turns. (${ctx.bombs.length}/${ctx.player.bombCapacity})`);
+    ctx.bombs.push({ id, x: ctx.player.x, y: ctx.player.y, fuse: BOMB_CONFIG.fuseTurns, range: ctx.player.bombRange, placedTurn: ctx.turnCount + 1, source: 'player', chainReactive: true });
+    addLog(ctx, `Bomb placed. Detonation in ${BOMB_CONFIG.fuseTurns} turns. (${playerBombs(ctx).length}/${ctx.player.bombCapacity})`);
   },
 
   execute_enemy_ai: (ctx) => {
-    [...ctx.enemies].forEach(enemy => {
-        if (!ctx.enemies.includes(enemy)) return;
-        if (!updateEnemyDetection(ctx, enemy)) return;
-        if (resolvePendingSpell(ctx, enemy)) return;
-        if (prepareEnemySpell(ctx, enemy)) return;
-
-        const dx = Math.sign(ctx.player.x - enemy.x);
-        const dy = Math.sign(ctx.player.y - enemy.y);
-        const isAdjacent = Math.abs(ctx.player.x - enemy.x) + Math.abs(ctx.player.y - enemy.y) === 1;
-
-        if (isAdjacent) {
-            const finalDmg = Math.max(1, enemy.atk - ctx.player.armor.def);
-            ctx.player.hp = Math.max(0, ctx.player.hp - finalDmg);
-            ctx.player.hpFlow = "damaged";
-            addLog(ctx, `${enemy.name} strikes you for ${finalDmg} damage!`);
-            if (enemy.archetype === "Venom Bat" && Math.random() < 0.22) {
-              ctx.player.statusEffects = ctx.player.statusEffects || { poisonTurns: 0 };
-              ctx.player.statusEffects.poisonTurns = Math.max(ctx.player.statusEffects.poisonTurns || 0, 5);
-              addLog(ctx, "Venom courses through your body!");
-            }
-        } else {
-            let nx = enemy.x + dx;
-            let ny = enemy.y;
-            const blocked = (x, y) => ctx.grid[y][x] !== 0 || isBombAt(ctx, x, y) || ctx.enemies.some(e => e !== enemy && e.x === x && e.y === y);
-            if (blocked(nx, ny)) { nx = enemy.x; ny = enemy.y + dy; }
-            if (!blocked(nx, ny) && !(ctx.player.x === nx && ctx.player.y === ny)) {
-                enemy.x = nx; enemy.y = ny;
-            }
-        }
+    const blastThreatened = (x, y) => ctx.bombs.some(bomb => {
+      if (bomb.x === x && Math.abs(bomb.y - y) <= bomb.range) return true;
+      if (bomb.y === y && Math.abs(bomb.x - x) <= bomb.range) return true;
+      return false;
     });
+    const turnProjection = {
+      turn: ctx.turnCount,
+      policy: { ...ENEMY_TURN_POLICY },
+      decisions: []
+    };
+    [...ctx.enemies].forEach((enemy, orderIndex) => {
+      if (!ctx.enemies.includes(enemy)) return;
+      const runtime = executeEnemyDecisionSfa(ctx, enemy, blastThreatened);
+      turnProjection.decisions.push({
+        orderIndex,
+        enemyId: enemy.id,
+        archetype: enemy.archetype,
+        movementPolicy: enemyMovementPolicy(enemy),
+        intent: runtime.intent ? { ...runtime.intent } : null,
+        trace: runtime.trace.map(step => ({ ...step }))
+      });
+    });
+    ctx.lastEnemyTurnDecision = turnProjection;
   },
 
   process_turn_lifecycle: (ctx) => {
-    ctx.turnCount++;
-    processBombLifecycle(ctx);
-    // 12ターン毎に朝・昼・夕・夜がシフト変化する
-    if (ctx.turnCount % 12 === 0) {
-        ctx.timePhase = (ctx.timePhase + 1) % 6;
-        addLog(ctx, `The environment shifts into [${TIME_NAMES[ctx.timePhase]}].`);
+    executeTurnLifecycleSfa(ctx);
+  },
 
-        if (ctx.currentMapType === "town") {
-          if (ctx.timePhase >= 3) spawnTownNightForce(ctx, ctx.timePhase);
-          else ctx.enemies = ctx.enemies.filter(enemy => !enemy.isTownEnemy);
-        }
-    }
-
-    // HPは小数で保持し、最大HPに対する割合で回復・継続ダメージを解決する。
-    ctx.player.hpFlow = "stable";
-    ctx.player.statusEffects = ctx.player.statusEffects || { poisonTurns: 0 };
-    ctx.player.hunger = Math.max(0, ctx.player.hunger - BALANCE_CONFIG.hungerPerTurn);
-
-    const poisonActive = ctx.player.statusEffects.poisonTurns > 0;
-    if (poisonActive) {
-      const poisonDamage = ctx.player.maxHp * BALANCE_CONFIG.poisonDamageRate;
-      ctx.player.hp = Math.max(0, ctx.player.hp - poisonDamage);
-      ctx.player.statusEffects.poisonTurns -= 1;
-      ctx.player.hpFlow = "poisoned";
-      if (ctx.turnCount % 3 === 0) addLog(ctx, `Poison drained ${poisonDamage.toFixed(2)} HP.`);
-    }
-
-    if (ctx.player.hunger <= 0) {
-      const starvationDamage = ctx.player.maxHp * BALANCE_CONFIG.starvationDamageRate;
-      ctx.player.hp = Math.max(0, ctx.player.hp - starvationDamage);
-      if (ctx.player.hpFlow !== "poisoned") ctx.player.hpFlow = "starving";
-      if (ctx.turnCount % 3 === 0) addLog(ctx, `Starvation drained ${starvationDamage.toFixed(2)} HP.`);
-    } else if (!poisonActive && !isCombatActive(ctx) && ctx.player.hp < ctx.player.maxHp) {
-      const recovery = ctx.player.maxHp * BALANCE_CONFIG.satiatedRegenRate;
-      const beforeHp = ctx.player.hp;
-      ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + recovery);
-      if (ctx.player.hp > beforeHp) {
-        ctx.player.hpFlow = "recovering";
-        if (ctx.turnCount % 5 === 0) addLog(ctx, `Out of combat, satiation restored ${(ctx.player.hp - beforeHp).toFixed(2)} HP.`);
-      }
+  // --- 装備所持品ロジック ---
+  prepare_inventory_menu: (ctx) => {
+    ctx.inventorySelectedIndex = Math.min(ctx.inventorySelectedIndex, Math.max(0, ctx.equipmentInventory.length - 1));
+  },
+  inventory_cursor_up: (ctx) => {
+    ctx.inventorySelectedIndex = Math.max(0, ctx.inventorySelectedIndex - 1);
+  },
+  inventory_cursor_down: (ctx) => {
+    ctx.inventorySelectedIndex = Math.min(Math.max(0, ctx.equipmentInventory.length - 1), ctx.inventorySelectedIndex + 1);
+  },
+  equip_selected_inventory: (ctx) => {
+    const selected = ctx.equipmentInventory[ctx.inventorySelectedIndex];
+    if (!selected) return;
+    if (selected.type === "weapon") {
+      const previous = ctx.player.weapon;
+      ctx.player.weapon = selected;
+      ctx.equipmentInventory[ctx.inventorySelectedIndex] = previous;
+      addLog(ctx, `Equipped ${selected.name}. Stored ${previous.name}.`);
+    } else if (selected.type === "armor") {
+      const previous = ctx.player.armor;
+      ctx.player.armor = selected;
+      ctx.equipmentInventory[ctx.inventorySelectedIndex] = previous;
+      addLog(ctx, `Equipped ${selected.name}. Stored ${previous.name}.`);
     }
   },
+  sell_selected_inventory: (ctx) => {
+    const selected = ctx.equipmentInventory[ctx.inventorySelectedIndex];
+    if (!selected) return;
+    const price = Math.floor((selected.value || 0) / 2);
+    ctx.player.gold += price;
+    ctx.equipmentInventory.splice(ctx.inventorySelectedIndex, 1);
+    ctx.inventorySelectedIndex = Math.min(ctx.inventorySelectedIndex, Math.max(0, ctx.equipmentInventory.length - 1));
+    addLog(ctx, `Sold ${selected.name} for ${price} gold.`);
+    pickupFloorItemAtPlayerPosition(ctx);
+  },
+
+  // --- 町の進行施設ロジック ---
+  purchase_home: (ctx) => {
+    if (ctx.homePurchased || ctx.player.gold < HOME_CONFIG.purchasePrice) return;
+    ctx.player.gold -= HOME_CONFIG.purchasePrice;
+    ctx.homePurchased = true;
+    addLog(ctx, `Purchased a home in town for ${HOME_CONFIG.purchasePrice} gold.`);
+  },
+  enter_abyss_dungeon: (ctx) => {
+    if (!hasClearedBlacksmithMilestone(ctx)) return;
+    ctx.currentMapType = 'dungeon';
+    ctx.dungeonMode = 'abyss';
+    ctx.depth = ABYSS_CONFIG.startDepth;
+    addLog(ctx, `You crossed the Abyss Gate. Descent begins at A${ctx.depth}.`);
+  },
+
+  // --- 自宅ロジック ---
+  prepare_home_menu: (ctx) => {
+    ctx.homeStorage = ctx.homeStorage || { equipment: [], gold: 0 };
+    rebuildHomeMenuEntries(ctx);
+  },
+  home_cursor_up: (ctx) => { ctx.homeSelectedIndex = Math.max(0, ctx.homeSelectedIndex - 1); },
+  home_cursor_down: (ctx) => { ctx.homeSelectedIndex = Math.min(Math.max(0, ctx.homeMenuEntries.length - 1), ctx.homeSelectedIndex + 1); },
+  deposit_home_equipment: (ctx) => {
+    const entry = ctx.homeMenuEntries[ctx.homeSelectedIndex];
+    if (!entry || entry.kind !== 'carried') return;
+    const [item] = ctx.equipmentInventory.splice(entry.index, 1);
+    if (!item) return;
+    ctx.homeStorage.equipment.push(item);
+    addLog(ctx, `Stored ${item.name} at home.`);
+    rebuildHomeMenuEntries(ctx);
+  },
+  withdraw_home_equipment: (ctx) => {
+    const entry = ctx.homeMenuEntries[ctx.homeSelectedIndex];
+    if (!entry || entry.kind !== 'stored' || ctx.equipmentInventory.length >= ctx.inventoryCapacity) return;
+    const [item] = ctx.homeStorage.equipment.splice(entry.index, 1);
+    if (!item) return;
+    ctx.equipmentInventory.push(item);
+    addLog(ctx, `Took ${item.name} from home.`);
+    rebuildHomeMenuEntries(ctx);
+  },
+  deposit_home_gold: (ctx) => {
+    const amount = Math.min(10, ctx.player.gold);
+    if (amount <= 0) return;
+    ctx.player.gold -= amount;
+    ctx.homeStorage.gold += amount;
+    addLog(ctx, `Deposited ${amount} gold at home.`);
+    rebuildHomeMenuEntries(ctx);
+  },
+  withdraw_home_gold: (ctx) => {
+    const amount = Math.min(10, ctx.homeStorage.gold);
+    if (amount <= 0) return;
+    ctx.homeStorage.gold -= amount;
+    ctx.player.gold += amount;
+    addLog(ctx, `Withdrew ${amount} gold from home.`);
+    rebuildHomeMenuEntries(ctx);
+  },
+
+  // --- 闇の鍛冶屋（Forge Shard強化）ロジック ---
+  prepare_dark_smith_menu: (ctx) => {
+    ctx.darkSmithMenuEntries = darkSmithCandidateEntries(ctx);
+    ctx.darkSmithSelectedIndex = Math.min(ctx.darkSmithSelectedIndex, Math.max(0, ctx.darkSmithMenuEntries.length - 1));
+  },
+  dark_smith_cursor_up: (ctx) => { ctx.darkSmithSelectedIndex = Math.max(0, ctx.darkSmithSelectedIndex - 1); },
+  dark_smith_cursor_down: (ctx) => { ctx.darkSmithSelectedIndex = Math.min(Math.max(0, ctx.darkSmithMenuEntries.length - 1), ctx.darkSmithSelectedIndex + 1); },
+  prepare_dark_smith_dismantle_menu: (ctx) => {
+    ctx.darkSmithDismantleEntries = darkSmithDismantleEntries(ctx);
+    ctx.darkSmithDismantleSelectedIndex = Math.min(ctx.darkSmithDismantleSelectedIndex, Math.max(0, ctx.darkSmithDismantleEntries.length - 1));
+  },
+  dark_smith_dismantle_cursor_up: (ctx) => { ctx.darkSmithDismantleSelectedIndex = Math.max(0, ctx.darkSmithDismantleSelectedIndex - 1); },
+  dark_smith_dismantle_cursor_down: (ctx) => { ctx.darkSmithDismantleSelectedIndex = Math.min(Math.max(0, ctx.darkSmithDismantleEntries.length - 1), ctx.darkSmithDismantleSelectedIndex + 1); },
+  dismantle_selected_dark_smith_item: (ctx) => {
+    const entry = ctx.darkSmithDismantleEntries[ctx.darkSmithDismantleSelectedIndex];
+    if (!entry) return;
+    const current = ctx.equipmentInventory[entry.index];
+    if (current !== entry.item || entry.yield <= 0) return;
+    ctx.equipmentInventory.splice(entry.index, 1);
+    ctx.forgeShards += entry.yield;
+    addLog(ctx, `Dismantled ${entry.item.name} into ${entry.yield} Forge Shard${entry.yield === 1 ? '' : 's'}.`);
+    ctx.darkSmithDismantleEntries = darkSmithDismantleEntries(ctx);
+    ctx.darkSmithDismantleSelectedIndex = Math.min(ctx.darkSmithDismantleSelectedIndex, Math.max(0, ctx.darkSmithDismantleEntries.length - 1));
+    ctx.darkSmithMenuEntries = darkSmithCandidateEntries(ctx);
+  },
+  attempt_dark_smith_upgrade: (ctx) => {
+    const entry = ctx.darkSmithMenuEntries[ctx.darkSmithSelectedIndex];
+    const option = entry?.item?.options?.[0];
+    const materialCost = darkSmithMaterialCost(option);
+    if (!entry || !option || ctx.forgeShards < materialCost) return;
+    const rate = darkSmithSuccessRate(option);
+    ctx.forgeShards -= materialCost;
+    if (Math.random() < rate) {
+      strengthenEquipmentOption(entry.item, option);
+      addLog(ctx, `${entry.item.name}: ${option.name} strengthened to +${option.value}.`);
+    } else {
+      addLog(ctx, `${entry.item.name}: forging failed. ${materialCost} Forge Shard${materialCost === 1 ? '' : 's'} consumed; the item was not damaged.`);
+    }
+    ctx.darkSmithMenuEntries = darkSmithCandidateEntries(ctx);
+  },
+
+
+  // --- 鍛冶屋（1000Gold再抽選）ロジック ---
+  prepare_blacksmith_menu: (ctx) => { ctx.blacksmithEntries = blacksmithCandidateEntries(ctx); ctx.blacksmithSelectedIndex = Math.min(ctx.blacksmithSelectedIndex, Math.max(0, ctx.blacksmithEntries.length - 1)); ctx.blacksmithProposal = null; },
+  blacksmith_cursor_up: (ctx) => { ctx.blacksmithSelectedIndex = Math.max(0, ctx.blacksmithSelectedIndex - 1); },
+  blacksmith_cursor_down: (ctx) => { ctx.blacksmithSelectedIndex = Math.min(Math.max(0, ctx.blacksmithEntries.length - 1), ctx.blacksmithSelectedIndex + 1); },
+  prepare_blacksmith_kind: (ctx) => { ctx.blacksmithKindIndex = 0; },
+  blacksmith_kind_up: (ctx) => { ctx.blacksmithKindIndex = Math.max(0, ctx.blacksmithKindIndex - 1); },
+  blacksmith_kind_down: (ctx) => { ctx.blacksmithKindIndex = Math.min(1, ctx.blacksmithKindIndex + 1); },
+  roll_blacksmith_proposal: (ctx) => {
+    const entry = ctx.blacksmithEntries[ctx.blacksmithSelectedIndex];
+    if (!entry || ctx.player.gold < BLACKSMITH_CONFIG.rerollCost) return;
+    ctx.player.gold -= BLACKSMITH_CONFIG.rerollCost;
+    ctx.blacksmithProposal = createBlacksmithProposal(entry, ctx.blacksmithKindIndex === 0 ? 'option' : 'rarity');
+    addLog(ctx, `The Blacksmith consumed ${BLACKSMITH_CONFIG.rerollCost} gold and revealed a candidate alteration.`);
+  },
+  accept_blacksmith_proposal: (ctx) => { applyBlacksmithProposal(ctx); addLog(ctx, 'Accepted the Blacksmith alteration.'); ctx.blacksmithProposal = null; ctx.blacksmithEntries = blacksmithCandidateEntries(ctx); },
+  reject_blacksmith_proposal: (ctx) => { addLog(ctx, 'Rejected the Blacksmith alteration. The gold was not returned.'); ctx.blacksmithProposal = null; ctx.blacksmithEntries = blacksmithCandidateEntries(ctx); },
 
   // --- ショップロジック群 ---
   generate_shop_stock: (ctx) => {
@@ -1645,6 +3218,9 @@ const actions = {
       ctx.player.hunger = Math.min(BALANCE_CONFIG.fullHunger, ctx.player.hunger + (item.hunger || 0));
       ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + (item.heal || 0));
       addLog(ctx, `Used ${item.name}.`);
+    } else if (item.type === "return_scroll") {
+      ctx.player.returnScrolls++;
+      addLog(ctx, `Purchased a Return to Town Scroll. Carried: ${ctx.player.returnScrolls}.`);
     } else if (item.type === "full_restore") {
       ctx.player.hp = ctx.player.maxHp;
       ctx.player.hunger = BALANCE_CONFIG.fullHunger;
@@ -1687,82 +3263,609 @@ const actions = {
   }
 };
 
-// 移動及び戦闘の統合アトミックチェッカー
+function storeEquipmentLoot(ctx, item) {
+  return autoEquipOrStoreEquipment(ctx, item, { x: item.x, y: item.y });
+}
+
+// ------------------------------------------
+// 5A. Treasure reward disposition local SFA
+// ------------------------------------------
+const TREASURE_REWARD_DISPOSITION_SFA = Object.freeze({
+  TREASURE_REWARD_REQUESTED: {
+    role: "shared",
+    next_transitions: [
+      { event: "CLASSIFY", target_state: "TREASURE_REWARD_CLASSIFIED" }
+    ]
+  },
+  TREASURE_REWARD_CLASSIFIED: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "treasure_reward_is_bomb_range", action: "set_treasure_bomb_range_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "treasure_reward_is_bomb_capacity", action: "set_treasure_bomb_capacity_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "treasure_reward_is_gold", action: "set_treasure_gold_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "treasure_reward_is_consumable", action: "set_treasure_consume_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "treasure_reward_is_elixir", action: "set_treasure_elixir_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "treasure_equipment_replaces_and_sells_current", action: "set_treasure_equip_sell_current_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "treasure_equipment_replaces_and_stores_current", action: "set_treasure_equip_store_current_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "treasure_equipment_should_auto_sell", action: "set_treasure_auto_sell_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "treasure_equipment_can_store", action: "set_treasure_store_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "treasure_reward_is_equipment", action: "set_treasure_inventory_full_sell_intent", target_state: "TREASURE_REWARD_APPLY" },
+      { event: "AUTO", guard: "always", action: "set_treasure_unknown_intent", target_state: "TREASURE_REWARD_APPLY" }
+    ]
+  },
+  TREASURE_REWARD_APPLY: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "treasure_intent_bomb_range", action: "apply_treasure_bomb_range_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_bomb_capacity", action: "apply_treasure_bomb_capacity_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_gold", action: "apply_treasure_gold_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_consume", action: "apply_treasure_consume_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_elixir", action: "apply_treasure_elixir_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_equip_sell_current", action: "apply_treasure_equip_sell_current_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_equip_store_current", action: "apply_treasure_equip_store_current_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_auto_sell", action: "apply_treasure_auto_sell_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_store", action: "apply_treasure_store_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_inventory_full_sell", action: "apply_treasure_inventory_full_sell_intent", target_state: "TREASURE_REWARD_DONE" },
+      { event: "AUTO", guard: "treasure_intent_unknown", action: "apply_treasure_unknown_intent", target_state: "TREASURE_REWARD_DONE" }
+    ]
+  },
+  TREASURE_REWARD_DONE: { role: "shared", next_transitions: [] }
+});
+
+function createTreasureRewardRuntime(ctx, reward) {
+  const equipment = reward && (reward.type === "weapon" || reward.type === "armor") ? { ...reward } : null;
+  const slot = equipment?.type === "weapon" ? "weapon" : "armor";
+  return {
+    ctx,
+    reward,
+    equipment,
+    slot,
+    current: equipment ? ctx.player[slot] : null,
+    intent: null,
+    trace: []
+  };
+}
+
+function treasureRewardIsEquipment(runtime) {
+  return runtime.equipment?.type === "weapon" || runtime.equipment?.type === "armor";
+}
+
+const treasureRewardGuards = {
+  always: () => true,
+  treasure_reward_is_bomb_range: runtime => runtime.reward?.type === "bomb_range",
+  treasure_reward_is_bomb_capacity: runtime => runtime.reward?.type === "bomb_capacity",
+  treasure_reward_is_gold: runtime => runtime.reward?.type === "gold",
+  treasure_reward_is_consumable: runtime => runtime.reward?.type === "food" || runtime.reward?.type === "potion",
+  treasure_reward_is_elixir: runtime => runtime.reward?.type === "elixir",
+  treasure_reward_is_equipment: treasureRewardIsEquipment,
+  treasure_equipment_replaces_and_sells_current: runtime => treasureRewardIsEquipment(runtime) && isClearlyBetterEquipment(runtime.equipment, runtime.current) && shouldAutoSellEquipment(runtime.current, runtime.equipment),
+  treasure_equipment_replaces_and_stores_current: runtime => treasureRewardIsEquipment(runtime) && isClearlyBetterEquipment(runtime.equipment, runtime.current) && !shouldAutoSellEquipment(runtime.current, runtime.equipment) && runtime.ctx.equipmentInventory.length < runtime.ctx.inventoryCapacity,
+  treasure_equipment_should_auto_sell: runtime => treasureRewardIsEquipment(runtime) && !isClearlyBetterEquipment(runtime.equipment, runtime.current) && shouldAutoSellEquipment(runtime.equipment, runtime.current),
+  treasure_equipment_can_store: runtime => treasureRewardIsEquipment(runtime) && !isClearlyBetterEquipment(runtime.equipment, runtime.current) && !shouldAutoSellEquipment(runtime.equipment, runtime.current) && runtime.ctx.equipmentInventory.length < runtime.ctx.inventoryCapacity,
+  treasure_intent_bomb_range: runtime => runtime.intent?.type === "INSTALL_BOMB_RANGE",
+  treasure_intent_bomb_capacity: runtime => runtime.intent?.type === "INSTALL_BOMB_CAPACITY",
+  treasure_intent_gold: runtime => runtime.intent?.type === "ADD_GOLD",
+  treasure_intent_consume: runtime => runtime.intent?.type === "CONSUME",
+  treasure_intent_elixir: runtime => runtime.intent?.type === "CONSUME_ELIXIR",
+  treasure_intent_equip_sell_current: runtime => runtime.intent?.type === "AUTO_EQUIP_SELL_CURRENT",
+  treasure_intent_equip_store_current: runtime => runtime.intent?.type === "AUTO_EQUIP_STORE_CURRENT",
+  treasure_intent_auto_sell: runtime => runtime.intent?.type === "AUTO_SELL",
+  treasure_intent_store: runtime => runtime.intent?.type === "STORE",
+  treasure_intent_inventory_full_sell: runtime => runtime.intent?.type === "INVENTORY_FULL_SELL",
+  treasure_intent_unknown: runtime => runtime.intent?.type === "UNKNOWN"
+};
+
+const treasureRewardActions = {
+  set_treasure_bomb_range_intent: runtime => { runtime.intent = { type: "INSTALL_BOMB_RANGE", reason: "PERMANENT_BOMB_UPGRADE" }; },
+  set_treasure_bomb_capacity_intent: runtime => { runtime.intent = { type: "INSTALL_BOMB_CAPACITY", reason: "PERMANENT_BOMB_UPGRADE" }; },
+  set_treasure_gold_intent: runtime => { runtime.intent = { type: "ADD_GOLD", reason: "TREASURE_CURRENCY" }; },
+  set_treasure_consume_intent: runtime => { runtime.intent = { type: "CONSUME", reason: "IMMEDIATE_USE" }; },
+  set_treasure_elixir_intent: runtime => { runtime.intent = { type: "CONSUME_ELIXIR", reason: "PERMANENT_MAX_HP" }; },
+  set_treasure_equip_sell_current_intent: runtime => { runtime.intent = { type: "AUTO_EQUIP_SELL_CURRENT", slot: runtime.slot, reason: "CLEARLY_BETTER_REPLACEMENT" }; },
+  set_treasure_equip_store_current_intent: runtime => { runtime.intent = { type: "AUTO_EQUIP_STORE_CURRENT", slot: runtime.slot, reason: "CLEARLY_BETTER_PRESERVE_CURRENT" }; },
+  set_treasure_auto_sell_intent: runtime => { runtime.intent = { type: "AUTO_SELL", reason: "CLEARLY_WEAKER_NO_PRESERVABLE_OPTION" }; },
+  set_treasure_store_intent: runtime => { runtime.intent = { type: "STORE", reason: hasPreservableEquipmentOption(runtime.equipment) ? "PRESERVE_OPTION" : "PLAYER_COMPARISON" }; },
+  set_treasure_inventory_full_sell_intent: runtime => { runtime.intent = { type: "INVENTORY_FULL_SELL", reason: isClearlyBetterEquipment(runtime.equipment, runtime.current) ? "CANNOT_REPLACE_PRESERVED_CURRENT" : "NO_FLOOR_POSITION" }; },
+  set_treasure_unknown_intent: runtime => { runtime.intent = { type: "UNKNOWN", reason: "UNKNOWN_REWARD_TYPE" }; },
+  apply_treasure_bomb_range_intent: runtime => {
+    runtime.ctx.player.bombRange = Math.min(BOMB_CONFIG.maxRange, runtime.ctx.player.bombRange + 1);
+    addLog(runtime.ctx, `VERY RARE! Blast range increased to ${runtime.ctx.player.bombRange}.`);
+  },
+  apply_treasure_bomb_capacity_intent: runtime => {
+    runtime.ctx.player.bombCapacity = Math.min(BOMB_CONFIG.maxCapacity, runtime.ctx.player.bombCapacity + 1);
+    addLog(runtime.ctx, `ULTRA RARE! Bomb capacity increased to ${runtime.ctx.player.bombCapacity}.`);
+  },
+  apply_treasure_gold_intent: runtime => {
+    runtime.ctx.player.gold += runtime.reward.amount;
+    addLog(runtime.ctx, `The chest contained ${runtime.reward.amount} gold.`);
+  },
+  apply_treasure_consume_intent: runtime => {
+    runtime.ctx.player.hp = Math.min(runtime.ctx.player.maxHp, runtime.ctx.player.hp + (runtime.reward.heal || 0));
+    runtime.ctx.player.hunger = Math.min(BALANCE_CONFIG.fullHunger, runtime.ctx.player.hunger + (runtime.reward.hunger || 0));
+    addLog(runtime.ctx, `The chest contained ${runtime.reward.name}. It was used immediately.`);
+  },
+  apply_treasure_elixir_intent: runtime => {
+    runtime.ctx.player.permanentMaxHpBonus = Math.max(0, Number(runtime.ctx.player.permanentMaxHpBonus) || 0) + runtime.reward.maxHp;
+    recomputePlayerMaxHp(runtime.ctx);
+    runtime.ctx.player.hp = runtime.ctx.player.maxHp;
+    addLog(runtime.ctx, `The chest contained ${runtime.reward.name}. Max HP increased by ${runtime.reward.maxHp}.`);
+  },
+  apply_treasure_equip_sell_current_intent: runtime => {
+    runtime.ctx.player[runtime.slot] = runtime.equipment;
+    sellEquipmentAutomatically(runtime.ctx, runtime.current, 'replaced by a clearly stronger item');
+    addLog(runtime.ctx, `Auto-equipped clearly better ${runtime.equipment.name}.`);
+    addLog(runtime.ctx, `The chest contained ${runtime.reward.name}.`);
+  },
+  apply_treasure_equip_store_current_intent: runtime => {
+    runtime.ctx.player[runtime.slot] = runtime.equipment;
+    runtime.ctx.equipmentInventory.push(runtime.current);
+    runtime.ctx.inventorySelectedIndex = runtime.ctx.equipmentInventory.length - 1;
+    addLog(runtime.ctx, `Auto-equipped clearly better ${runtime.equipment.name}. Preserved ${runtime.current.name} for its option value.`);
+    addLog(runtime.ctx, `The chest contained ${runtime.reward.name}.`);
+  },
+  apply_treasure_auto_sell_intent: runtime => {
+    sellEquipmentAutomatically(runtime.ctx, runtime.equipment, 'clearly weaker and no Rare option');
+    addLog(runtime.ctx, `The chest contained ${runtime.reward.name}.`);
+  },
+  apply_treasure_store_intent: runtime => {
+    runtime.ctx.equipmentInventory.push(runtime.equipment);
+    runtime.ctx.inventorySelectedIndex = runtime.ctx.equipmentInventory.length - 1;
+    const preservation = hasPreservableEquipmentOption(runtime.equipment) ? ' Rare option preserved for future smithing.' : '';
+    addLog(runtime.ctx, `Stored ${runtime.equipment.name}.${preservation} Open Equipment with [I].`);
+    addLog(runtime.ctx, `The chest contained ${runtime.reward.name}.`);
+  },
+  apply_treasure_inventory_full_sell_intent: runtime => {
+    const price = Math.floor((runtime.reward.value || 0) / 2);
+    runtime.ctx.player.gold += price;
+    addLog(runtime.ctx, `The chest contained ${runtime.reward.name}; inventory was full, so it was sold for ${price} gold.`);
+  },
+  apply_treasure_unknown_intent: () => {}
+};
+
+function executeTreasureRewardDispositionSfa(ctx, reward) {
+  const runtime = createTreasureRewardRuntime(ctx, reward);
+  const result = runLocalSfa(TREASURE_REWARD_DISPOSITION_SFA, "TREASURE_REWARD_REQUESTED", "CLASSIFY", runtime, treasureRewardGuards, treasureRewardActions);
+  runtime.trace = result.trace;
+  ctx.lastTreasureRewardDecision = {
+    rewardName: reward?.name || null,
+    rewardType: reward?.type || null,
+    intent: runtime.intent ? { ...runtime.intent } : null,
+    trace: result.trace
+  };
+  return runtime;
+}
+
+// ------------------------------------------
+// 5A. Floor loot disposition local SFA
+// ------------------------------------------
+const FLOOR_LOOT_DISPOSITION_SFA = Object.freeze({
+  FLOOR_LOOT_REQUESTED: {
+    role: "shared",
+    next_transitions: [
+      { event: "CLASSIFY", target_state: "FLOOR_LOOT_CLASSIFIED" }
+    ]
+  },
+  FLOOR_LOOT_CLASSIFIED: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "floor_loot_is_consumable", action: "set_floor_loot_consume_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_loot_is_elixir", action: "set_floor_loot_elixir_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_loot_is_chest", action: "set_floor_loot_chest_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_loot_is_bomb_range", action: "set_floor_loot_bomb_range_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_loot_is_bomb_capacity", action: "set_floor_loot_bomb_capacity_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_equipment_replaces_and_sells_current", action: "set_floor_loot_equip_sell_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_equipment_replaces_and_stores_current", action: "set_floor_loot_equip_store_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_equipment_replaces_and_leaves_current", action: "set_floor_loot_equip_swap_floor_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_equipment_should_auto_sell", action: "set_floor_loot_auto_sell_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_equipment_can_store", action: "set_floor_loot_store_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "floor_loot_is_equipment", action: "set_floor_loot_leave_intent", target_state: "FLOOR_LOOT_APPLY" },
+      { event: "AUTO", guard: "always", action: "set_floor_loot_unknown_intent", target_state: "FLOOR_LOOT_APPLY" }
+    ]
+  },
+  FLOOR_LOOT_APPLY: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "floor_loot_intent_consumes", action: "apply_floor_loot_consume_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_elixir", action: "apply_floor_loot_elixir_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_chest", action: "apply_floor_loot_chest_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_bomb_range", action: "apply_floor_loot_bomb_range_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_bomb_capacity", action: "apply_floor_loot_bomb_capacity_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_equip_sell", action: "apply_floor_loot_equip_sell_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_equip_store", action: "apply_floor_loot_equip_store_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_equip_swap_floor", action: "apply_floor_loot_equip_swap_floor_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_auto_sell", action: "apply_floor_loot_auto_sell_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_store", action: "apply_floor_loot_store_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_leave", action: "apply_floor_loot_leave_intent", target_state: "FLOOR_LOOT_DONE" },
+      { event: "AUTO", guard: "floor_loot_intent_unknown", action: "apply_floor_loot_unknown_intent", target_state: "FLOOR_LOOT_DONE" }
+    ]
+  },
+  FLOOR_LOOT_DONE: { role: "shared", next_transitions: [] }
+});
+
+function createFloorLootRuntime(ctx, itemIndex) {
+  const item = ctx.items[itemIndex] || null;
+  const equipment = item ? (() => { const { x, y, ...rest } = item; return rest; })() : null;
+  const slot = equipment?.type === "weapon" ? "weapon" : "armor";
+  return {
+    ctx,
+    itemIndex,
+    item,
+    originalItemName: item?.name || null,
+    originalItemType: item?.type || null,
+    equipment,
+    slot,
+    current: equipment && (equipment.type === "weapon" || equipment.type === "armor") ? ctx.player[slot] : null,
+    intent: null,
+    removeFloor: false,
+    trace: []
+  };
+}
+
+function floorLootIsEquipment(runtime) {
+  return runtime.equipment?.type === "weapon" || runtime.equipment?.type === "armor";
+}
+
+const floorLootGuards = {
+  always: () => true,
+  floor_loot_is_consumable: runtime => runtime.item?.type === "potion" || runtime.item?.type === "food",
+  floor_loot_is_elixir: runtime => runtime.item?.type === "elixir",
+  floor_loot_is_chest: runtime => runtime.item?.type === "chest",
+  floor_loot_is_bomb_range: runtime => runtime.item?.type === "bomb_range",
+  floor_loot_is_bomb_capacity: runtime => runtime.item?.type === "bomb_capacity",
+  floor_loot_is_equipment: floorLootIsEquipment,
+  floor_equipment_replaces_and_sells_current: runtime => floorLootIsEquipment(runtime) && isClearlyBetterEquipment(runtime.equipment, runtime.current) && shouldAutoSellEquipment(runtime.current, runtime.equipment),
+  floor_equipment_replaces_and_stores_current: runtime => floorLootIsEquipment(runtime) && isClearlyBetterEquipment(runtime.equipment, runtime.current) && !shouldAutoSellEquipment(runtime.current, runtime.equipment) && runtime.ctx.equipmentInventory.length < runtime.ctx.inventoryCapacity,
+  floor_equipment_replaces_and_leaves_current: runtime => floorLootIsEquipment(runtime) && isClearlyBetterEquipment(runtime.equipment, runtime.current) && !shouldAutoSellEquipment(runtime.current, runtime.equipment) && runtime.ctx.equipmentInventory.length >= runtime.ctx.inventoryCapacity,
+  floor_equipment_should_auto_sell: runtime => floorLootIsEquipment(runtime) && shouldAutoSellEquipment(runtime.equipment, runtime.current),
+  floor_equipment_can_store: runtime => floorLootIsEquipment(runtime) && runtime.ctx.equipmentInventory.length < runtime.ctx.inventoryCapacity,
+  floor_loot_intent_consumes: runtime => runtime.intent?.type === "CONSUME",
+  floor_loot_intent_elixir: runtime => runtime.intent?.type === "CONSUME_ELIXIR",
+  floor_loot_intent_chest: runtime => runtime.intent?.type === "OPEN_CHEST",
+  floor_loot_intent_bomb_range: runtime => runtime.intent?.type === "INSTALL_BOMB_RANGE",
+  floor_loot_intent_bomb_capacity: runtime => runtime.intent?.type === "INSTALL_BOMB_CAPACITY",
+  floor_loot_intent_equip_sell: runtime => runtime.intent?.type === "AUTO_EQUIP_SELL_CURRENT",
+  floor_loot_intent_equip_store: runtime => runtime.intent?.type === "AUTO_EQUIP_STORE_CURRENT",
+  floor_loot_intent_equip_swap_floor: runtime => runtime.intent?.type === "AUTO_EQUIP_LEAVE_CURRENT",
+  floor_loot_intent_auto_sell: runtime => runtime.intent?.type === "AUTO_SELL",
+  floor_loot_intent_store: runtime => runtime.intent?.type === "STORE",
+  floor_loot_intent_leave: runtime => runtime.intent?.type === "LEAVE_ON_FLOOR",
+  floor_loot_intent_unknown: runtime => runtime.intent?.type === "UNKNOWN"
+};
+
+const floorLootActions = {
+  set_floor_loot_consume_intent: runtime => { runtime.intent = { type: "CONSUME", itemType: runtime.item.type, reason: "IMMEDIATE_USE" }; },
+  set_floor_loot_elixir_intent: runtime => { runtime.intent = { type: "CONSUME_ELIXIR", reason: "PERMANENT_MAX_HP" }; },
+  set_floor_loot_chest_intent: runtime => { runtime.intent = { type: "OPEN_CHEST", reason: "TREASURE_CONTAINER" }; },
+  set_floor_loot_bomb_range_intent: runtime => { runtime.intent = { type: "INSTALL_BOMB_RANGE", reason: "PERMANENT_BOMB_UPGRADE" }; },
+  set_floor_loot_bomb_capacity_intent: runtime => { runtime.intent = { type: "INSTALL_BOMB_CAPACITY", reason: "PERMANENT_BOMB_UPGRADE" }; },
+  set_floor_loot_equip_sell_intent: runtime => { runtime.intent = { type: "AUTO_EQUIP_SELL_CURRENT", slot: runtime.slot, reason: "CLEARLY_BETTER_REPLACEMENT" }; },
+  set_floor_loot_equip_store_intent: runtime => { runtime.intent = { type: "AUTO_EQUIP_STORE_CURRENT", slot: runtime.slot, reason: "CLEARLY_BETTER_PRESERVE_CURRENT" }; },
+  set_floor_loot_equip_swap_floor_intent: runtime => { runtime.intent = { type: "AUTO_EQUIP_LEAVE_CURRENT", slot: runtime.slot, reason: "CLEARLY_BETTER_INVENTORY_FULL" }; },
+  set_floor_loot_auto_sell_intent: runtime => { runtime.intent = { type: "AUTO_SELL", reason: "CLEARLY_WEAKER_NO_PRESERVABLE_OPTION" }; },
+  set_floor_loot_store_intent: runtime => { runtime.intent = { type: "STORE", reason: hasPreservableEquipmentOption(runtime.equipment) ? "PRESERVE_OPTION" : "PLAYER_COMPARISON" }; },
+  set_floor_loot_leave_intent: runtime => { runtime.intent = { type: "LEAVE_ON_FLOOR", reason: hasPreservableEquipmentOption(runtime.equipment) ? "INVENTORY_FULL_PRESERVE_OPTION" : "INVENTORY_FULL_PLAYER_COMPARISON" }; },
+  set_floor_loot_unknown_intent: runtime => { runtime.intent = { type: "UNKNOWN", reason: "UNKNOWN_ITEM_TYPE" }; },
+  apply_floor_loot_consume_intent: runtime => {
+    runtime.ctx.player.hp = Math.min(runtime.ctx.player.maxHp, runtime.ctx.player.hp + (runtime.item.heal || 20));
+    runtime.ctx.player.hunger = Math.min(BALANCE_CONFIG.fullHunger, runtime.ctx.player.hunger + (runtime.item.hunger || 30));
+    addLog(runtime.ctx, `Consumed ${runtime.item.name}. Recovered HP/Hunger.`);
+    runtime.removeFloor = true;
+  },
+  apply_floor_loot_elixir_intent: runtime => {
+    runtime.ctx.player.permanentMaxHpBonus = Math.max(0, Number(runtime.ctx.player.permanentMaxHpBonus) || 0) + runtime.item.maxHp;
+    recomputePlayerMaxHp(runtime.ctx);
+    runtime.ctx.player.hp = runtime.ctx.player.maxHp;
+    addLog(runtime.ctx, `Consumed ${runtime.item.name}. Max HP increased by ${runtime.item.maxHp}.`);
+    runtime.removeFloor = true;
+  },
+  apply_floor_loot_chest_intent: runtime => {
+    addLog(runtime.ctx, "You opened an Ancient Treasure Chest.");
+    applyTreasureReward(runtime.ctx, runtime.item.reward);
+    runtime.removeFloor = true;
+  },
+  apply_floor_loot_bomb_range_intent: runtime => {
+    runtime.ctx.player.bombRange = Math.min(BOMB_CONFIG.maxRange, runtime.ctx.player.bombRange + 1);
+    addLog(runtime.ctx, `Blast Radius Crystal installed. Range is now ${runtime.ctx.player.bombRange}.`);
+    runtime.removeFloor = true;
+  },
+  apply_floor_loot_bomb_capacity_intent: runtime => {
+    runtime.ctx.player.bombCapacity = Math.min(BOMB_CONFIG.maxCapacity, runtime.ctx.player.bombCapacity + 1);
+    addLog(runtime.ctx, `Infinite Chamber Core installed. Capacity is now ${runtime.ctx.player.bombCapacity}.`);
+    runtime.removeFloor = true;
+  },
+  apply_floor_loot_equip_sell_intent: runtime => {
+    runtime.ctx.player[runtime.slot] = runtime.equipment;
+    sellEquipmentAutomatically(runtime.ctx, runtime.current, 'replaced by a clearly stronger item');
+    addLog(runtime.ctx, `Auto-equipped clearly better ${runtime.equipment.name}.`);
+    runtime.removeFloor = true;
+  },
+  apply_floor_loot_equip_store_intent: runtime => {
+    runtime.ctx.player[runtime.slot] = runtime.equipment;
+    runtime.ctx.equipmentInventory.push(runtime.current);
+    runtime.ctx.inventorySelectedIndex = runtime.ctx.equipmentInventory.length - 1;
+    addLog(runtime.ctx, `Auto-equipped clearly better ${runtime.equipment.name}. Preserved ${runtime.current.name} for its option value.`);
+    runtime.removeFloor = true;
+  },
+  apply_floor_loot_equip_swap_floor_intent: runtime => {
+    runtime.ctx.player[runtime.slot] = runtime.equipment;
+    Object.assign(runtime.item, runtime.current, { x: runtime.item.x, y: runtime.item.y });
+    addLog(runtime.ctx, `Auto-equipped clearly better ${runtime.equipment.name}. ${runtime.current.name} remains on the floor.`);
+    runtime.removeFloor = false;
+  },
+  apply_floor_loot_auto_sell_intent: runtime => {
+    sellEquipmentAutomatically(runtime.ctx, runtime.equipment, 'clearly weaker and no Rare option');
+    runtime.removeFloor = true;
+  },
+  apply_floor_loot_store_intent: runtime => {
+    runtime.ctx.equipmentInventory.push(runtime.equipment);
+    runtime.ctx.inventorySelectedIndex = runtime.ctx.equipmentInventory.length - 1;
+    const preservation = hasPreservableEquipmentOption(runtime.equipment) ? ' Rare option preserved for future smithing.' : '';
+    addLog(runtime.ctx, `Stored ${runtime.equipment.name}.${preservation} Open Equipment with [I].`);
+    runtime.removeFloor = true;
+  },
+  apply_floor_loot_leave_intent: runtime => {
+    const reason = hasPreservableEquipmentOption(runtime.equipment) ? 'Rare option preserved' : 'player comparison required';
+    addLog(runtime.ctx, `Equipment inventory is full. ${runtime.equipment.name} remains on the floor (${reason}).`);
+    runtime.removeFloor = false;
+  },
+  apply_floor_loot_unknown_intent: runtime => { runtime.removeFloor = false; }
+};
+
+function executeFloorLootDispositionSfa(ctx, itemIndex) {
+  const runtime = createFloorLootRuntime(ctx, itemIndex);
+  if (!runtime.item) return runtime;
+  const result = runLocalSfa(FLOOR_LOOT_DISPOSITION_SFA, "FLOOR_LOOT_REQUESTED", "CLASSIFY", runtime, floorLootGuards, floorLootActions);
+  runtime.trace = result.trace;
+  ctx.lastFloorLootDecision = {
+    itemName: runtime.originalItemName,
+    itemType: runtime.originalItemType,
+    intent: runtime.intent ? { ...runtime.intent } : null,
+    removeFloor: runtime.removeFloor,
+    trace: result.trace
+  };
+  if (runtime.removeFloor) ctx.items.splice(itemIndex, 1);
+  return runtime;
+}
+
+// ------------------------------------------
+// 5A. Player movement, melee combat, and floor pickup local SFA
+// ------------------------------------------
+const PLAYER_ACTION_SFA = Object.freeze({
+  PLAYER_ACTION_REQUESTED: {
+    role: "frontend",
+    next_transitions: [
+      { event: "CLASSIFY", target_state: "PLAYER_ACTION_CLASSIFIED" }
+    ]
+  },
+  PLAYER_ACTION_CLASSIFIED: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "player_target_is_terrain_blocked", action: "set_player_terrain_blocked_intent", target_state: "PLAYER_ACTION_APPLY" },
+      { event: "AUTO", guard: "player_target_has_bomb", action: "set_player_bomb_blocked_intent", target_state: "PLAYER_ACTION_APPLY" },
+      { event: "AUTO", guard: "player_target_has_enemy", action: "set_player_attack_intent", target_state: "PLAYER_ACTION_APPLY" },
+      { event: "AUTO", guard: "player_target_has_loot", action: "set_player_move_pickup_intent", target_state: "PLAYER_ACTION_APPLY" },
+      { event: "AUTO", guard: "always", action: "set_player_move_intent", target_state: "PLAYER_ACTION_APPLY" }
+    ]
+  },
+  PLAYER_ACTION_APPLY: {
+    role: "shared",
+    next_transitions: [
+      { event: "AUTO", guard: "player_intent_is_terrain_blocked", action: "apply_player_terrain_blocked_intent", target_state: "PLAYER_ACTION_DONE" },
+      { event: "AUTO", guard: "player_intent_is_bomb_blocked", action: "apply_player_bomb_blocked_intent", target_state: "PLAYER_ACTION_DONE" },
+      { event: "AUTO", guard: "player_intent_is_attack", action: "apply_player_attack_intent", target_state: "PLAYER_ACTION_DONE" },
+      { event: "AUTO", guard: "player_intent_is_move_pickup", action: "apply_player_move_pickup_intent", target_state: "PLAYER_ACTION_DONE" },
+      { event: "AUTO", guard: "player_intent_is_move", action: "apply_player_move_intent", target_state: "PLAYER_ACTION_DONE" }
+    ]
+  },
+  PLAYER_ACTION_DONE: { role: "shared", next_transitions: [] }
+});
+
+function createPlayerActionRuntime(ctx, dx, dy) {
+  return {
+    ctx,
+    dx,
+    dy,
+    targetX: ctx.player.x + dx,
+    targetY: ctx.player.y + dy,
+    targetEnemy: null,
+    intent: null,
+    trace: []
+  };
+}
+
+function playerTargetGridCell(runtime) {
+  const row = runtime.ctx.grid[runtime.targetY];
+  return row ? row[runtime.targetX] : 2;
+}
+
+const playerActionGuards = {
+  always: () => true,
+  player_target_is_terrain_blocked: runtime => playerTargetGridCell(runtime) !== 0,
+  player_target_has_bomb: runtime => isBombAt(runtime.ctx, runtime.targetX, runtime.targetY),
+  player_target_has_enemy: runtime => runtime.ctx.enemies.some(enemy => enemy.x === runtime.targetX && enemy.y === runtime.targetY),
+  player_target_has_loot: runtime => runtime.ctx.items.some(item => item.x === runtime.targetX && item.y === runtime.targetY),
+  player_intent_is_terrain_blocked: runtime => runtime.intent?.type === "BLOCKED_TERRAIN",
+  player_intent_is_bomb_blocked: runtime => runtime.intent?.type === "BLOCKED_BOMB",
+  player_intent_is_attack: runtime => runtime.intent?.type === "ATTACK",
+  player_intent_is_move_pickup: runtime => runtime.intent?.type === "MOVE_AND_PICKUP",
+  player_intent_is_move: runtime => runtime.intent?.type === "MOVE"
+};
+
+const playerActionActions = {
+  set_player_terrain_blocked_intent: runtime => {
+    const cell = playerTargetGridCell(runtime);
+    runtime.intent = { type: "BLOCKED_TERRAIN", to: { x: runtime.targetX, y: runtime.targetY }, reason: cell === 1 ? "DESTRUCTIBLE_ROCK" : "INDESTRUCTIBLE_WALL" };
+  },
+  set_player_bomb_blocked_intent: runtime => {
+    runtime.intent = { type: "BLOCKED_BOMB", to: { x: runtime.targetX, y: runtime.targetY }, reason: "ARMED_BOMB" };
+  },
+  set_player_attack_intent: runtime => {
+    runtime.targetEnemy = runtime.ctx.enemies.find(enemy => enemy.x === runtime.targetX && enemy.y === runtime.targetY) || null;
+    runtime.intent = { type: "ATTACK", to: { x: runtime.targetX, y: runtime.targetY }, targetEnemyId: runtime.targetEnemy?.id ?? null, reason: "ENEMY_CONTACT" };
+  },
+  set_player_move_pickup_intent: runtime => {
+    runtime.intent = { type: "MOVE_AND_PICKUP", to: { x: runtime.targetX, y: runtime.targetY }, reason: "FLOOR_LOOT" };
+  },
+  set_player_move_intent: runtime => {
+    runtime.intent = { type: "MOVE", to: { x: runtime.targetX, y: runtime.targetY }, reason: "OPEN_FLOOR" };
+  },
+  apply_player_terrain_blocked_intent: runtime => {
+    addLog(runtime.ctx, runtime.intent.reason === "DESTRUCTIBLE_ROCK" ? "A destructible rock blocks the way." : "An indestructible wall blocks the way.");
+  },
+  apply_player_bomb_blocked_intent: runtime => {
+    addLog(runtime.ctx, "The armed bomb blocks that tile.");
+  },
+  apply_player_attack_intent: runtime => {
+    const target = runtime.targetEnemy || runtime.ctx.enemies.find(enemy => enemy.x === runtime.targetX && enemy.y === runtime.targetY);
+    if (!target) return;
+    const playerAtk = playerAttackPower(runtime.ctx);
+    target.provoked = true;
+    target.hasDetectedPlayer = true;
+    target.hp -= playerAtk;
+    addLog(runtime.ctx, `You slash ${target.name} for ${playerAtk} damage!`);
+    if (target.hp <= 0) defeatEnemy(runtime.ctx, target, 'your blade');
+  },
+  apply_player_move_pickup_intent: runtime => {
+    runtime.ctx.player.x = runtime.targetX;
+    runtime.ctx.player.y = runtime.targetY;
+    pickupFloorItemAtPlayerPosition(runtime.ctx);
+  },
+  apply_player_move_intent: runtime => {
+    runtime.ctx.player.x = runtime.targetX;
+    runtime.ctx.player.y = runtime.targetY;
+  }
+};
+
+function executePlayerActionSfa(ctx, dx, dy) {
+  const runtime = createPlayerActionRuntime(ctx, dx, dy);
+  const result = runLocalSfa(PLAYER_ACTION_SFA, "PLAYER_ACTION_REQUESTED", "CLASSIFY", runtime, playerActionGuards, playerActionActions);
+  runtime.trace = result.trace;
+  ctx.lastPlayerActionDecision = {
+    direction: { dx, dy },
+    intent: runtime.intent ? { ...runtime.intent, to: runtime.intent.to ? { ...runtime.intent.to } : undefined } : null,
+    trace: result.trace
+  };
+  return runtime;
+}
+
 function resolvePlayerMovement(ctx, dx, dy) {
-    const nx = ctx.player.x + dx;
-    const ny = ctx.player.y + dy;
+  return executePlayerActionSfa(ctx, dx, dy);
+}
 
-    // 1. 壁の衝突判定
-    if (ctx.grid[ny][nx] !== 0) {
-        addLog(ctx, ctx.grid[ny][nx] === 1 ? "A destructible rock blocks the way." : "An indestructible wall blocks the way.");
-        return;
-    }
-    if (isBombAt(ctx, nx, ny)) {
-        addLog(ctx, "The armed bomb blocks that tile.");
-        return;
-    }
-
-    // 2. 敵との接触（戦闘解決フェーズ）
-    const target = ctx.enemies.find(e => e.x === nx && e.y === ny);
-    if (target) {
-        const playerAtk = playerAttackPower(ctx);
-        target.provoked = true;
-        target.hasDetectedPlayer = true;
-        target.hp -= playerAtk;
-        addLog(ctx, `You slash ${target.name} for ${playerAtk} damage!`);
-
-        if (target.hp <= 0) defeatEnemy(ctx, target, 'your blade');
-        return;
-    }
-
-    // 3. 通常床の移動
-    ctx.player.x = nx;
-    ctx.player.y = ny;
-
-    // 4. ハクスラ戦利品床アイテムの回収
-    const itemIdx = ctx.items.findIndex(i => i.x === nx && i.y === ny);
-    if (itemIdx !== -1) {
-        const item = ctx.items[itemIdx];
-        if (item.type === "potion" || item.type === "food") {
-            ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + (item.heal || 20));
-            ctx.player.hunger = Math.min(BALANCE_CONFIG.fullHunger, ctx.player.hunger + (item.hunger || 30));
-            addLog(ctx, `Consumed ${item.name}. Recovered HP/Hunger.`);
-        } else if (item.type === "elixir") {
-            ctx.player.maxHp += item.maxHp;
-            ctx.player.hp = ctx.player.maxHp;
-            addLog(ctx, `Consumed ${item.name}. Max HP increased by ${item.maxHp}.`);
-        } else if (item.type === "chest") {
-            addLog(ctx, "You opened an Ancient Treasure Chest.");
-            applyTreasureReward(ctx, item.reward);
-        } else if (item.type === "bomb_range") {
-            ctx.player.bombRange = Math.min(BOMB_CONFIG.maxRange, ctx.player.bombRange + 1);
-            addLog(ctx, `Blast Radius Crystal installed. Range is now ${ctx.player.bombRange}.`);
-        } else if (item.type === "bomb_capacity") {
-            ctx.player.bombCapacity = Math.min(BOMB_CONFIG.maxCapacity, ctx.player.bombCapacity + 1);
-            addLog(ctx, `Infinite Chamber Core installed. Capacity is now ${ctx.player.bombCapacity}.`);
-        } else if (item.type === "weapon") {
-            if (item.atk > ctx.player.weapon.atk) {
-                ctx.player.weapon = item;
-                addLog(ctx, `Looted & Auto-Equipped: ${item.name}! (ATK:${item.atk})`);
-            } else {
-                ctx.player.gold += Math.floor(item.value / 2);
-                addLog(ctx, `Found ${item.name}. Converted to ${Math.floor(item.value/2)} gold.`);
-            }
-        } else if (item.type === "armor") {
-            if (item.def > ctx.player.armor.def) {
-                ctx.player.armor = item;
-                addLog(ctx, `Looted & Auto-Equipped: ${item.name}! (DEF:${item.def})`);
-            } else {
-                ctx.player.gold += Math.floor(item.value / 2);
-                addLog(ctx, `Found ${item.name}. Converted to ${Math.floor(item.value/2)} gold.`);
-            }
-        }
-        ctx.items.splice(itemIdx, 1);
-    }
+function pickupFloorItemAtPlayerPosition(ctx) {
+  const itemIndex = ctx.items.findIndex(item => item.x === ctx.player.x && item.y === ctx.player.y);
+  if (itemIndex === -1) return false;
+  return executeFloorLootDispositionSfa(ctx, itemIndex).removeFloor;
 }
 
 // ==========================================
-// 5. SFA ステートマシンエンジン
+// 6. SFA state metadata (state_id / role / description)
+// ==========================================
+const SFA_STATE_DESCRIPTIONS = Object.freeze({
+  game: Object.freeze({
+    FE_TITLE: "Title screen waiting for a new game request.",
+    FE_GENERATE_MAP: "Generate and initialize the current town or dungeon map.",
+    FE_PLAYER_TURN: "Stable gameplay state that accepts one player command.",
+    FE_RESOLVE_PLAYER: "Boundary state after applying the selected player action.",
+    FE_ENEMY_TURN: "Resolve eligible enemy decisions in deterministic array order.",
+    FE_TURN_END: "Check immediate death before turn-end lifecycle processing.",
+    FE_PROCESS_TURN_LIFECYCLE: "Run bomb, status, hunger, and recovery lifecycle processing.",
+    FE_CHECK_TURN_OUTCOME: "Select death, victory, or the next player turn after lifecycle processing.",
+    FE_DEATH_RESOLVE: "Apply the persistent death penalty and prepare the death summary.",
+    FE_INVENTORY_MENU: "Browse, equip, or sell carried equipment.",
+    FE_SHOP_MENU: "Browse and purchase currently stocked shop items.",
+    FE_WARP_MENU: "Select a discovered standard-dungeon warp destination.",
+    FE_INN_MENU: "Confirm an inn rest purchase and recovery.",
+    FE_BAR_MENU: "Display the current tavern rumor and return to play.",
+    FE_HOME_PURCHASE_MENU: "Confirm purchase of the player home.",
+    FE_BLACKSMITH_LOCKED_MENU: "Explain that the blacksmith milestone is not yet cleared.",
+    FE_HOME_MENU: "Transfer equipment and gold between carried and home storage.",
+    FE_DARK_SMITH_MENU: "Choose dark-smith enhancement or dismantling operations.",
+    FE_DARK_SMITH_DISMANTLE_MENU: "Select a high-rarity item to dismantle.",
+    FE_DARK_SMITH_DISMANTLE_CONFIRM: "Confirm dismantling the selected equipment.",
+    FE_BLACKSMITH_MENU: "Select equipment for a blacksmith reroll proposal.",
+    FE_BLACKSMITH_KIND_MENU: "Select which equipment property the blacksmith should reroll.",
+    FE_BLACKSMITH_COMPARE: "Accept or reject the generated blacksmith proposal.",
+    FE_ABYSS_ENTRY_MENU: "Confirm entry into the Abyss dungeon mode.",
+    FE_DEATH_SUMMARY: "Display the death result and wait for return or exit.",
+    FE_VICTORY: "Display victory and wait for restart or title exit."
+  }),
+  player_action: Object.freeze({
+    PLAYER_ACTION_REQUESTED: "Accept one directional movement request for classification.",
+    PLAYER_ACTION_CLASSIFIED: "Choose the highest-priority applicable player intent.",
+    PLAYER_ACTION_APPLY: "Apply the selected player intent exactly once.",
+    PLAYER_ACTION_DONE: "Stable completion state for one player action."
+  }),
+  enemy_decision: Object.freeze({
+    ENEMY_SENSE: "Evaluate the current perception snapshot for one enemy.",
+    ENEMY_SENSE_EVALUATED: "Apply the evaluated detection result before intent selection.",
+    ENEMY_SELECT_INTENT: "Select one enemy intent using declared candidate priority.",
+    ENEMY_EVALUATE_MOVE: "Calculate one movement intent using the enemy movement policy.",
+    ENEMY_MOVE_EVALUATED: "Classify the evaluated movement result as move or wait.",
+    ENEMY_APPLY_INTENT: "Apply the selected enemy intent at most once.",
+    ENEMY_DONE: "Stable completion state for one enemy decision."
+  }),
+  turn_lifecycle: Object.freeze({
+    TURN_LIFECYCLE_REQUESTED: "Begin one end-of-turn lifecycle execution.",
+    TURN_LIFECYCLE_BOMBS: "Advance and resolve the bomb lifecycle.",
+    TURN_LIFECYCLE_STATUS_PREPARE: "Prepare hunger and status data used by later lifecycle stages.",
+    TURN_LIFECYCLE_POISON: "Apply poison damage when poison was active at lifecycle start.",
+    TURN_LIFECYCLE_HUNGER: "Apply starvation damage when hunger is depleted.",
+    TURN_LIFECYCLE_RECOVERY: "Apply natural recovery only when all recovery guards pass.",
+    TURN_LIFECYCLE_DONE: "Stable completion state for end-of-turn processing."
+  }),
+  bomb_lifecycle: Object.freeze({
+    BOMB_LIFECYCLE_REQUESTED: "Begin processing all bombs for the current turn.",
+    BOMB_LIFECYCLE_FUSE_TICK: "Decrease eligible bomb fuses without ticking newly placed bombs.",
+    BOMB_LIFECYCLE_READY_COLLECTION: "Collect bombs ready for deterministic detonation.",
+    BOMB_LIFECYCLE_DETONATION: "Resolve explosions and chain reactions without duplicate damage.",
+    BOMB_LIFECYCLE_DONE: "Stable completion state for bomb processing."
+  }),
+  floor_loot: Object.freeze({
+    FLOOR_LOOT_REQUESTED: "Begin disposition of the item at the player position.",
+    FLOOR_LOOT_CLASSIFIED: "Select consumption, equipment, storage, sale, or leave-on-floor policy.",
+    FLOOR_LOOT_APPLY: "Apply the selected floor-loot disposition exactly once.",
+    FLOOR_LOOT_DONE: "Stable completion state for floor-loot processing."
+  }),
+  treasure_reward: Object.freeze({
+    TREASURE_REWARD_REQUESTED: "Begin disposition of one treasure-chest reward.",
+    TREASURE_REWARD_CLASSIFIED: "Select reward consumption, equipment, storage, or sale policy.",
+    TREASURE_REWARD_APPLY: "Apply the selected treasure reward disposition exactly once.",
+    TREASURE_REWARD_DONE: "Stable completion state for treasure reward processing."
+  }),
+  map_generation: Object.freeze({
+    MAP_GENERATION_REQUESTED: "Begin generation for the selected map kind and depth.",
+    MAP_LAYOUT_GENERATED: "Map terrain and guaranteed route anchors have been generated.",
+    MAP_ENTITIES_PLACED: "Enemies, facilities, stairs, warps, and loot have been placed.",
+    MAP_VALIDATED: "Required route reachability has been evaluated.",
+    MAP_REPAIRED: "An unreachable required route has been repaired.",
+    MAP_READY: "Stable map-generation completion state ready for gameplay."
+  })
+});
+
+function applySfaStateMetadata(definitions, descriptions, defaultRole) {
+  for (const [stateId, definition] of Object.entries(definitions)) {
+    const description = descriptions[stateId];
+    if (!description) throw new Error(`Missing SFA description: ${stateId}`);
+    definition.state_id = stateId;
+    definition.role = definition.role || defaultRole;
+    definition.description = description;
+  }
+  const unknownDescriptions = Object.keys(descriptions).filter(stateId => !definitions[stateId]);
+  if (unknownDescriptions.length) throw new Error(`Unknown SFA descriptions: ${unknownDescriptions.join(", ")}`);
+}
+
+applySfaStateMetadata(SFA_DEFINITIONS, SFA_STATE_DESCRIPTIONS.game, "frontend");
+applySfaStateMetadata(PLAYER_ACTION_SFA, SFA_STATE_DESCRIPTIONS.player_action, "shared");
+applySfaStateMetadata(ENEMY_DECISION_SFA, SFA_STATE_DESCRIPTIONS.enemy_decision, "shared");
+applySfaStateMetadata(TURN_LIFECYCLE_SFA, SFA_STATE_DESCRIPTIONS.turn_lifecycle, "shared");
+applySfaStateMetadata(BOMB_LIFECYCLE_SFA, SFA_STATE_DESCRIPTIONS.bomb_lifecycle, "shared");
+applySfaStateMetadata(FLOOR_LOOT_DISPOSITION_SFA, SFA_STATE_DESCRIPTIONS.floor_loot, "shared");
+applySfaStateMetadata(TREASURE_REWARD_DISPOSITION_SFA, SFA_STATE_DESCRIPTIONS.treasure_reward, "shared");
+applySfaStateMetadata(MAP_GENERATION_SFA, SFA_STATE_DESCRIPTIONS.map_generation, "shared");
+
+// ==========================================
+// 6. SFA ステートマシンエンジン
 // ==========================================
 class SFAEngine {
   constructor(definitions, initialState, context, guards, actions, onTransitioned) {
@@ -1830,7 +3933,7 @@ class SFAEngine {
 }
 
 // ==========================================
-// 6. UI レンダラー (等幅グリッド ＆ モード別メニューオーバレイ描画)
+// 7. UI レンダラー (等幅グリッド ＆ モード別メニューオーバレイ描画)
 // ==========================================
 function getHpPresentation(player) {
   const ratio = player.maxHp > 0 ? player.hp / player.maxHp : 0;
@@ -1851,6 +3954,9 @@ function getHpPresentation(player) {
 }
 
 function render(state, ctxGame) {
+  const gameStatusInformation = document.getElementById("game-status-information");
+  if (gameStatusInformation) gameStatusInformation.style.display = state === "FE_TITLE" ? "none" : "block";
+
   // 時間帯に応じてブラウザ全体の背景色(グラデーション)を変え、夜の深さを情緒的に演出
   document.body.style.backgroundColor = TIME_BG_COLORS[ctxGame.timePhase];
 
@@ -1869,8 +3975,14 @@ function render(state, ctxGame) {
       if (ctxGame.tiles[tileKey] === "inn")     { symbol = "Ｈ"; className = "tile-inn"; }
       if (ctxGame.tiles[tileKey] === "shop")    { symbol = "Ｓ"; className = "tile-shop"; }
       if (ctxGame.tiles[tileKey] === "bar")     { symbol = "Ｂ"; className = "tile-bar"; }
+      if (ctxGame.tiles[tileKey] === "home")          { symbol = "Ｍ"; className = "tile-home"; }
+      if (ctxGame.tiles[tileKey] === "home_for_sale") { symbol = "＄"; className = "tile-home-sale"; }
+      if (ctxGame.tiles[tileKey] === "smith")         { symbol = "Ｆ"; className = "tile-smith"; }
+      if (ctxGame.tiles[tileKey] === "smith_closed")  { symbol = "ｆ"; className = "tile-smith-closed"; }
+      if (ctxGame.tiles[tileKey] === "abyss_gate")    { symbol = "Ω"; className = "tile-abyss"; }
       if (ctxGame.tiles[tileKey] === "stairs")    { symbol = "＞"; className = "tile-stairs"; }
       if (ctxGame.tiles[tileKey] === "town_warp") { symbol = "◎"; className = "tile-warp"; }
+      if (ctxGame.tiles[tileKey] === "dark_smith") { symbol = "☾"; className = "tile-smith"; }
 
       // 2. 動的エンティティの上書き配置（ペインターレイヤー法）
       const warning = ctxGame.enemies.some(enemy => enemy.pendingSpell && warningCellsForSpell(enemy.pendingSpell).some(cell => cell.x === c && cell.y === r));
@@ -1883,7 +3995,7 @@ function render(state, ctxGame) {
       }
 
       const bomb = ctxGame.bombs.find(b => b.x === c && b.y === r);
-      if (bomb) { symbol = String(Math.max(1, bomb.fuse)); className = "bomb"; }
+      if (bomb) { symbol = String(Math.max(1, bomb.fuse)); className = bomb.source === "mirror" ? "mirror-bomb" : "bomb"; }
 
       if (ctxGame.explosionCells.includes(tileKey)) { symbol = "※"; className = "explosion"; }
 
@@ -1906,13 +4018,13 @@ function render(state, ctxGame) {
   document.getElementById("board").innerHTML = boardHtml;
 
   // HUD文字列の更新
-  document.getElementById("location").textContent = isTown ? "LOCATION: Town square" : `LOCATION: Dungeon B${ctxGame.depth}F (Best B${ctxGame.maxReachedDepth})`;
+  document.getElementById("location").textContent = isTown ? "LOCATION: Town square" : (ctxGame.dungeonMode === "abyss" ? `LOCATION: Abyss A${ctxGame.depth} (Best A${ctxGame.maxReachedAbyssDepth})` : `LOCATION: Dungeon B${ctxGame.depth}F (Best B${ctxGame.maxReachedDepth})`);
   document.getElementById("timephase").textContent = `TIME: ${TIME_NAMES[ctxGame.timePhase]} (Turn ${ctxGame.turnCount})`;
   const hpElement = document.getElementById("hp");
   const hpPresentation = getHpPresentation(ctxGame.player);
   hpElement.className = hpPresentation.className;
   hpElement.innerHTML = `HP: ${Math.floor(ctxGame.player.hp)}/${Math.floor(ctxGame.player.maxHp)}${hpPresentation.marker ? `<span class="hp-flow ${hpPresentation.markerClass}">${hpPresentation.marker}</span>` : ""} (Hng:${Math.min(100, Math.floor(ctxGame.player.hunger))})`;
-  document.getElementById("gold").textContent = `GOLD: ${ctxGame.player.gold}g BOMB:∞ SET:${ctxGame.bombs.length}/${ctxGame.player.bombCapacity} RNG:${ctxGame.player.bombRange}`;
+  document.getElementById("gold").textContent = `GOLD: ${ctxGame.player.gold}g BOMB:∞ SET:${playerBombs(ctxGame).length}/${ctxGame.player.bombCapacity} RNG:${ctxGame.player.bombRange} SCR:${ctxGame.player.returnScrolls}`;
   document.getElementById("player-lvl").textContent = `LV: ${ctxGame.player.level} (${ctxGame.player.exp}/${ctxGame.player.nextExp})`;
 
   // ログウィンドウの更新
@@ -1920,33 +4032,118 @@ function render(state, ctxGame) {
     .map((log, idx) => `<div class="${idx === ctxGame.logs.length - 1 ? 'new-log' : ''}">> ${log}</div>`)
     .join("");
 
-  // 3. メニューオーバレイ制御（状態に応じて画面を完全ロック・上書きUIを宣言的に構築）
+  // 3. メニューオーバレイ制御（projection policyに従って画面を完全ロック）
   const overlay = document.getElementById("overlay");
-  if (state === "FE_TITLE") {
+  const overlayMode = PROJECTION_POLICY[state] ? PROJECTION_POLICY[state].overlay : null;
+  if (overlayMode === "title") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<h1 style='color:#00ffcc; font-size:36px; margin:0;'>SFA ROGUE</h1><h2 style='color:#ff00ff; font-size:16px; margin:4px 0 20px 0;'>STATE-FIRST BOMBER ROGUELIKE</h2><p style='font-size:12px; color:#aaa; line-height:1.6;'>Bomb Combat / Dungeon Exploration / Boss Rematches<br>Powered by State-First Architecture</p><p style='font-size:14px; color:#fff; margin-top:30px; animation: blink 1s infinite;'>Press [ENTER] to Venture</p>`;
-  } else if (state === "FE_SHOP_MENU") {
+  } else if (overlayMode === "abyss-entry") {
+    overlay.style.display = "flex";
+    overlay.innerHTML = `<div class="menu-title">ABYSS GATE</div><p style="font-size:12px; line-height:1.7;">A separate high-difficulty dungeon begins at A1.<br>The endless Underworld remains available from the normal stairs.<br><span style="color:#ff7777;">Abyss enemies are coordinated and vastly stronger.</span></p><p style="font-size:10px; color:#888;">[Enter]: Enter A1 | [Esc]: Cancel</p>`;
+  } else if (overlayMode === "inventory") {
+    overlay.style.display = "flex";
+    const selected = ctxGame.equipmentInventory[ctxGame.inventorySelectedIndex] || null;
+    const equipmentRows = ctxGame.equipmentInventory.length > 0
+      ? ctxGame.equipmentInventory.map((item, idx) => {
+          const stat = item.type === "weapon" ? `ATK ${item.atk}` : `DEF ${item.def}`;
+          return `<div class="inventory-item ${idx === ctxGame.inventorySelectedIndex ? 'selected' : ''} rarity-${(item.rarity || 'common').replace('_', '-')}">${item.name} [${stat}]<br><span style="font-size:9px;">${equipmentOptionSummary(item)}</span></div>`;
+        }).join("")
+      : `<div class="inventory-item" style="color:#777;">No stored equipment.</div>`;
+    let comparison = "Select stored equipment to compare.";
+    if (selected) {
+      const current = selected.type === "weapon" ? ctxGame.player.weapon : ctxGame.player.armor;
+      const key = selected.type === "weapon" ? "atk" : "def";
+      const diff = selected[key] - current[key];
+      const diffClass = diff > 0 ? "inventory-positive" : (diff < 0 ? "inventory-negative" : "");
+      comparison = `${selected.type.toUpperCase()}: ${coloredEquipmentName(current)} ${current[key]} → ${coloredEquipmentName(selected)} ${selected[key]} <span class="${diffClass}">(${diff >= 0 ? '+' : ''}${diff})</span><br>Current option: ${equipmentOptionSummary(current)}<br>Candidate option: ${equipmentOptionSummary(selected)}`;
+    }
+    overlay.innerHTML = `<div class="menu-title">EQUIPMENT & STATUS</div><div class="inventory-panel"><div class="inventory-equipped"><div>Weapon: ${coloredEquipmentName(ctxGame.player.weapon)} / ATK ${ctxGame.player.weapon.atk} / ${equipmentOptionSummary(ctxGame.player.weapon)}</div><div>Armor: ${coloredEquipmentName(ctxGame.player.armor)} / DEF ${ctxGame.player.armor.def} / ${equipmentOptionSummary(ctxGame.player.armor)}</div><div>HP ${Math.floor(ctxGame.player.hp)}/${Math.floor(ctxGame.player.maxHp)} | Hunger ${Math.min(100, Math.floor(ctxGame.player.hunger))} | Bomb SET ${ctxGame.player.bombCapacity} RNG ${ctxGame.player.bombRange}</div><div>Status: ${(ctxGame.player.statusEffects?.poisonTurns || 0) > 0 ? `Poison ${ctxGame.player.statusEffects.poisonTurns} turns` : 'Normal'}</div></div><div>Stored equipment ${ctxGame.equipmentInventory.length}/${ctxGame.inventoryCapacity}</div><div id="inventory-list" class="inventory-list">${equipmentRows}</div><div class="inventory-comparison">${comparison}</div></div><p style='font-size:10px; color:#888;'>[↑/↓]: Cursor | [Enter]: Equip | [S]: Sell | [Esc]: Close</p>`;
+    const inventoryList = document.getElementById('inventory-list');
+    if (inventoryList && typeof inventoryList.querySelector === 'function') {
+      const selectedRow = inventoryList.querySelector('.inventory-item.selected');
+      if (selectedRow && typeof selectedRow.scrollIntoView === 'function') selectedRow.scrollIntoView({ block: 'nearest' });
+    }
+  } else if (overlayMode === "shop") {
     overlay.style.display = "flex";
     let menuItemsHtml = ctxGame.shopInventory.map((item, idx) => {
-        return `<div class="menu-item ${idx === ctxGame.shopSelectedIndex ? 'selected' : ''}">${item.name} (${item.value}g / stock:${item.stock})</div>`;
+        const detail = item.type === 'return_scroll' ? ' — Carry it into a dungeon and press [R] to return safely.' : '';
+        return `<div class="menu-item ${idx === ctxGame.shopSelectedIndex ? 'selected' : ''}">${item.name} (${item.value}g / stock:${item.stock})${detail}</div>`;
     }).join("");
     overlay.innerHTML = `<div class="menu-title">MERCHANT SHOP</div><div style='width:100%; margin-bottom:20px;'>${menuItemsHtml}</div><p style='font-size:10px; color:#888;'>[↑/↓]: Cursor | [Enter]: Purchase | [Esc]: Exit</p>`;
-  } else if (state === "FE_WARP_MENU") {
+  } else if (overlayMode === "warp") {
     overlay.style.display = "flex";
     const destinations = ctxGame.warpDestinations.map((floor, idx) => `<div class="menu-item ${idx === ctxGame.warpSelectedIndex ? 'selected' : ''}">Enter B${floor} (new map)</div>`).join("");
     overlay.innerHTML = `<div class="menu-title">DISCOVERED WARP GATE</div><div style='width:100%; margin-bottom:20px;'>${destinations}</div><p style='font-size:10px; color:#888;'>[↑/↓]: Destination | [Enter]: Enter | [Esc]: Cancel</p>`;
-  } else if (state === "FE_INN_MENU") {
+  } else if (overlayMode === "inn") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<div class="menu-title">TOWN INN</div><p style='font-size:13px; margin-bottom:20px;'>Stay overnight for <span style='color:#ffff00;'>20 gold</span>?<br>(Fully restores HP/Hunger and resets to Morning)</p><div class="menu-item selected">Rest and Sleep</div><p style='font-size:10px; color:#888; margin-top:20px;'>[Enter]: Pay & Stay | [Esc]: Exit</p>`;
-  } else if (state === "FE_BAR_MENU") {
+  } else if (overlayMode === "bar") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<div class="menu-title">TAVERN RUMORS</div><p style='font-size:12px; color:#e0e0f0; line-height:1.6; padding: 0 10px;'>${ctxGame.barMessage}</p><p style='font-size:11px; color:#ff00ff; margin-top:30px;'>[Esc/Enter]: Close Discussion</p>`;
-  } else if (state === "FE_DEATH_SUMMARY") {
+  } else if (overlayMode === "home-purchase") {
+    overlay.style.display = "flex";
+    const affordable = ctxGame.player.gold >= HOME_CONFIG.purchasePrice;
+    overlay.innerHTML = `<div class="menu-title">TOWN HOME FOR SALE</div><p style="font-size:13px;line-height:1.6;">Purchase this home for <span style="color:#ffe066;">${HOME_CONFIG.purchasePrice} gold</span>?<br>Equipment and deposited gold stored here survive rescue penalties.</p><div class="menu-item ${affordable ? 'selected' : ''}" style="${affordable ? '' : 'color:#777;'}">${affordable ? 'Purchase Home' : `Need ${HOME_CONFIG.purchasePrice - ctxGame.player.gold} more gold`}</div><p style="font-size:10px;color:#888;">[Enter]: Purchase | [Esc]: Leave</p>`;
+  } else if (overlayMode === "smith-locked") {
+    overlay.style.display = "flex";
+    overlay.innerHTML = `<div class="menu-title">CLOSED FORGE</div><p style="font-size:12px;line-height:1.7;color:#aaa;">The master smith will return after the guardian of B${DARK_SMITH_CONFIG.unlockBossFloor} is defeated.<br>A sealed high-difficulty dungeon gate is said to awaken at the same time.</p><p style="font-size:10px;color:#888;">[Enter/Esc]: Leave</p>`;
+  } else if (overlayMode === "home") {
+    overlay.style.display = "flex";
+    const rows = ctxGame.homeMenuEntries.map((entry, idx) => {
+      let label = '';
+      if (entry.kind === 'carried') label = `Store: ${coloredEquipmentName(entry.item)} / ${equipmentOptionSummary(entry.item)}`;
+      else if (entry.kind === 'stored') label = `Take: ${coloredEquipmentName(entry.item)} / ${equipmentOptionSummary(entry.item)}`;
+      else if (entry.kind === 'deposit_gold') label = `Deposit 10g (carried ${ctxGame.player.gold}g)`;
+      else label = `Withdraw 10g (stored ${ctxGame.homeStorage.gold}g)`;
+      return `<div class="menu-item ${idx === ctxGame.homeSelectedIndex ? 'selected' : ''}">${label}</div>`;
+    }).join('');
+    overlay.innerHTML = `<div class="menu-title">MY HOME</div><p style="font-size:11px;color:#aabbee;">Stored gold: ${ctxGame.homeStorage.gold}g / Stored equipment: ${ctxGame.homeStorage.equipment.length}</p><div style="width:100%;max-height:250px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">[↑/↓]: Cursor | [Enter]: Store / Take | Gold moves in 10g units | [Esc]: Exit</p>`;
+  } else if (overlayMode === "dark-smith") {
+    overlay.style.display = "flex";
+    const rows = ctxGame.darkSmithMenuEntries.length ? ctxGame.darkSmithMenuEntries.map((entry, idx) => {
+      const option = entry.item.options[0];
+      const chance = Math.round(darkSmithSuccessRate(option) * 100);
+      const cost = darkSmithMaterialCost(option);
+      const stat = entry.item.type === 'weapon' ? `ATK ${entry.item.atk}` : `DEF ${entry.item.def}`;
+      return `<div class="menu-item ${idx === ctxGame.darkSmithSelectedIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)} [${stat}]<br><span style="font-size:9px;">${equipmentOptionSummary(entry.item)} / Cost ${cost} shard${cost === 1 ? '' : 's'} / Success ${chance}%</span></div>`;
+    }).join('') : `<div class="menu-item" style="color:#777;">No equipment with an option.</div>`;
+    overlay.innerHTML = `<div class="menu-title">DARK SMITH</div><p style="font-size:11px;color:#c58cff;">Forge Shards: ${ctxGame.forgeShards}. Dismantle Rare or better carried equipment for material.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">First 10 successful upgrades: 100%. Then -1% per success, minimum 10%. Material cost rises every 10 successes.<br>[↑/↓]: Cursor | [Enter]: Forge | [D]: Dismantle | [Esc]: Exit</p>`;
+  } else if (overlayMode === "dark-smith-dismantle") {
+    overlay.style.display = "flex";
+    const rows = ctxGame.darkSmithDismantleEntries.length ? ctxGame.darkSmithDismantleEntries.map((entry, idx) => {
+      const stat = entry.item.type === 'weapon' ? `ATK ${entry.item.atk}` : `DEF ${entry.item.def}`;
+      return `<div class="menu-item ${idx === ctxGame.darkSmithDismantleSelectedIndex ? 'selected' : ''}">${coloredEquipmentName(entry.item)} [${stat}]<br><span style="font-size:9px;">${rarityLabel(entry.item.rarity)} / ${equipmentOptionSummary(entry.item)} / Yield ${entry.yield} shard${entry.yield === 1 ? '' : 's'}</span></div>`;
+    }).join('') : `<div class="menu-item" style="color:#777;">No Rare or better carried equipment.</div>`;
+    overlay.innerHTML = `<div class="menu-title">DISMANTLE EQUIPMENT</div><p style="font-size:11px;color:#ffcc66;">Forge Shards: ${ctxGame.forgeShards}. Equipped gear is never listed.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">Rare: 1 / Very Rare: 3 / Ultra Rare: 8<br>[↑/↓]: Cursor | [Enter]: Select | [Esc]: Back</p>`;
+  } else if (overlayMode === "dark-smith-dismantle-confirm") {
+    overlay.style.display = "flex";
+    const entry = ctxGame.darkSmithDismantleEntries[ctxGame.darkSmithDismantleSelectedIndex];
+    overlay.innerHTML = entry
+      ? `<div class="menu-title">CONFIRM DISMANTLE</div><p style="font-size:12px;line-height:1.7;">Destroy <span style="color:#ffe066;">${entry.item.name}</span><br>and receive ${entry.yield} Forge Shard${entry.yield === 1 ? '' : 's'}?</p><p style="font-size:10px;color:#888;">[Enter]: Confirm | [Esc]: Cancel</p>`
+      : `<div class="menu-title">CONFIRM DISMANTLE</div><p style="color:#777;">The selected equipment is no longer available.</p><p style="font-size:10px;color:#888;">[Esc]: Back</p>`;
+  } else if (overlayMode === "blacksmith") {
+    overlay.style.display = "flex";
+    const rows = ctxGame.blacksmithEntries.map((entry, idx) => `<div class="menu-item ${idx === ctxGame.blacksmithSelectedIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)}<br><span style="font-size:9px;">${rarityLabel(entry.item.rarity)} / ${equipmentOptionSummary(entry.item)}</span></div>`).join('');
+    overlay.innerHTML = `<div class="menu-title">BLACKSMITH</div><p style="font-size:11px;color:#ffcc66;">One random alteration costs ${BLACKSMITH_CONFIG.rerollCost} gold. You may compare and reject it, but payment is final.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">[↑/↓]: Equipment | [Enter]: Select | [Esc]: Leave</p>`;
+  } else if (overlayMode === "blacksmith-kind") {
+    overlay.style.display = "flex";
+    const entry = ctxGame.blacksmithEntries[ctxGame.blacksmithSelectedIndex];
+    const kinds = ['Reroll option', 'Reroll item rarity'];
+    const rows = kinds.map((label, idx) => `<div class="menu-item ${idx === ctxGame.blacksmithKindIndex ? 'selected' : ''}">${label}</div>`).join('');
+    overlay.innerHTML = `<div class="menu-title">CHOOSE ALTERATION</div><p style="font-size:11px;">${entry ? coloredEquipmentName(entry.item) : 'No equipment'} / Carried gold ${ctxGame.player.gold}</p>${rows}<p style="font-size:10px;color:#888;">Cost ${BLACKSMITH_CONFIG.rerollCost}g on roll. [Enter]: Roll | [Esc]: Back</p>`;
+  } else if (overlayMode === "blacksmith-compare") {
+    overlay.style.display = "flex";
+    const proposal = ctxGame.blacksmithProposal;
+    const original = proposal?.original; const candidate = proposal?.candidate;
+    const stat = item => item?.type === 'weapon' ? `ATK ${item.atk}` : `DEF ${item?.def}`;
+    overlay.innerHTML = proposal ? `<div class="menu-title">BLACKSMITH ALTERATION</div><div style="font-size:11px;line-height:1.8;text-align:left;"><b>Current</b>: ${rarityLabel(original.rarity)} ${coloredEquipmentName(original)} / ${stat(original)} / ${equipmentOptionSummary(original)}<br><b>Candidate</b>: ${rarityLabel(candidate.rarity)} ${coloredEquipmentName(candidate)} / ${stat(candidate)} / ${equipmentOptionSummary(candidate)}</div><p style="font-size:10px;color:#888;">[Enter]: Accept candidate | [Esc]: Keep current</p>` : `<div class="menu-title">BLACKSMITH ALTERATION</div><p>No candidate.</p>`;
+  } else if (overlayMode === "death-summary") {
     overlay.style.display = "flex";
     const summary = ctxGame.deathSummary || { deathFloor: 0, goldLost: 0, divineGoldGranted: 0, goldAfterRescue: ctxGame.player.gold, expLost: 0, level: ctxGame.player.level, weaponName: ctxGame.player.weapon.name, armorName: ctxGame.player.armor.name, bombRange: ctxGame.player.bombRange, bombCapacity: ctxGame.player.bombCapacity, warpCount: ctxGame.discoveredWarpFloors.length };
     const divineGiftHtml = summary.divineGoldGranted > 0 ? `<div style='color:#ffe066;'>Divine aid: The gods granted ${summary.divineGoldGranted} gold. You now carry ${summary.goldAfterRescue} gold for the Inn.</div>` : "";
     overlay.innerHTML = `<h1 style='color:#ff9933; font-size:28px; margin-bottom:8px;'>YOU WERE RESCUED</h1><p style='font-size:12px; color:#aaa; margin:0 0 12px;'>The town rescue party recovered you from B${summary.deathFloor}.</p><div style='font-size:11px; line-height:1.6; text-align:left; width:88%;'><div style='color:#ff7777;'>Lost: ${summary.goldLost} gold / ${summary.expLost} current EXP / current floor progress</div>${divineGiftHtml}<div style='color:#77ff99;'>Preserved: LV ${summary.level}, ${summary.weaponName}, ${summary.armorName}</div><div style='color:#77ff99;'>Bomb RNG ${summary.bombRange}, capacity ${summary.bombCapacity}, discovered warps ${summary.warpCount}</div><div style='color:#aabbee;'>Recovery: HP 50% / Hunger 50 / Morning</div></div><p style='font-size:14px; color:#00ffcc; margin-top:24px;'>Press [ENTER] to Return to Town</p>`;
-  } else if (state === "FE_VICTORY") {
+  } else if (overlayMode === "victory") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<h1 style='color:#ffff00; font-size:32px; text-shadow:0 0 10px #ffff00;'>VICTORY CONCLUDED</h1><p style='font-size:13px; color:#33ff33;'>You successfully slayed the Overlord<br>and returned alive to the Town!</p><p style='font-size:14px; color:#00ffcc; margin-top:30px;'>Press [ESC] to Return to Main Title</p>`;
   } else {
@@ -1955,50 +4152,15 @@ function render(state, ctxGame) {
 }
 
 // ==========================================
-// 7. エントリポイント ＆ キーボードマッピング
+// 8. エントリポイント ＆ キーボードprojection
 // ==========================================
 const engine = new SFAEngine(SFA_DEFINITIONS, "FE_TITLE", context, guards, actions, render);
 
 document.addEventListener("keydown", (e) => {
-  let sfaEvent = null;
-  const state = engine.currentState;
-
-  // 各種メニュー状態と通常ターン状態でのキーコンフィグ分離をエンジン経由で安全に紐付け
-  if (state === "FE_SHOP_MENU" || state === "FE_WARP_MENU") {
-      if (e.key === "ArrowUp")    sfaEvent = "MENU_UP";
-      if (e.key === "ArrowDown")  sfaEvent = "MENU_DOWN";
-      if (e.key === "Enter")      sfaEvent = "SELECT";
-      if (e.key === "Escape")     sfaEvent = "ESCAPE";
-  } else if (state === "FE_INN_MENU" || state === "FE_BAR_MENU") {
-      if (e.key === "Enter")      sfaEvent = "SELECT";
-      if (e.key === "Escape")     sfaEvent = "ESCAPE";
-  } else {
-      // 通常歩行時
-      if (e.key === "ArrowUp")    sfaEvent = "MOVE_UP";
-      if (e.key === "ArrowDown")  sfaEvent = "MOVE_DOWN";
-      if (e.key === "ArrowLeft")  sfaEvent = "MOVE_LEFT";
-      if (e.key === "ArrowRight") sfaEvent = "MOVE_RIGHT";
-      if (e.key === " ")          sfaEvent = "PLACE_BOMB";
-      if (e.key === ".")          sfaEvent = "PASS";
-      if (e.key === "Enter")      sfaEvent = "INTERACT"; // 施設マスの上で決定キーを押すと侵入
-      if (e.key === "Escape")     sfaEvent = "ESCAPE";
-  }
-
-  // タイトル等でのグローバルスタート
-  if (e.key === "Enter" && (state === "FE_TITLE" || state === "FE_VICTORY")) {
-      sfaEvent = "START";
-  }
-  if (e.key === "Enter" && state === "FE_DEATH_SUMMARY") {
-      sfaEvent = "RETURN_TO_TOWN";
-  }
-  if (e.key === "Escape" && (state === "FE_DEATH_SUMMARY" || state === "FE_VICTORY")) {
-      sfaEvent = "ESCAPE";
-  }
-
-  if (sfaEvent) {
-    e.preventDefault();
-    engine.transition(sfaEvent);
-  }
+  const sfaEvent = projectKeyToEvent(engine.currentState, e.key);
+  if (!sfaEvent) return;
+  e.preventDefault();
+  engine.transition(sfaEvent);
 });
 </script>
 </body>
