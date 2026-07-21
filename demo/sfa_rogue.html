@@ -182,12 +182,12 @@
         </div>
         <p id="game-controls" style="font-size: 11px; color: #666; text-align: center; margin-top: 10px;">
             [Enter]: Select / Action | [Esc]: Title / Exit Menu <br>
-            [←/→/↑/↓]: Move & Attack | [Space]: Place Bomb | [R]: Return Scroll | [.]: Pass 1 Turn | [I]: Equipment | [P]: Auto Patrol<br>[F8]: Export Debug Snapshot | [F9]: Import Snapshot | [F10]: Resume Loaded Auto Patrol
+            [←/→/↑/↓]: Move & Attack | [Space]: Place Bomb | [R]: Return Scroll | [.]: Pass 1 Turn | [I]: Equipment | [P]: Auto Patrol<br>[F8]: Export Floor Debug Package | [F9]: Retry Floor Start | [F10]: Resume Loaded Auto Patrol
         </p>
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage151-bomb-escape-recovery-safety-20260720";
+const SFA_ROGUE_BUILD_ID = "stage152ax-contact-aftermath-hit-avoidance-20260721";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -704,15 +704,24 @@ const AUTO_PATROL_CONFIG = Object.freeze({
 const autoPatrolRuntime = {
   state: "AUTO_PATROL_OFF", generation: 0, timerId: null, speed: AUTO_PATROL_CONFIG.defaultSpeed,
   decision: null, stopReason: "", elapsedTurns: 0, deepestDepth: 0, repeatedSignature: "", repeatCount: 0,
-  bombPlan: null, pendingBombPlan: null, bombSetupPlan: null, bombLurePlan: null, bombLureEvaluatedDepth: 0, meleePlan: null, contactRoutePlan: null, initialRoutePlan: null, foodHuntPlan: null,
-  contactRouteState: "CONTACT_ROUTE_EVALUATE", initialRouteState: "INITIAL_ROUTE_EVALUATE", foodHuntState: "FOOD_HUNT_EVALUATE",
-  plansStarted: 0, plannedBombKills: 0, meleePlansCompleted: 0, contactRoutePlansStarted: 0, contactRoutePlansCompleted: 0, initialRoutePlansStarted: 0, initialRoutePlansCompleted: 0, foodHuntPlansStarted: 0, foodHuntTargetsDefeated: 0,
+  bombPlan: null, pendingBombPlan: null, bombSetupPlan: null, bombLurePlan: null, bombLureEvaluatedDepth: 0, meleePlan: null, lurePlan: null, contactRoutePlan: null, initialRoutePlan: null, foodHuntPlan: null,
+  lurePlanState: "LURE_PLAN_NONE", contactRouteState: "CONTACT_ROUTE_EVALUATE", initialRouteState: "INITIAL_ROUTE_EVALUATE", foodHuntState: "FOOD_HUNT_EVALUATE",
+  plansStarted: 0, plannedBombKills: 0, meleePlansCompleted: 0, lurePlansStarted: 0, lurePlansCompleted: 0, lurePlansInvalidated: 0, contactRoutePlansStarted: 0, contactRoutePlansCompleted: 0, initialRoutePlansStarted: 0, initialRoutePlansCompleted: 0, foodHuntPlansStarted: 0, foodHuntTargetsDefeated: 0,
   levelCommitAttacks: 0, emergencyPositions: 0, multiStrongWallLastEvaluationTurn: -999, multiStrongWallLastEvaluationDepth: 0, multiStrongWallLastEvaluationSignature: "", multiStrongWallEvaluations: 0, multiStrongWallPlansStarted: 0, bombEscapePreflightEvaluations: 0, bombEscapePreflightRejected: 0, bombEscapeSuppressUntilTurn: -1, bombEscapeSuppressTargetId: null, floorBombPlacementRejectedDepth: 0, bombEscapeAlternativePlan: null, bombEscapeAlternativePlansStarted: 0, bombEscapeAlternativePlansCompleted: 0,
   movementHistory: [], oscillationState: "OBJECTIVE_CONFLICT_EVALUATE", oscillationBreaks: 0, oscillationFallbacks: 0,
   objectiveSuppressions: {}, objectiveConflictDetections: 0, objectiveDemotions: 0, objectiveAlternativeCommits: 0,
   objectiveState: "OBJECTIVE_NONE", activeObjective: null, objectiveSequence: 0, objectiveHistory: [],
   objectiveCreatedCount: 0, objectiveCompletedCount: 0, objectiveFailedCount: 0, objectiveDeathCount: 0,
-  lastStandStarts: 0, lastBombPlanTerminal: null, escapeFailureMemory: []
+  lastStandStarts: 0, contactAftermathAvoidances: 0, contactAftermathBombEscalations: 0, contactAftermathTargetAvoidances: 0, contactAftermathTargetId: null, contactAftermathDepth: 0, contactAftermathVisitedCells: [], lastBombPlanTerminal: null, escapeFailureMemory: [], huntStallSignature: "", huntStallStartTurn: -1, floorHuntAbandonedDepth: 0, floorHuntAbandonReason: "", engagementPlan: null, engagementPlansStarted: 0, engagementPlansEnded: 0, engagementLastEndReason: "", huntStallLastHp: null,
+  combatObjectiveSequence: 0, activeCombatTactic: null, combatTacticState: "TACTIC_NONE",
+  combatTacticalAttempts: [], combatRejectedTrajectorySignatures: [], combatVisitedStateActions: [],
+  combatVisitedStates: [], combatStateVersion: 0, combatNoProgressCount: 0,
+  combatTrajectoryReuseBlocked: 0, combatStateActionReuseBlocked: 0, combatAbaCycles: 0,
+  tacticalShadowCache: {}, tacticalShadowEvaluations: 0, tacticalShadowCacheHits: 0,
+  tacticalShadowBudgetDepth: 0, tacticalShadowBudgetUsed: 0, tacticalShadowLastResult: null,
+  tacticalShadowLastTriggerSignature: "", tacticalShadowLastTriggerState: null, tacticalShadowTriggerCounts: {},
+  tacticalShadowSameStateSkips: 0, tacticalShadowLastSkipReason: "",
+  horizontalFlowPlan: null, horizontalFlowDirection: null, horizontalFlowDisabled: false, horizontalFlowBeamWidth: 0, horizontalFlowEvaluations: 0, horizontalFlowBudgetDepth: 0, horizontalFlowBudgetUsed: 0, horizontalFlowPlansStarted: 0, horizontalFlowPlansCompleted: 0, horizontalFlowPlansInvalidated: 0, horizontalFlowLastResult: null, horizontalFlowLastSignature: "", horizontalFlowLastRejectionSignature: "", horizontalFlowLastRejectionTurn: -999, horizontalFlowLastRejectionHpRatio: 0
 };
 
 const AUTO_PATROL_SCHEDULER_RUNTIME_KEYS = Object.freeze([
@@ -4709,6 +4718,7 @@ const actions = {
       staged.saveUi.canonicalSavedSnapshot = raw;
       addLog(staged, "Continued from the last inn save.");
       commitLoadSavedGameStagingContext(ctx, staged);
+      resetAnalysisTrace("continue-loaded", ctx);
     } catch (error) {
       commitLoadFailureUi(ctx, error);
     }
@@ -4797,6 +4807,7 @@ const actions = {
     addLog(staged, "Welcome to SFA Rogue.");
     addLog(staged, "Descend, survive, and reshape the dungeon with bombs.");
     commitNewGameStagingContext(ctx, staged, preservedSaveUi);
+    resetAnalysisTrace("new-game-started", ctx);
   },
 
   apply_death_penalty: (ctx) => {
@@ -4851,6 +4862,7 @@ const actions = {
     addLog(ctx, "Your level, equipment, bomb upgrades, and discovered warps were preserved.");
     ctx.lastDeathSummary = resolvedSummary;
     ctx.deathSummary = null;
+    resetAnalysisTrace("defeat-dismissed-town-return", ctx);
   },
 
   execute_map_generation: (ctx) => {
@@ -4858,6 +4870,8 @@ const actions = {
     clearTransientInteractionRuntime(staged);
     executeMapGenerationSfa(staged);
     commitMapGenerationStagingContext(ctx, staged);
+    resetAnalysisTrace("floor-entered", ctx);
+    captureDebugFloorStartSnapshot(ctx);
   },
 
   trigger_stairs: (ctx) => {
@@ -5882,6 +5896,435 @@ function transitionAutoPatrolObjective(event) {
   autoPatrolRuntime.objectiveState = transition.target_state;
   return true;
 }
+function autoPatrolDetectedCombatEnemies(ctx) {
+  return autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer);
+}
+function autoPatrolDecisionIsDetectedCombatTactic(ctx, decision) {
+  if (ctx.currentMapType !== "dungeon") return false;
+  const active = autoPatrolRuntime.activeObjective;
+  const engagementActive = active?.type === "DEFEAT_DETECTED_ENEMIES"
+    && (active.targetEnemyIds || []).some(id => Boolean(autoPatrolEnemyById(ctx, id)));
+  if (!engagementActive && autoPatrolDetectedCombatEnemies(ctx).length === 0) return false;
+  const reason = decision?.reason || "";
+  const category = autoPatrolObjectiveCategory(reason);
+  return ["RECOVERY", "COMBAT", "SURVIVAL", "BOMB"].includes(category)
+    || /detected-combat|wall-cover|strong-wall|separate-multi-enemy|open-lane|single-enemy-lure/i.test(reason)
+    || reason.startsWith("last-stand:") || reason.startsWith("escape-lethal-target:");
+}
+function autoPatrolObjectiveTypeForContext(ctx, decision) {
+  return autoPatrolDecisionIsDetectedCombatTactic(ctx, decision) ? "DEFEAT_DETECTED_ENEMIES" : autoPatrolObjectiveTypeFromDecision(decision);
+}
+function autoPatrolCombatTacticType(decision) {
+  const reason = decision?.reason || "";
+  if (reason.startsWith("last-stand:")) return "LAST_STAND";
+  if (reason.startsWith("escape-lethal-target:")) return "FORCED_SURVIVAL_COMBAT";
+  if (/recover|recovery|heal|potion|food/i.test(reason)) return "RECOVER_WHILE_ENGAGED";
+  if (/wall-cover|strong-wall|wall-position/i.test(reason)) return "WALL_COVER_REPOSITION";
+  if (/separate|open-lane|reposition|escape/i.test(reason)) return "OPEN_POSITION_REPOSITION";
+  if (/bomb/i.test(reason)) return "BOMB_FULL_TRAJECTORY";
+  return "DIRECT_MELEE";
+}
+function autoPatrolCombatRouteForDecision(decision) {
+  if (Array.isArray(decision?.route) && decision.route.length) return [...decision.route];
+  const candidates = [
+    autoPatrolRuntime.bombPlan?.route, autoPatrolRuntime.pendingBombPlan?.route,
+    autoPatrolRuntime.bombSetupPlan?.route, autoPatrolRuntime.bombLurePlan?.route,
+    autoPatrolRuntime.bombEscapeAlternativePlan?.route, autoPatrolRuntime.lurePlan?.route,
+    autoPatrolRuntime.contactRoutePlan?.route, autoPatrolRuntime.initialRoutePlan?.route
+  ];
+  const route = candidates.find(value => Array.isArray(value) && value.length);
+  return route ? [...route] : [decision?.event].filter(Boolean);
+}
+function autoPatrolCombatStateKey(ctx, objective = autoPatrolRuntime.activeObjective) {
+  const ids = [...(objective?.targetEnemyIds || [])].sort((a, b) => a - b);
+  const enemyBands = ids.map(id => {
+    const enemy = autoPatrolEnemyById(ctx, id);
+    return `${id}:${enemy ? Math.ceil(Math.max(0, enemy.hp) / 10) : 0}`;
+  });
+  return [ctx.depth, `${ctx.player.x},${ctx.player.y}`, Math.ceil(ctx.player.hp / 10), ids.join('+'), enemyBands.join(','), (ctx.bombs || []).length].join('|');
+}
+function autoPatrolCombatTrajectorySignature(ctx, decision, objective = autoPatrolRuntime.activeObjective) {
+  const route = autoPatrolCombatRouteForDecision(decision);
+  return JSON.stringify({
+    floor: ctx.depth,
+    startCombatState: autoPatrolCombatStateKey(ctx, objective),
+    firstAction: route[0] || decision?.event || null,
+    route,
+    arrivalRegion: `${ctx.player.x},${ctx.player.y}:${route.at(-1) || "HOLD"}`,
+    targetEnemyIds: [...(objective?.targetEnemyIds || autoPatrolDetectedCombatEnemies(ctx).map(enemy => enemy.id))].sort((a, b) => a - b),
+    predictedEnemyLureDirection: autoPatrolIsMovementEvent(route[0]) ? route[0].replace("MOVE_", "") : "NONE"
+  });
+}
+function autoPatrolCombatMeaningfulChanges(before, after, objective) {
+  const changes = [];
+  const ids = objective?.targetEnemyIds || [];
+  if (after.hostileCount < before.hostileCount) changes.push("TARGET_ENEMY_DEFEATED");
+  if (after.hostileHp < before.hostileHp) changes.push("ENEMY_HP_REDUCED");
+  if (after.hp > before.hp) changes.push("PLAYER_HEALED");
+  if (after.bombCount !== before.bombCount) changes.push("EXPLOSION_OR_BOMB_STATE_CHANGED");
+  if (before.adjacentHostileCount === 0 && after.adjacentHostileCount > 0) changes.push("NEW_ATTACK_WINDOW");
+  if (after.floor !== before.floor || after.mapType !== before.mapType) changes.push("TERRAIN_OR_OCCUPANCY_CHANGED");
+  if (ids.some(id => before.aliveTargetIds?.includes(id) && !after.aliveTargetIds?.includes(id))) changes.push("TARGET_ENEMY_DEFEATED");
+  return [...new Set(changes)];
+}
+function autoPatrolUpdateDetectedCombatTargets(ctx, objective) {
+  if (!objective || objective.type !== "DEFEAT_DETECTED_ENEMIES") return [];
+  const previous = new Set(objective.targetEnemyIds || []);
+  const next = new Set(previous);
+  for (const enemy of autoPatrolDetectedCombatEnemies(ctx)) next.add(enemy.id);
+  const added = [...next].filter(id => !previous.has(id)).sort((a, b) => a - b);
+  objective.targetEnemyIds = [...next].sort((a, b) => a - b);
+  objective.primaryTargetId = objective.primaryTargetId && next.has(objective.primaryTargetId)
+    ? objective.primaryTargetId : (objective.targetEnemyIds[0] || null);
+  return added;
+}
+function autoPatrolDetectedCombatCandidateBlock(ctx, decision, objective = autoPatrolRuntime.activeObjective) {
+  if (!decision || decision.kind !== "DISPATCH" || objective?.type !== "DEFEAT_DETECTED_ENEMIES") {
+    return { blocked: false, trajectoryRejected: false, stateActionVisited: false, signature: null, stateAction: null };
+  }
+  const signature = autoPatrolCombatTrajectorySignature(ctx, decision, objective);
+  const stateAction = `${autoPatrolCombatStateKey(ctx, objective)}|${decision.event}`;
+  const trajectoryRejected = (objective.rejectedTrajectorySignatures || []).some(entry => entry.signature === signature && entry.version === objective.combatStateVersion);
+  const stateActionVisited = (objective.visitedStateActions || []).some(entry => entry.key === stateAction && entry.version === objective.combatStateVersion);
+  return { blocked: trajectoryRejected || stateActionVisited, trajectoryRejected, stateActionVisited, signature, stateAction };
+}
+function autoPatrolFilterDetectedCombatCandidates(ctx, candidates, decisionFactory = candidate => candidate) {
+  return candidates.filter(candidate => !autoPatrolDetectedCombatCandidateBlock(ctx, decisionFactory(candidate)).blocked);
+}
+
+function autoPatrolManualTacticEngagementProfile(ctx, target) {
+  const hostiles = autoPatrolHostiles(ctx);
+  const detected = hostiles.filter(enemy => enemy.hasDetectedPlayer);
+  const adjacent = autoPatrolAdjacentHostiles(ctx);
+  const attack = Math.max(1, playerAttackPower(ctx));
+  const enemy = target || adjacent[0] || detected.slice().sort((a, b) => autoPatrolDistance(a, ctx.player) - autoPatrolDistance(b, ctx.player) || a.id - b.id)[0] || null;
+  const meleeTurns = enemy ? Math.max(1, Math.ceil(enemy.hp / attack)) : Infinity;
+  const meleeDamage = enemy ? meleeTurns * Math.max(0, enemyDamageAgainstPlayer(ctx, enemy)) : Infinity;
+  const otherArrivalTurns = enemy ? hostiles.filter(item => item.id !== enemy.id).reduce((best, item) => Math.min(best, Math.max(0, autoPatrolDistance(item, ctx.player) - 1)), Infinity) : Infinity;
+  const quickMelee = Boolean(enemy && autoPatrolDistance(enemy, ctx.player) === 1
+    && meleeTurns <= 4
+    && meleeDamage <= ctx.player.maxHp * 0.15
+    && otherArrivalTurns >= meleeTurns);
+  const escapeEvents = ['MOVE_UP','MOVE_RIGHT','MOVE_DOWN','MOVE_LEFT'].filter(event => {
+    const delta = autoPatrolDirectionDelta(event);
+    if (!delta) return false;
+    const x = ctx.player.x + delta.dx;
+    const y = ctx.player.y + delta.dy;
+    return autoPatrolWalkable(ctx, x, y);
+  });
+  const bombPathBlock = Boolean(enemy
+    && adjacent.length <= 1
+    && detected.length <= 2
+    && escapeEvents.length > 0
+    && !quickMelee);
+  return {
+    activeEngagementTargetId: enemy?.id ?? null,
+    deferredEnemyIds: detected.filter(item => item.id !== enemy?.id).map(item => item.id).sort((a,b)=>a-b),
+    detectedCount: detected.length,
+    adjacentCount: adjacent.length,
+    meleeTurns,
+    meleeDamage,
+    otherArrivalTurns,
+    escapeEvents,
+    quickMelee,
+    bombPathBlock,
+    tactic: quickMelee ? 'QUICK_MELEE_FINISH' : bombPathBlock ? 'BOMB_PATH_BLOCK_AND_DISENGAGE' : 'TACTICAL_RESET_FOR_ADVANTAGE'
+  };
+}
+function autoPatrolManualTacticCandidateSet(ctx, target) {
+  const profile = autoPatrolManualTacticEngagementProfile(ctx, target);
+  const candidates = [];
+  const enemy = autoPatrolEnemyById(ctx, profile.activeEngagementTargetId);
+  if (profile.quickMelee && enemy) candidates.push({
+    kind:'DISPATCH', event:autoPatrolDirectionEvent(enemy.x-ctx.player.x, enemy.y-ctx.player.y),
+    route:[autoPatrolDirectionEvent(enemy.x-ctx.player.x, enemy.y-ctx.player.y)], reason:'manual-tactic:quick-melee-finish', targetId:enemy.id,
+    tacticType:'QUICK_MELEE_FINISH'
+  });
+  if (profile.bombPathBlock && enemy) candidates.push({
+    kind:'DISPATCH', event:'PLACE_BOMB', route:['PLACE_BOMB'], reason:'manual-tactic:bomb-path-block-disengage', targetId:enemy.id,
+    tacticType:'BOMB_PATH_BLOCK_AND_DISENGAGE', escapeCandidates:profile.escapeEvents.slice()
+  });
+  return { profile, candidates };
+}
+function autoPatrolCombatComparisonVector(metrics) {
+  const value = metrics || {};
+  return [
+    value.dead ? 1 : 0,
+    Math.max(0, (value.adjacent || 0) - 1),
+    value.bombRisk ? 1 : 0,
+    value.adjacent || 0,
+    value.hpLoss || 0,
+    value.detected || 0,
+    value.near2 || 0,
+    -(value.kills || 0),
+    -(value.exits || 0)
+  ];
+}
+function autoPatrolManualTacticMateriallyBetter(baselineResult, candidateResult, maxHp = 100) {
+  if (!candidateResult?.accepted || candidateResult.metrics?.dead) return false;
+  const base = baselineResult?.metrics || {};
+  const next = candidateResult.metrics || {};
+  if ((next.adjacent || 0) >= 2) return false;
+  if (next.bombRisk && !base.bombRisk) return false;
+  if (base.dead && !next.dead) return true;
+  if ((next.adjacent || 0) < (base.adjacent || 0)) return true;
+  const materialHp = Math.max(4, Math.max(1, maxHp) * 0.05);
+  if ((next.hpLoss || 0) + materialHp <= (base.hpLoss || 0)) return true;
+  const sameSafety = (next.adjacent || 0) <= (base.adjacent || 0)
+    && (next.hpLoss || 0) <= (base.hpLoss || 0)
+    && !next.bombRisk;
+  if (sameSafety && (next.kills || 0) > (base.kills || 0)) return true;
+  if (sameSafety && (next.detected || 0) === 0 && (base.detected || 0) > 0) return true;
+  return false;
+}
+async function autoPatrolCompareManualTacticCandidates(ctx, baseline, baselineResult) {
+  if (!baseline || baseline.kind !== "DISPATCH") return null;
+  if (autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan || autoPatrolRuntime.bombSetupPlan || autoPatrolRuntime.bombLurePlan || autoPatrolRuntime.meleePlan) return null;
+  const detected = autoPatrolDetectedCombatEnemies(ctx);
+  const adjacent = autoPatrolAdjacentHostiles(ctx);
+  if (!detected.length && !adjacent.length) return null;
+  const target = adjacent[0] || detected.slice().sort((a,b) => autoPatrolDistance(a, ctx.player) - autoPatrolDistance(b, ctx.player) || a.id - b.id)[0];
+  const modeled = autoPatrolManualTacticCandidateSet(ctx, target);
+  const filtered = autoPatrolFilterDetectedCombatCandidates(ctx, modeled.candidates);
+  if (!filtered.length) return null;
+  const runtime = autoPatrolClonePlanRuntime();
+  let best = null;
+  for (const candidate of filtered) {
+    const result = await autoPatrolSimulateEvent(candidate.event);
+    autoPatrolRestorePlanRuntime(runtime);
+    if (!autoPatrolManualTacticMateriallyBetter(baselineResult, result, ctx.player.maxHp)) continue;
+    const vector = autoPatrolCombatComparisonVector(result.metrics);
+    if (!best || vector.some((value,index) => value !== best.vector[index] && value < best.vector[index] && vector.slice(0,index).every((prior,j) => prior === best.vector[j]))) {
+      best = { candidate, result, vector, profile: modeled.profile };
+    }
+  }
+  autoPatrolRestorePlanRuntime(runtime);
+  return best;
+}
+let autoPatrolManualBombTrajectoryDepth = 0;
+function autoPatrolManualBombPendingPlan(ctx, target, escapeEvent) {
+  const delta = autoPatrolDirectionDelta(escapeEvent);
+  if (!target || !delta) return null;
+  const toX = ctx.player.x + delta.dx;
+  const toY = ctx.player.y + delta.dy;
+  if (!autoPatrolWalkable(ctx, toX, toY) || ctx.enemies.some(enemy => enemy.x === toX && enemy.y === toY)) return null;
+  return {
+    targetId: target.id,
+    bombX: ctx.player.x,
+    bombY: ctx.player.y,
+    escape: { dx: delta.dx, dy: delta.dy, event: escapeEvent, fromX: ctx.player.x, fromY: ctx.player.y, toX, toY },
+    reason: 'manual-tactic:bomb-path-block-disengage'
+  };
+}
+function autoPatrolManualBombTrajectoryMateriallyBetter(baseline, bomb, maxHp = 100, currentAdjacent = 0) {
+  if (!bomb || bomb.dead || bomb.trapped > 0 || bomb.maxAdjacent >= 2) return false;
+  if (bomb.multiAdjacentTurns > baseline.multiAdjacentTurns) return false;
+  const fatalAvoided = baseline.dead && !bomb.dead;
+  const surroundingReduced = bomb.maxAdjacent < baseline.maxAdjacent
+    || bomb.multiAdjacentTurns + 1 < baseline.multiAdjacentTurns;
+  const materialHp = Math.max(6, Math.max(1, maxHp) * 0.08);
+  const damageReduced = bomb.hpLoss + materialHp <= baseline.hpLoss;
+  const sameSafety = !baseline.dead
+    && bomb.maxAdjacent <= baseline.maxAdjacent
+    && bomb.multiAdjacentTurns <= baseline.multiAdjacentTurns
+    && bomb.hpLoss <= baseline.hpLoss + Math.max(3, maxHp * 0.03);
+  const progressImproved = (bomb.kills || 0) > (baseline.kills || 0)
+    || (bomb.hostileHpLoss || 0) > (baseline.hostileHpLoss || 0) + 8;
+  const contactBroken = bomb.detected === 0 && baseline.detected > 0;
+  const crisisContained = currentAdjacent >= 1 && sameSafety && bomb.maxAdjacent <= 1;
+  return fatalAvoided || surroundingReduced || damageReduced || (sameSafety && (progressImproved || contactBroken || crisisContained));
+}
+function autoPatrolManualBombProductionEligibility(baseline, bomb, maxHp = 100) {
+  if (!baseline || !bomb) return { eligible: false, reason: 'MISSING_TRAJECTORY' };
+  if (bomb.dead) return { eligible: false, reason: 'BOMB_TRAJECTORY_DEATH' };
+  if ((bomb.trapped || 0) > 0) return { eligible: false, reason: 'BOMB_TRAJECTORY_TRAPPED' };
+  if ((bomb.maxAdjacent || 0) >= 2 || (bomb.multiAdjacentTurns || 0) > 0) return { eligible: false, reason: 'BOMB_MULTI_ADJACENCY' };
+  if ((bomb.multiAdjacentTurns || 0) > (baseline.multiAdjacentTurns || 0)) return { eligible: false, reason: 'ADJACENCY_REGRESSION' };
+  const materialHp = Math.max(8, Math.max(1, maxHp) * 0.10);
+  const fatalAvoided = Boolean(baseline.dead && !bomb.dead);
+  const multiAdjacencyAvoided = (baseline.maxAdjacent || 0) >= 2 && (bomb.maxAdjacent || 0) <= 1;
+  const materialDamageReduction = (bomb.hpLoss || 0) + materialHp <= (baseline.hpLoss || 0);
+  const completedKill = (bomb.kills || 0) > 0 && (bomb.kills || 0) >= (baseline.kills || 0);
+  const contactBrokenWithProgress = (bomb.detected || 0) === 0
+    && (baseline.detected || 0) > 0
+    && ((bomb.hostileHpLoss || 0) >= Math.max(8, (baseline.hostileHpLoss || 0) * 0.5));
+  if (fatalAvoided) return { eligible: true, reason: 'FATALITY_AVOIDED' };
+  if (multiAdjacencyAvoided && (completedKill || materialDamageReduction || contactBrokenWithProgress)) return { eligible: true, reason: 'MULTI_ADJACENCY_AVOIDED' };
+  if (completedKill && materialDamageReduction) return { eligible: true, reason: 'KILL_WITH_MATERIAL_DAMAGE_REDUCTION' };
+  if (contactBrokenWithProgress && materialDamageReduction) return { eligible: true, reason: 'CONTACT_BREAK_WITH_MATERIAL_PROGRESS' };
+  return { eligible: false, reason: 'INSUFFICIENT_FULL_TRAJECTORY_ADVANTAGE' };
+}
+const AUTO_PATROL_TACTICAL_SHADOW_MAX_EVALUATIONS_PER_FLOOR = 6;
+function autoPatrolTacticalShadowCacheKey(ctx, baseline, target, escapeEvent) {
+  const objective = autoPatrolRuntime.activeObjective;
+  return [
+    autoPatrolCombatStateKey(ctx, objective),
+    target?.id ?? "none",
+    baseline?.event || "none",
+    escapeEvent || "none",
+    objective?.combatStateVersion || 0
+  ].join("|");
+}
+function autoPatrolResetTacticalShadowBudgetForDepth(ctx) {
+  if (autoPatrolRuntime.tacticalShadowBudgetDepth === ctx.depth) return;
+  autoPatrolRuntime.tacticalShadowBudgetDepth = ctx.depth;
+  autoPatrolRuntime.tacticalShadowBudgetUsed = 0;
+  autoPatrolRuntime.tacticalShadowCache = {};
+  autoPatrolRuntime.tacticalShadowLastTriggerSignature = "";
+  autoPatrolRuntime.tacticalShadowLastTriggerState = null;
+}
+function autoPatrolTacticalShadowTrigger(ctx, target) {
+  const objective = autoPatrolRuntime.activeObjective;
+  const state = {
+    depth: ctx.depth,
+    detectedIds: autoPatrolDetectedCombatEnemies(ctx).map(enemy => enemy.id).sort((a,b) => a-b),
+    adjacentIds: autoPatrolAdjacentHostiles(ctx).map(enemy => enemy.id).sort((a,b) => a-b),
+    targetId: target?.id ?? null,
+    combatStateVersion: objective?.combatStateVersion || 0,
+    bombEscapePreflightRejected: autoPatrolRuntime.bombEscapePreflightRejected || 0
+  };
+  const signature = JSON.stringify(state);
+  const previous = autoPatrolRuntime.tacticalShadowLastTriggerState;
+  let reason = null;
+  if (!previous || previous.depth !== state.depth || (!previous.detectedIds.length && state.detectedIds.length)) reason = "FIRST_COMBAT_CONTACT";
+  else if (previous.targetId !== state.targetId) reason = "ACTIVE_TARGET_CHANGED";
+  else if (previous.bombEscapePreflightRejected !== state.bombEscapePreflightRejected) reason = "BOMB_PREFLIGHT_REJECTED";
+  else if (previous.combatStateVersion !== state.combatStateVersion) reason = "COMBAT_STATE_VERSION_CHANGED";
+  else if (JSON.stringify(previous.detectedIds) !== JSON.stringify(state.detectedIds) || JSON.stringify(previous.adjacentIds) !== JSON.stringify(state.adjacentIds)) reason = "COMBAT_CONTACT_SET_CHANGED";
+  return { reason, signature, state };
+}
+async function autoPatrolMaybeEvaluateManualBombTrajectoryShadow(ctx, baseline, runtimeAfterBaseline) {
+  if (autoPatrolManualBombTrajectoryDepth > 0 || !baseline || baseline.kind !== "DISPATCH" || baseline.event === "PLACE_BOMB") return null;
+  if (autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan || autoPatrolRuntime.bombSetupPlan || autoPatrolRuntime.bombLurePlan) return null;
+  const detected = autoPatrolDetectedCombatEnemies(ctx);
+  const adjacent = autoPatrolAdjacentHostiles(ctx);
+  if (!detected.length && !adjacent.length) return null;
+  const target = adjacent[0] || detected.slice().sort((left, right) => autoPatrolDistance(left, ctx.player) - autoPatrolDistance(right, ctx.player) || left.id - right.id)[0];
+  autoPatrolResetTacticalShadowBudgetForDepth(ctx);
+  const trigger = autoPatrolTacticalShadowTrigger(ctx, target);
+  if (!trigger.reason && autoPatrolRuntime.tacticalShadowLastTriggerSignature === trigger.signature && autoPatrolRuntime.tacticalShadowLastResult) {
+    autoPatrolRuntime.tacticalShadowSameStateSkips += 1;
+    autoPatrolRuntime.tacticalShadowCacheHits += 1;
+    autoPatrolRuntime.tacticalShadowLastSkipReason = "SAME_TRIGGER_STATE";
+    autoPatrolRuntime.tacticalShadowLastResult = { ...structuredClone(autoPatrolRuntime.tacticalShadowLastResult), cacheHit: true, skipReason: "SAME_TRIGGER_STATE" };
+    return autoPatrolRuntime.tacticalShadowLastResult;
+  }
+  const modeled = autoPatrolManualTacticCandidateSet(ctx, target);
+  const bombCandidate = modeled.candidates.find(candidate => candidate.tacticType === "BOMB_PATH_BLOCK_AND_DISENGAGE");
+  const escapeEvent = bombCandidate?.escapeCandidates?.[0] || modeled.profile.escapeEvents[0] || null;
+  if (!bombCandidate || !escapeEvent) return null;
+  const cacheKey = autoPatrolTacticalShadowCacheKey(ctx, baseline, target, escapeEvent);
+  const cached = autoPatrolRuntime.tacticalShadowCache[cacheKey];
+  if (cached) {
+    autoPatrolRuntime.tacticalShadowCacheHits += 1;
+    autoPatrolRuntime.tacticalShadowLastResult = { ...structuredClone(cached), cacheHit: true };
+    return autoPatrolRuntime.tacticalShadowLastResult;
+  }
+  if (autoPatrolRuntime.tacticalShadowBudgetUsed >= AUTO_PATROL_TACTICAL_SHADOW_MAX_EVALUATIONS_PER_FLOOR) return null;
+  autoPatrolRuntime.tacticalShadowBudgetUsed += 1;
+  autoPatrolRuntime.tacticalShadowEvaluations += 1;
+  const comparison = await autoPatrolCompareManualBombFullTrajectory(ctx, baseline, runtimeAfterBaseline, target, escapeEvent);
+  const productionEligibility = autoPatrolManualBombProductionEligibility(comparison.baseline, comparison.bomb, ctx.player.maxHp);
+  const record = {
+    cacheKey,
+    triggerReason: trigger.reason,
+    depth: ctx.depth,
+    turn: ctx.turnCount,
+    targetId: target.id,
+    targetIsBoss: Boolean(target.isBoss || target.isAbyssBoss),
+    baselineEvent: baseline.event,
+    escapeEvent,
+    acceptBomb: Boolean(comparison.acceptBomb),
+    productionEligible: productionEligibility.eligible,
+    productionEligibilityReason: productionEligibility.reason,
+    reason: comparison.reason,
+    baseline: comparison.baseline,
+    bomb: comparison.bomb,
+    cacheHit: false
+  };
+  autoPatrolRuntime.tacticalShadowLastTriggerSignature = trigger.signature;
+  autoPatrolRuntime.tacticalShadowLastTriggerState = structuredClone(trigger.state);
+  autoPatrolRuntime.tacticalShadowTriggerCounts[trigger.reason] = (autoPatrolRuntime.tacticalShadowTriggerCounts[trigger.reason] || 0) + 1;
+  autoPatrolRuntime.tacticalShadowLastSkipReason = "";
+  autoPatrolRuntime.tacticalShadowCache[cacheKey] = structuredClone(record);
+  const keys = Object.keys(autoPatrolRuntime.tacticalShadowCache);
+  if (keys.length > 48) delete autoPatrolRuntime.tacticalShadowCache[keys[0]];
+  autoPatrolRuntime.tacticalShadowLastResult = record;
+  return record;
+}
+
+async function autoPatrolCompareManualBombFullTrajectory(ctx, baseline, runtimeAfterBaseline, target, escapeEvent) {
+  const pendingPlan = autoPatrolManualBombPendingPlan(ctx, target, escapeEvent);
+  if (!pendingPlan) return { acceptBomb: false, reason: 'NO_PENDING_PLAN', baseline: null, bomb: null, pendingPlan: null };
+  const replayPrefix = gameRandomRuntime.canonicalReplay.slice();
+  const fork = beginGameRandomSimulationFork();
+  for (let index = replayPrefix.length; index < 768; index += 1) gameRandom();
+  endGameRandomSimulationFork(fork);
+  const futureRandoms = gameRandomRuntime.canonicalReplay.slice();
+  autoPatrolManualBombTrajectoryDepth += 1;
+  try {
+    autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
+    const baselineResult = await autoPatrolSimulateObjectiveTrajectory([baseline.event], futureRandoms, 16, AUTO_PATROL_SIMULATION_DISPATCH_POLICY.RUNTIME_PARITY);
+    autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
+    autoPatrolRuntime.meleePlan = null;
+    autoPatrolRuntime.pendingBombPlan = structuredClone(pendingPlan);
+    const bombResult = await autoPatrolSimulateObjectiveTrajectory(['PLACE_BOMB'], futureRandoms, 16, AUTO_PATROL_SIMULATION_DISPATCH_POLICY.RUNTIME_PARITY);
+    autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
+    gameRandomRuntime.canonicalReplay.length = 0;
+    gameRandomRuntime.canonicalReplay.push(...futureRandoms);
+    return {
+      acceptBomb: autoPatrolManualBombTrajectoryMateriallyBetter(
+        baselineResult, bombResult, ctx.player.maxHp, autoPatrolAdjacentHostiles(ctx).length
+      ),
+      reason: 'FULL_TRAJECTORY_COMPARISON',
+      baseline: baselineResult,
+      bomb: bombResult,
+      pendingPlan
+    };
+  } finally {
+    autoPatrolManualBombTrajectoryDepth = Math.max(0, autoPatrolManualBombTrajectoryDepth - 1);
+    autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
+  }
+}
+
+function autoPatrolSelectDetectedCombatTacticCandidate(ctx, candidates) {
+  const normalized = (candidates || []).filter(candidate => candidate?.kind === "DISPATCH");
+  for (const candidate of normalized) {
+    const block = autoPatrolDetectedCombatCandidateBlock(ctx, candidate);
+    if (!block.blocked) return { candidate, rejected: [] };
+  }
+  return {
+    candidate: null,
+    rejected: normalized.map(candidate => ({
+      tactic: autoPatrolCombatTacticType(candidate),
+      event: candidate.event,
+      reason: candidate.reason || "",
+      ...autoPatrolDetectedCombatCandidateBlock(ctx, candidate)
+    }))
+  };
+}
+async function autoPatrolResolveDetectedCombatTrajectory(ctx, decision) {
+  const objective = autoPatrolRuntime.activeObjective;
+  if (!decision || decision.kind !== "DISPATCH" || objective?.type !== "DEFEAT_DETECTED_ENEMIES") return decision;
+  autoPatrolUpdateDetectedCombatTargets(ctx, objective);
+  const block = autoPatrolDetectedCombatCandidateBlock(ctx, decision, objective);
+  const rejected = block.trajectoryRejected;
+  const tried = block.stateActionVisited;
+  if (!block.blocked) return decision;
+  if (rejected) autoPatrolRuntime.combatTrajectoryReuseBlocked += 1;
+  if (tried) autoPatrolRuntime.combatStateActionReuseBlocked += 1;
+  const category = autoPatrolObjectiveCategory(decision.reason || "");
+  const alternative = await autoPatrolSelectConflictAlternative(ctx, category, decision, autoPatrolRuntime.movementHistory.at(-1));
+  if (alternative) {
+    const altSignature = autoPatrolCombatTrajectorySignature(ctx, alternative, objective);
+    const altStateAction = `${autoPatrolCombatStateKey(ctx, objective)}|${alternative.event}`;
+    const altBlocked = (objective.rejectedTrajectorySignatures || []).some(entry => entry.signature === altSignature && entry.version === objective.combatStateVersion)
+      || (objective.visitedStateActions || []).some(entry => entry.key === altStateAction && entry.version === objective.combatStateVersion);
+    if (!altBlocked) return { ...alternative, reason: `detected-combat-alternative:${alternative.reason || "available"}` };
+  }
+  return autoPatrolLastStandDecision(ctx) || { kind: "PAUSE", reason: "detected-combat-no-untried-trajectory", targetId: decision.targetId || null };
+}
+
 function autoPatrolObjectiveTypeFromDecision(decision) {
   const reason = decision?.reason || "";
   if (reason.startsWith("town-rest-")) return "REST_AT_INN";
@@ -5924,14 +6367,16 @@ function autoPatrolObjectiveCanonicalSnapshot(ctx) {
     inventoryFoodCount: inventory.filter(item => /food|ration|meat/i.test(String(item.type || item.name || ""))).length,
     lootCount: (ctx.items || []).length, bombCount: (ctx.bombs || []).length,
     adjacentHostileCount: autoPatrolAdjacentHostiles(ctx).length,
-    hostileHp: hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0), turn: ctx.turnCount
+    hostileHp: hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0),
+    detectedEnemyIds: detected.map(enemy => enemy.id).sort((a, b) => a - b),
+    aliveTargetIds: hostiles.map(enemy => enemy.id).sort((a, b) => a - b), turn: ctx.turnCount
   };
 }
 function autoPatrolRecoveryGoalRatio(reason = "") {
   return reason === "floor-clear-recovery" ? AUTO_PATROL_SURVIVAL_MODEL.clearRecover : AUTO_PATROL_SURVIVAL_MODEL.betweenRecover;
 }
 function autoPatrolObjectiveDefinition(ctx, decision) {
-  const type = autoPatrolObjectiveTypeFromDecision(decision);
+  const type = autoPatrolObjectiveTypeForContext(ctx, decision);
   const targetId = decision?.targetId || autoPatrolRuntime.meleePlan?.targetId || autoPatrolRuntime.bombPlan?.targetId || autoPatrolRuntime.pendingBombPlan?.targetId || autoPatrolRuntime.foodHuntPlan?.targetId || null;
   const target = targetId == null ? null : autoPatrolEnemyById(ctx, targetId);
   const start = autoPatrolObjectiveCanonicalSnapshot(ctx);
@@ -5968,6 +6413,12 @@ function autoPatrolObjectiveDefinition(ctx, decision) {
     deathCondition: "player.hp <= 0 or current frontend state is FE_DEATH_SUMMARY", allowedActions: [decision?.event].filter(Boolean), forbiddenActions: [],
     progressDefinition: "hostile HP/count, loot count, Hunger, HP ratio, target distance, stairs/floor transition, or adjacent pressure improves",
     noProgressDefinition: "none of the objective-specific canonical metrics improve",
+    targetEnemyIds: type === "DEFEAT_DETECTED_ENEMIES" ? autoPatrolDetectedCombatEnemies(ctx).map(enemy => enemy.id).sort((a, b) => a - b) : [],
+    primaryTargetId: type === "DEFEAT_DETECTED_ENEMIES" ? (targetId || autoPatrolDetectedCombatEnemies(ctx)[0]?.id || null) : null,
+    combatStartSnapshot: type === "DEFEAT_DETECTED_ENEMIES" ? start : null,
+    activeTactic: type === "DEFEAT_DETECTED_ENEMIES" ? autoPatrolCombatTacticType(decision) : null,
+    tacticalAttempts: [], rejectedTrajectorySignatures: [], visitedStateActions: [], visitedCombatStates: [],
+    combatStateVersion: 0, combatNoProgressCount: 0,
     completionEvent: "OBJECTIVE_COMPLETED", failureEvent: "OBJECTIVE_FAILED", status: "ACTIVE",
     actionSequence: [], progressSequence: [], noProgressCount: 0, bombPlanTrappedCount: 0, multiAdjacentTurns: 0
   };
@@ -6076,11 +6527,26 @@ function autoPatrolTerminateObjectiveOnDeath(ctx, reason = "player-dead") {
   return objective;
 }
 function autoPatrolEnsureObjectiveForDecision(ctx, decision) {
-  const nextType = autoPatrolObjectiveTypeFromDecision(decision);
+  const nextType = autoPatrolObjectiveTypeForContext(ctx, decision);
   if (nextType === "ESCAPE_LETHAL_TARGET" && autoPatrolEscapeFailureBlocks(ctx, decision?.targetId)) return null;
   if (autoPatrolRuntime.activeObjective && autoPatrolRuntime.activeObjective.type !== nextType) autoPatrolFailObjective(ctx, `legacy-decision-changed:${nextType}`);
   const objective = autoPatrolRuntime.activeObjective || autoPatrolCreateObjective(ctx, decision);
   objective.allowedActions = [decision.event];
+  if (objective.type === "DEFEAT_DETECTED_ENEMIES") {
+    const addedTargetIds = autoPatrolUpdateDetectedCombatTargets(ctx, objective);
+    if (addedTargetIds.length) {
+      objective.combatStateVersion = (objective.combatStateVersion || 0) + 1;
+      objective.combatNoProgressCount = 0;
+    }
+    const tactic = autoPatrolCombatTacticType(decision);
+    objective.activeTactic = tactic;
+    autoPatrolRuntime.activeCombatTactic = tactic;
+    autoPatrolRuntime.combatTacticState = "TACTIC_COMMITTED";
+    objective.pendingTrajectorySignature = autoPatrolCombatTrajectorySignature(ctx, decision, objective);
+    objective.pendingStateAction = `${autoPatrolCombatStateKey(ctx, objective)}|${decision.event}`;
+    objective.tacticalAttempts.push({ turn: ctx.turnCount, tactic, event: decision.event, reason: decision.reason || "", trajectorySignature: objective.pendingTrajectorySignature });
+    autoPatrolRuntime.combatTacticalAttempts = objective.tacticalAttempts.slice(-200);
+  }
   return objective;
 }
 function autoPatrolPlayerIsCurrentlyDead(ctx, frontendState = engine.currentState) {
@@ -6091,6 +6557,49 @@ function autoPatrolRecordObjectiveProjection(before, decision, accepted) {
   if (!objective || !accepted) return;
   const after = autoPatrolObjectiveCanonicalSnapshot(context);
   objective.actionSequence.push({ turn: before.turn, event: decision.event, reason: decision.reason || "" });
+  if (objective.type === "DEFEAT_DETECTED_ENEMIES") {
+    autoPatrolUpdateDetectedCombatTargets(context, objective);
+    const changes = autoPatrolCombatMeaningfulChanges(before, after, objective);
+    const stateKey = autoPatrolCombatStateKey(context, objective);
+    const previousVersion = objective.combatStateVersion || 0;
+    if (changes.length) {
+      objective.combatStateVersion = previousVersion + 1;
+      objective.combatNoProgressCount = 0;
+    } else {
+      objective.combatNoProgressCount = (objective.combatNoProgressCount || 0) + 1;
+      if ((objective.visitedCombatStates || []).some(entry => entry.key === stateKey && entry.version === previousVersion)) {
+        autoPatrolRuntime.combatAbaCycles += 1;
+      }
+    }
+    objective.visitedCombatStates.push({ key: stateKey, version: objective.combatStateVersion });
+    objective.visitedCombatStates = objective.visitedCombatStates.slice(-1000);
+    if (objective.pendingStateAction) objective.visitedStateActions.push({ key: objective.pendingStateAction, version: previousVersion });
+    objective.visitedStateActions = objective.visitedStateActions.slice(-1000);
+    if (!changes.length && objective.combatNoProgressCount >= 4 && objective.pendingTrajectorySignature) {
+      objective.rejectedTrajectorySignatures.push({ signature: objective.pendingTrajectorySignature, version: previousVersion, reason: "tactic-no-progress-limit" });
+      objective.rejectedTrajectorySignatures = objective.rejectedTrajectorySignatures.slice(-200);
+      objective.combatNoProgressCount = 0;
+      objective.activeTactic = null;
+      autoPatrolRuntime.activeCombatTactic = null;
+      autoPatrolRuntime.combatTacticState = "TRAJECTORY_REJECTED";
+    } else {
+      autoPatrolRuntime.combatTacticState = changes.length ? "TACTIC_COMPLETED" : "TACTIC_EXECUTING";
+    }
+    autoPatrolRuntime.combatRejectedTrajectorySignatures = objective.rejectedTrajectorySignatures.slice(-200);
+    autoPatrolRuntime.combatVisitedStateActions = objective.visitedStateActions.slice(-200);
+    autoPatrolRuntime.combatVisitedStates = objective.visitedCombatStates.slice(-200);
+    autoPatrolRuntime.combatStateVersion = objective.combatStateVersion;
+    autoPatrolRuntime.combatNoProgressCount = objective.combatNoProgressCount;
+    objective.pendingTrajectorySignature = null;
+    objective.pendingStateAction = null;
+    if (autoPatrolPlayerIsCurrentlyDead(context)) { autoPatrolTerminateObjectiveOnDeath(context); return; }
+    const remainingTargets = objective.targetEnemyIds.filter(id => Boolean(autoPatrolEnemyById(context, id)));
+    if (!remainingTargets.length) { autoPatrolCompleteObjective(context, "detected-combat-targets-defeated"); return; }
+    transitionAutoPatrolObjective("PROGRESS");
+    objective.noProgressCount = 0;
+    transitionAutoPatrolObjective("CONTINUE");
+    return;
+  }
   if (decision.reason === "bomb-plan-trapped") objective.bombPlanTrappedCount += 1;
   if (after.adjacentHostileCount >= 2) objective.multiAdjacentTurns += 1;
   const townObjective = ["REST_AT_INN", "PURCHASE_HOME", "STORE_RARE_EQUIPMENT", "PROCESS_EQUIPMENT_AT_BLACKSMITH", "SELL_UNNEEDED_EQUIPMENT", "BUY_REQUIRED_RETURN_SCROLL", "RESUME_DUNGEON"].includes(objective.type);
@@ -6244,6 +6753,134 @@ function autoPatrolResetContactRoute() {
   if (autoPatrolRuntime.contactRouteState === "CONTACT_ROUTE_FALLBACK") transitionAutoPatrolContactRoute("NEXT_TICK");
 }
 
+
+const AUTO_PATROL_LURE_PLAN_SFA = Object.freeze({
+  LURE_PLAN_NONE: { state_id: "LURE_PLAN_NONE", role: "shared", next_transitions: [{ event: "PROJECT", target_state: "LURE_PLAN_PROJECTING" }] },
+  LURE_PLAN_PROJECTING: { state_id: "LURE_PLAN_PROJECTING", role: "shared", next_transitions: [{ event: "ROUTE_AVAILABLE", target_state: "LURE_PLAN_ROUTE_AVAILABLE" }, { event: "ROUTE_UNAVAILABLE", target_state: "LURE_PLAN_UNAVAILABLE" }] },
+  LURE_PLAN_ROUTE_AVAILABLE: { state_id: "LURE_PLAN_ROUTE_AVAILABLE", role: "shared", next_transitions: [{ event: "STEP", target_state: "LURE_PLAN_STEP_VALIDATING" }, { event: "INVALIDATE", target_state: "LURE_PLAN_INVALIDATED" }] },
+  LURE_PLAN_STEP_VALIDATING: { state_id: "LURE_PLAN_STEP_VALIDATING", role: "shared", next_transitions: [{ event: "NEXT_STEP", target_state: "LURE_PLAN_ROUTE_AVAILABLE" }, { event: "ARRIVED", target_state: "LURE_PLAN_ARRIVAL_GATE" }, { event: "INVALIDATE", target_state: "LURE_PLAN_INVALIDATED" }] },
+  LURE_PLAN_ARRIVAL_GATE: { state_id: "LURE_PLAN_ARRIVAL_GATE", role: "shared", next_transitions: [{ event: "ROBUST_SINGLE", target_state: "LURE_PLAN_COMPLETED" }, { event: "REACQUIRE", target_state: "LURE_PLAN_INVALIDATED" }, { event: "MULTI_RISK", target_state: "LURE_PLAN_INVALIDATED" }] },
+  LURE_PLAN_COMPLETED: { state_id: "LURE_PLAN_COMPLETED", role: "shared", next_transitions: [{ event: "CLEAR", target_state: "LURE_PLAN_NONE" }] },
+  LURE_PLAN_INVALIDATED: { state_id: "LURE_PLAN_INVALIDATED", role: "shared", next_transitions: [{ event: "CLEAR", target_state: "LURE_PLAN_NONE" }] },
+  LURE_PLAN_UNAVAILABLE: { state_id: "LURE_PLAN_UNAVAILABLE", role: "shared", next_transitions: [{ event: "CLEAR", target_state: "LURE_PLAN_NONE" }] }
+});
+function transitionAutoPatrolLurePlan(event) {
+  const definition = AUTO_PATROL_LURE_PLAN_SFA[autoPatrolRuntime.lurePlanState];
+  const transition = definition?.next_transitions?.find(candidate => candidate.event === event);
+  if (!transition) return false;
+  autoPatrolRuntime.lurePlanState = transition.target_state;
+  return true;
+}
+function autoPatrolClearLurePlan(invalidated = false) {
+  if (invalidated) autoPatrolRuntime.lurePlansInvalidated += 1;
+  autoPatrolRuntime.lurePlan = null;
+  if (autoPatrolRuntime.lurePlanState === "LURE_PLAN_COMPLETED" || autoPatrolRuntime.lurePlanState === "LURE_PLAN_INVALIDATED" || autoPatrolRuntime.lurePlanState === "LURE_PLAN_UNAVAILABLE") transitionAutoPatrolLurePlan("CLEAR");
+  else autoPatrolRuntime.lurePlanState = "LURE_PLAN_NONE";
+}
+function autoPatrolDetectionIdsAtCell(ctx, x, y) {
+  const originalX = ctx.player.x, originalY = ctx.player.y;
+  ctx.player.x = x; ctx.player.y = y;
+  try { return autoPatrolHostiles(ctx).filter(enemy => !enemy.isBoss && evaluateEnemyPerception(ctx, enemy).detected).map(enemy => enemy.id); }
+  finally { ctx.player.x = originalX; ctx.player.y = originalY; }
+}
+function autoPatrolSingleDetectionCells(ctx) {
+  const cells = [];
+  for (let y = 1; y < ctx.grid.length - 1; y += 1) for (let x = 1; x < ctx.grid[y].length - 1; x += 1) {
+    if (!autoPatrolWalkable(ctx, x, y) || ctx.enemies.some(enemy => enemy.x === x && enemy.y === y)) continue;
+    const ids = autoPatrolDetectionIdsAtCell(ctx, x, y);
+    if (ids.length !== 1) continue;
+    const originalX = ctx.player.x, originalY = ctx.player.y;
+    ctx.player.x = x; ctx.player.y = y;
+    const exits = autoPatrolWalkableExitCount(ctx);
+    ctx.player.x = originalX; ctx.player.y = originalY;
+    if (exits >= 2) cells.push({ x, y, targetId: ids[0], exits });
+  }
+  return cells;
+}
+function autoPatrolEnemyReachablePositions(ctx, enemy) {
+  const positions = new Map([[autoPatrolCellKey(enemy.x, enemy.y), { x: enemy.x, y: enemy.y }]]);
+  const perception = evaluateEnemyPerception(ctx, enemy).detected;
+  if (enemy.isFoodEnemy && enemy.provoked !== true) {
+    for (const [dx, dy] of [[1,0],[0,1],[-1,0],[0,-1]]) {
+      const x = enemy.x + dx, y = enemy.y + dy;
+      if (x === ctx.player.x && y === ctx.player.y) continue;
+      if (!isEnemyMovementCellBlocked(ctx, enemy, x, y)) positions.set(autoPatrolCellKey(x, y), { x, y });
+    }
+    return [...positions.values()];
+  }
+  if (!perception || enemy.pendingSpell || autoPatrolDistance(enemy, ctx.player) === 1 || canPrepareEnemySpell(ctx, enemy)) return [...positions.values()];
+  const next = chooseEnemyChaseStep(ctx, enemy, () => false, enemyMovementPolicy(enemy));
+  if (next && !(next.x === ctx.player.x && next.y === ctx.player.y)) positions.set(autoPatrolCellKey(next.x, next.y), next);
+  return [...positions.values()];
+}
+function autoPatrolDetectionFromEnemyPosition(ctx, enemy, position) {
+  const originalX = enemy.x, originalY = enemy.y;
+  enemy.x = position.x; enemy.y = position.y;
+  try { return evaluateEnemyPerception(ctx, enemy).detected; }
+  finally { enemy.x = originalX; enemy.y = originalY; }
+}
+function autoPatrolClassifyLureArrivalEnvelope(ctx, targetId) {
+  let targetCanDetect = false, targetMustDetect = false;
+  for (const enemy of autoPatrolHostiles(ctx)) {
+    const positions = autoPatrolEnemyReachablePositions(ctx, enemy);
+    const detections = positions.map(position => autoPatrolDetectionFromEnemyPosition(ctx, enemy, position));
+    const canDetect = detections.some(Boolean), mustDetect = detections.length > 0 && detections.every(Boolean);
+    if (enemy.id === targetId) { targetCanDetect = canDetect; targetMustDetect = mustDetect; }
+    else if (canDetect) return "MULTI_DETECTION_RISK";
+  }
+  if (targetMustDetect) return "ROBUST_SINGLE_LURE";
+  if (targetCanDetect) return "REACQUIRE_REQUIRED";
+  return "TARGET_NOT_DETECTABLE";
+}
+function autoPatrolCreateStaticLurePlan(ctx) {
+  if (autoPatrolHostiles(ctx).some(enemy => enemy.hasDetectedPlayer) || autoPatrolAdjacentHostiles(ctx).length) return null;
+  const candidates = [];
+  for (const cell of autoPatrolSingleDetectionCells(ctx)) {
+    const path = autoPatrolPathTo(ctx, [cell]);
+    if (!path || !path.length) continue;
+    const events = [];
+    let px = ctx.player.x, py = ctx.player.y;
+    for (const step of path) { events.push(autoPatrolDirectionEvent(step.x - px, step.y - py)); px = step.x; py = step.y; }
+    candidates.push({ targetId: cell.targetId, route: events, destination: { x: cell.x, y: cell.y }, expectedDetectedEnemyIds: [cell.targetId], maximumDetectedCount: 1, maximumAdjacentCount: 1, minimumExitCount: 2, createdDepth: ctx.depth, createdTurn: ctx.turnCount, sourceStateFingerprint: `${ctx.depth}|${ctx.turnCount}|${ctx.player.x},${ctx.player.y}|${cell.targetId}`, status: "LURE_PLAN_ROUTE_AVAILABLE" });
+  }
+  candidates.sort((a,b) => a.route.length - b.route.length || a.targetId - b.targetId);
+  return candidates[0] || null;
+}
+async function autoPatrolContinueLurePlan(ctx, frontendState) {
+  const plan = autoPatrolRuntime.lurePlan;
+  if (!plan || frontendState !== "FE_PLAYER_TURN") return null;
+  if (ctx.depth !== plan.createdDepth || !autoPatrolEnemyById(ctx, plan.targetId)) { transitionAutoPatrolLurePlan("INVALIDATE"); autoPatrolClearLurePlan(true); return null; }
+  if (!plan.route.length) {
+    if (autoPatrolRuntime.lurePlanState === "LURE_PLAN_STEP_VALIDATING") transitionAutoPatrolLurePlan("ARRIVED");
+    const detected = autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer);
+    const classification = detected.length === 1 && detected[0].id === plan.targetId ? autoPatrolClassifyLureArrivalEnvelope(ctx, plan.targetId) : "REACQUIRE_REQUIRED";
+    if (classification === "ROBUST_SINGLE_LURE" && autoPatrolWalkableExitCount(ctx) >= plan.minimumExitCount && autoPatrolAdjacentHostiles(ctx).length <= plan.maximumAdjacentCount) {
+      transitionAutoPatrolLurePlan("ROBUST_SINGLE");
+      autoPatrolRuntime.lurePlansCompleted += 1;
+      autoPatrolStartMeleePlan(detected[0], "single-enemy-lure-complete");
+      autoPatrolClearLurePlan(false);
+      return autoPatrolContinueMeleePlan(ctx);
+    }
+    transitionAutoPatrolLurePlan(classification === "MULTI_DETECTION_RISK" ? "MULTI_RISK" : "REACQUIRE");
+    autoPatrolClearLurePlan(true);
+    return null;
+  }
+  if (autoPatrolRuntime.lurePlanState === "LURE_PLAN_ROUTE_AVAILABLE") transitionAutoPatrolLurePlan("STEP");
+  const event = plan.route[0];
+  const simulated = await autoPatrolSimulateEvent(event);
+  const targetOnly = simulated.metrics.detected === 0 || (simulated.metrics.detected === 1 && simulated.metrics.detectedIds[0] === plan.targetId);
+  if (!simulated.accepted || simulated.metrics.dead || !targetOnly || simulated.metrics.adjacent > plan.maximumAdjacentCount || simulated.metrics.exits < plan.minimumExitCount) {
+    transitionAutoPatrolLurePlan("INVALIDATE");
+    autoPatrolClearLurePlan(true);
+    return null;
+  }
+  const activePlan = autoPatrolRuntime.lurePlan;
+  if (!activePlan) return null;
+  activePlan.route.shift();
+  if (activePlan.route.length) transitionAutoPatrolLurePlan("NEXT_STEP");
+  return { kind: "DISPATCH", event, reason: "single-enemy-lure-plan:step", targetId: plan.targetId };
+}
+
 function transitionAutoPatrol(event) {
   const definition = AUTO_PATROL_SFA[autoPatrolRuntime.state];
   const transition = definition?.next_transitions?.find(candidate => candidate.event === event);
@@ -6313,6 +6950,39 @@ function autoPatrolHostiles(ctx) {
 function autoPatrolAdjacentHostiles(ctx) { return autoPatrolHostiles(ctx).filter(enemy => autoPatrolDistance(enemy, ctx.player) === 1); }
 function autoPatrolEnemyById(ctx, id) { return ctx.enemies.find(enemy => enemy.id === id) || null; }
 function autoPatrolPlayerAttack(ctx) { return Math.max(1, playerAttackPower(ctx)); }
+function autoPatrolBombDamageAgainstEnemy(ctx, enemy) {
+  if (!enemy) return 0;
+  return Math.max(1, Math.floor(bombDamage(ctx) * ((enemy.isBoss || enemy.isAbyssBoss) ? BOMB_CONFIG.bossDamageRatio : 1)));
+}
+function autoPatrolBossEncounterAssessment(ctx) {
+  const hostiles = autoPatrolHostiles(ctx);
+  const bosses = hostiles.filter(enemy => enemy.isBoss || enemy.isAbyssBoss);
+  const regulars = hostiles.filter(enemy => !enemy.isBoss && !enemy.isAbyssBoss);
+  const detectedBosses = bosses.filter(enemy => enemy.hasDetectedPlayer);
+  const detectedRegulars = regulars.filter(enemy => enemy.hasDetectedPlayer);
+  const adjacentBosses = bosses.filter(enemy => autoPatrolDistance(enemy, ctx.player) === 1);
+  const adjacentRegulars = regulars.filter(enemy => autoPatrolDistance(enemy, ctx.player) === 1);
+  let mode = "NO_BOSS";
+  if (bosses.length && !regulars.length) mode = "BOSS_SINGLE_TARGET";
+  else if (bosses.length && regulars.length) {
+    if (adjacentBosses.length && adjacentRegulars.length) mode = "SEPARATE_MIXED_CONTACT";
+    else if (detectedRegulars.length || adjacentRegulars.length) mode = "CLEAR_REGULARS_FIRST";
+    else if (detectedBosses.length || adjacentBosses.length) mode = "ISOLATE_BOSS_FIRST";
+    else mode = "PREPARE_SINGLE_TARGET_CONTACT";
+  }
+  return {
+    mode, bossIds: bosses.map(enemy => enemy.id).sort((a,b)=>a-b), regularIds: regulars.map(enemy => enemy.id).sort((a,b)=>a-b),
+    detectedBossIds: detectedBosses.map(enemy => enemy.id).sort((a,b)=>a-b), detectedRegularIds: detectedRegulars.map(enemy => enemy.id).sort((a,b)=>a-b),
+    adjacentBossIds: adjacentBosses.map(enemy => enemy.id).sort((a,b)=>a-b), adjacentRegularIds: adjacentRegulars.map(enemy => enemy.id).sort((a,b)=>a-b)
+  };
+}
+function autoPatrolCombatTargetPriority(ctx, enemy) {
+  const encounter = autoPatrolBossEncounterAssessment(ctx);
+  const boss = Boolean(enemy?.isBoss || enemy?.isAbyssBoss);
+  if (encounter.mode === "CLEAR_REGULARS_FIRST" || encounter.mode === "SEPARATE_MIXED_CONTACT") return boss ? 1000 : 0;
+  if (encounter.mode === "ISOLATE_BOSS_FIRST" || encounter.mode === "BOSS_SINGLE_TARGET") return boss ? 0 : 1000;
+  return 0;
+}
 function autoPatrolDuel(ctx, enemy) {
   const hits = Math.max(1, Math.ceil(enemy.hp / autoPatrolPlayerAttack(ctx)));
   const retaliation = Math.max(0, hits - 1);
@@ -6368,7 +7038,7 @@ function autoPatrolSelectAdjacent(ctx, enemies) {
     const duel = autoPatrolDuel(ctx, enemy);
     const pressure = autoPatrolPressureAfterTarget(ctx, enemy, duel.hits);
     return { enemy, duel, pressure };
-  }).sort((a, b) => a.duel.threat - b.duel.threat || a.enemy.id - b.enemy.id)[0];
+  }).sort((a, b) => autoPatrolCombatTargetPriority(ctx, a.enemy) - autoPatrolCombatTargetPriority(ctx, b.enemy) || a.duel.threat - b.duel.threat || a.enemy.id - b.enemy.id)[0];
 }
 function autoPatrolStartMeleePlan(target, reason) {
   autoPatrolRuntime.meleePlan = { targetId: target.id, reason };
@@ -6384,7 +7054,6 @@ function autoPatrolContinueMeleePlan(ctx) {
       autoPatrolRuntime.meleePlan = null;
       return null;
     }
-    if (target.isBoss) return autoPatrolAttackDecision(ctx, target, "melee-plan-boss");
     if (autoPatrolSafeToFinishForLevel(ctx, target, duel)) {
       autoPatrolRuntime.levelCommitAttacks += 1;
       return autoPatrolAttackDecision(ctx, target, "melee-plan-levelup-finish");
@@ -6566,7 +7235,7 @@ function autoPatrolAdjacentBombTradeoff(ctx, target, duel) {
   };
 }
 function autoPatrolIsStrongHostile(ctx, enemy) {
-  if (!enemy || !isHostileFloorEnemy(enemy) || enemy.isBoss) return false;
+  if (!enemy || !isHostileFloorEnemy(enemy)) return false;
   const band = enemyThreatBand(ctx, enemy);
   return band === 'dangerous' || band === 'deadly';
 }
@@ -6646,11 +7315,11 @@ function autoPatrolCreateMultiStrongWallCandidate(ctx) {
 function autoPatrolMaybeStartBombPlan(ctx, target, duel) {
   if (autoPatrolRuntime.bombEscapeSuppressUntilTurn >= ctx.turnCount
       && (!autoPatrolRuntime.bombEscapeSuppressTargetId || autoPatrolRuntime.bombEscapeSuppressTargetId === target.id)) return null;
-  if (target.isBoss || !guards.can_place_bomb(ctx)) return null;
+  if (!guards.can_place_bomb(ctx)) return null;
   if (enemyMovementPolicy(target) !== ENEMY_MOVEMENT_POLICY.HORIZONTAL_FIRST) return null;
   const aligned = target.x === ctx.player.x || target.y === ctx.player.y;
   const range = autoPatrolDistance(target, ctx.player);
-  if (!aligned || range < 1 || range > 4 || bombDamage(ctx) < target.hp) return null;
+  if (!aligned || range < 1 || range > 4 || autoPatrolBombDamageAgainstEnemy(ctx, target) < target.hp) return null;
   const pressure = autoPatrolPressureAfterTarget(ctx, target, duel.hits);
   const nearestOther = ctx.enemies.filter(enemy => enemy !== target && isHostileFloorEnemy(enemy)).reduce((min, enemy) => Math.min(min, autoPatrolArrivalTurns(ctx, enemy)), 999);
   const arrivalRisk = nearestOther <= duel.hits + AUTO_PATROL_SURVIVAL_MODEL.arrivalMargin;
@@ -6791,6 +7460,15 @@ function autoPatrolFoodHuntDecision(ctx) {
   }
   const move = autoPatrolMoveDecision(ctx, [{ x: target.x, y: target.y }], "food-hunt-approach", true);
   if (!move) { autoPatrolResetFoodHunt(); return null; }
+  const distanceToTarget = autoPatrolDistance(target, ctx.player);
+  if (Number.isFinite(plan.lastDistance) && distanceToTarget >= plan.lastDistance) plan.noProgressSteps = (plan.noProgressSteps || 0) + 1;
+  else plan.noProgressSteps = 0;
+  plan.lastDistance = distanceToTarget;
+  if (plan.noProgressSteps >= 2) {
+    plan.noProgressSteps = 0;
+    plan.eventHistory = [];
+    return { kind: "DISPATCH", event: "PASS", reason: "food-hunt-parity-wait", targetId: target.id };
+  }
   const history = plan.eventHistory || [];
   let event = move.event;
   const hasTwoCycle = history.length >= 2 && history[history.length - 2] === event && autoPatrolOppositeEvent(history[history.length - 1]) === event;
@@ -6939,6 +7617,261 @@ function autoPatrolSupportedFrontendState(state) {
   return ["FE_PLAYER_TURN", "FE_INN_MENU", "FE_SAVE_RESULT", "FE_INVENTORY_MENU", "FE_WARP_MENU", "FE_BLACKSMITH_MENU", "FE_SHOP_MENU", "FE_HOME_PURCHASE_MENU", "FE_HOME_MENU"].includes(state);
 }
 
+const AUTO_PATROL_ENGAGEMENT_CONFIG = Object.freeze({ progressTimeoutTurns: 8, rockBreachTurnCost: 8, ambushDistance: 3, detectedYieldClearTurns: 3 });
+// Uniform-cost search from the player to a cell adjacent to the target.
+// Floor steps cost 1; rock cells (grid value 1) cost 1 + rockBreachTurnCost when allowed.
+// Returns { cost, firstRock } or null when unreachable on the allowed surface.
+function autoPatrolEngagementRouteCost(ctx, target, allowRocks) {
+  const height = ctx.grid.length, width = ctx.grid[0].length;
+  const start = ctx.player.y * width + ctx.player.x;
+  const costs = new Map([[start, 0]]);
+  const firstRocks = new Map();
+  const queue = [[0, start, null]];
+  while (queue.length) {
+    let bestIndex = 0;
+    for (let index = 1; index < queue.length; index += 1) if (queue[index][0] < queue[bestIndex][0]) bestIndex = index;
+    const [cost, node, firstRock] = queue.splice(bestIndex, 1)[0];
+    if (cost > (costs.get(node) ?? Infinity)) continue;
+    const x = node % width, y = Math.floor(node / width);
+    if (Math.abs(x - target.x) + Math.abs(y - target.y) === 1) return { cost, firstRock };
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || ny >= height || nx >= width) continue;
+      const tile = ctx.grid[ny][nx];
+      if (tile === 2) continue;
+      if (tile === 1 && !allowRocks) continue;
+      if (ctx.enemies.some(enemy => !enemy.isDead && enemy !== target && enemy.x === nx && enemy.y === ny)) continue;
+      const stepCost = tile === 1 ? 1 + AUTO_PATROL_ENGAGEMENT_CONFIG.rockBreachTurnCost : 1;
+      const next = ny * width + nx;
+      const nextCost = cost + stepCost;
+      if (nextCost < (costs.get(next) ?? Infinity)) {
+        costs.set(next, nextCost);
+        const nextFirstRock = firstRock || (tile === 1 ? { x: nx, y: ny } : null);
+        firstRocks.set(next, nextFirstRock);
+        queue.push([nextCost, next, nextFirstRock]);
+      }
+    }
+  }
+  return null;
+}
+function autoPatrolEngagementClear(reason) {
+  if (autoPatrolRuntime.engagementPlan) {
+    autoPatrolRuntime.engagementPlan = null;
+    autoPatrolRuntime.engagementPlansEnded = (autoPatrolRuntime.engagementPlansEnded || 0) + 1;
+    autoPatrolRuntime.engagementLastEndReason = reason;
+  }
+}
+function autoPatrolEngagementEscalate(ctx, plan, failedTactic) {
+  plan.failedTactics.push(failedTactic);
+  const ladder = ["approach", "breach", "bomb", "ambush"];
+  const next = ladder.find(tactic => !plan.failedTactics.includes(tactic) && (tactic !== "breach" || plan.breachAvailable));
+  if (!next) {
+    autoPatrolRuntime.floorHuntAbandonedDepth = ctx.depth;
+    autoPatrolRuntime.floorHuntAbandonReason = "engagement-ladder-exhausted";
+    autoPatrolEngagementClear("ladder-exhausted");
+    return;
+  }
+  plan.tactic = next;
+  plan.lastProgressTurn = ctx.turnCount;
+  plan.bestDistance = Infinity;
+}
+function autoPatrolEngagementDecision(ctx) {
+  if (ctx.currentMapType !== "dungeon") return null;
+  const runtimeBusy = autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan || autoPatrolRuntime.bombSetupPlan
+    || autoPatrolRuntime.bombLurePlan || autoPatrolRuntime.bombEscapeAlternativePlan || autoPatrolRuntime.horizontalFlowPlan
+    || autoPatrolRuntime.initialRoutePlan || autoPatrolRuntime.contactRoutePlan;
+  const hostiles = autoPatrolHostiles(ctx);
+  const plan = autoPatrolRuntime.engagementPlan;
+  if (!hostiles.length) { autoPatrolEngagementClear("floor-clear"); return null; }
+  if (plan && plan.depth !== ctx.depth) { autoPatrolEngagementClear("floor-change"); return null; }
+  if (autoPatrolAdjacentHostiles(ctx).length && (!plan || plan.tactic !== "bomb" || !ctx.bombs.length)) return null;
+  if (!plan) {
+    if (runtimeBusy) return null;
+    if (hostiles.some(enemy => enemy.hasDetectedPlayer)) return null;
+    if (autoPatrolRuntime.floorHuntAbandonedDepth === ctx.depth) return null;
+    // Commitment is an escalation of a demonstrated hunt stall, not a replacement
+    // for the normal hunting tactics: only engage after the stall window has been
+    // armed for a quarter of the abandon threshold with no material progress.
+    if (autoPatrolRuntime.huntStallStartTurn < 0
+      || ctx.turnCount - autoPatrolRuntime.huntStallStartTurn < Math.floor(AUTO_PATROL_HUNT_STALL_TURNS / 4)) return null;
+    if (ctx.player.hp < ctx.player.maxHp * 0.5) return null;
+    const target = hostiles.slice().sort((a, b) => autoPatrolDistance(a, ctx.player) - autoPatrolDistance(b, ctx.player) || a.id - b.id)[0];
+    const walkRoute = autoPatrolEngagementRouteCost(ctx, target, false);
+    const breachRoute = autoPatrolEngagementRouteCost(ctx, target, true);
+    let tactic = null;
+    if (walkRoute && (!breachRoute || walkRoute.cost <= breachRoute.cost)) tactic = "approach";
+    else if (breachRoute) tactic = "breach";
+    else tactic = "ambush";
+    autoPatrolRuntime.engagementPlan = {
+      depth: ctx.depth, targetId: target.id, tactic,
+      breachAvailable: Boolean(breachRoute && breachRoute.firstRock),
+      startTurn: ctx.turnCount, lastProgressTurn: ctx.turnCount,
+      bestDistance: autoPatrolDistance(target, ctx.player), lastTargetHp: target.hp,
+      detectedTurns: 0, failedTactics: []
+    };
+    autoPatrolRuntime.engagementPlansStarted = (autoPatrolRuntime.engagementPlansStarted || 0) + 1;
+    autoPatrolRuntime.lurePlan = null;
+    autoPatrolRuntime.meleePlan = null;
+  }
+  const active = autoPatrolRuntime.engagementPlan;
+  const target = autoPatrolEnemyById(ctx, active.targetId);
+  if (!target || target.isDead) { autoPatrolEngagementClear("target-defeated"); return null; }
+  if (ctx.player.hp < ctx.player.maxHp * 0.35) { autoPatrolEngagementClear("hp-floor"); return null; }
+  // Transient detection: yield without clearing; clear only when detection persists
+  // (a pursuing enemy is regular combat and the existing machinery owns it).
+  if (target.hasDetectedPlayer) {
+    active.detectedTurns += 1;
+    if (active.detectedTurns >= AUTO_PATROL_ENGAGEMENT_CONFIG.detectedYieldClearTurns) autoPatrolEngagementClear("target-engaged");
+    return null;
+  }
+  active.detectedTurns = 0;
+  const distance = autoPatrolDistance(target, ctx.player);
+  if (distance < active.bestDistance || (Number.isFinite(active.lastTargetHp) && target.hp < active.lastTargetHp)) {
+    active.bestDistance = Math.min(active.bestDistance, distance);
+    active.lastTargetHp = target.hp;
+    active.lastProgressTurn = ctx.turnCount;
+  }
+  if (ctx.turnCount - active.lastProgressTurn >= AUTO_PATROL_ENGAGEMENT_CONFIG.progressTimeoutTurns) {
+    autoPatrolEngagementEscalate(ctx, active, active.tactic);
+    if (!autoPatrolRuntime.engagementPlan) return null;
+  }
+  const bombThreat = (cell) => ctx.bombs.some(bomb => (bomb.x === cell.x && Math.abs(bomb.y - cell.y) <= (bomb.range || ctx.player.bombRange || 1)) || (bomb.y === cell.y && Math.abs(bomb.x - cell.x) <= (bomb.range || ctx.player.bombRange || 1)));
+  if (ctx.bombs.length) {
+    if (bombThreat(ctx.player)) {
+      const retreat = [[1,0],[-1,0],[0,1],[0,-1]]
+        .map(([dx, dy]) => ({ x: ctx.player.x + dx, y: ctx.player.y + dy }))
+        .find(cell => autoPatrolWalkable(ctx, cell.x, cell.y)
+          && !ctx.enemies.some(enemy => !enemy.isDead && enemy.x === cell.x && enemy.y === cell.y)
+          && !bombThreat(cell));
+      if (retreat) return { kind: "DISPATCH", event: autoPatrolDirectionEvent(retreat.x - ctx.player.x, retreat.y - ctx.player.y), reason: "engagement-bomb-retreat", targetId: active.targetId };
+    }
+    return { kind: "DISPATCH", event: "PASS", reason: "engagement-bomb-wait", targetId: active.targetId };
+  }
+  if (active.tactic === "approach") {
+    if (distance === 1) {
+      if (autoPatrolMeleeCommitmentIsSurvivable(ctx, target)) return null;
+      active.tactic = "bomb";
+    } else {
+      const move = autoPatrolMoveDecision(ctx, [{ x: target.x, y: target.y }], "engagement-approach", true);
+      if (move) return { kind: "DISPATCH", ...move, targetId: active.targetId };
+      autoPatrolEngagementEscalate(ctx, active, "approach");
+      return null;
+    }
+  }
+  if (active.tactic === "bomb") {
+    if (!guards.can_place_bomb(ctx)) { autoPatrolEngagementEscalate(ctx, active, "bomb"); return null; }
+    if (distance === 1) return { kind: "DISPATCH", event: "PLACE_BOMB", reason: "engagement-bomb-strike", targetId: active.targetId };
+    const move = autoPatrolMoveDecision(ctx, [{ x: target.x, y: target.y }], "engagement-bomb-approach", true);
+    if (move) return { kind: "DISPATCH", ...move, targetId: active.targetId };
+    autoPatrolEngagementEscalate(ctx, active, "bomb");
+    return null;
+  }
+  if (active.tactic === "breach") {
+    if (!guards.can_place_bomb(ctx)) { autoPatrolEngagementEscalate(ctx, active, "breach"); return null; }
+    const route = autoPatrolEngagementRouteCost(ctx, target, true);
+    if (!route) { autoPatrolEngagementEscalate(ctx, active, "breach"); return null; }
+    if (!route.firstRock) { active.tactic = "approach"; return null; }
+    const rock = route.firstRock;
+    if (Math.abs(rock.x - ctx.player.x) + Math.abs(rock.y - ctx.player.y) === 1) {
+      return { kind: "DISPATCH", event: "PLACE_BOMB", reason: "engagement-breach-bomb", targetId: active.targetId };
+    }
+    const move = autoPatrolMoveDecision(ctx, [{ x: rock.x, y: rock.y }], "engagement-breach-approach", true);
+    if (move) return { kind: "DISPATCH", ...move, targetId: active.targetId };
+    autoPatrolEngagementEscalate(ctx, active, "breach");
+    return null;
+  }
+  if (active.tactic === "ambush") {
+    if (distance <= AUTO_PATROL_ENGAGEMENT_CONFIG.ambushDistance) return { kind: "DISPATCH", event: "PASS", reason: "engagement-ambush-wait", targetId: active.targetId };
+    const move = autoPatrolMoveDecision(ctx, [{ x: target.x, y: target.y }], "engagement-ambush-approach", true);
+    if (move) return { kind: "DISPATCH", ...move, targetId: active.targetId };
+    autoPatrolEngagementEscalate(ctx, active, "ambush");
+    return null;
+  }
+  return null;
+}
+const AUTO_PATROL_HUNT_STALL_TURNS = 64;
+function autoPatrolStairsTiles(ctx) {
+  return Object.entries(ctx.tiles).filter(([, type]) => type === "stairs").map(([key]) => { const [x, y] = key.split(',').map(Number); return { x, y }; });
+}
+function autoPatrolUpdateFloorHuntStall(ctx) {
+  if (ctx.currentMapType !== "dungeon") return;
+  if (autoPatrolRuntime.floorHuntAbandonedDepth === ctx.depth) {
+    if (autoPatrolHostiles(ctx).some(enemy => enemy.hasDetectedPlayer) || autoPatrolAdjacentHostiles(ctx).length) {
+      autoPatrolRuntime.floorHuntAbandonedDepth = 0;
+      autoPatrolRuntime.floorHuntAbandonReason = "";
+      autoPatrolRuntime.huntStallSignature = "";
+      autoPatrolRuntime.huntStallStartTurn = -1;
+    }
+    return;
+  }
+  const hostiles = autoPatrolHostiles(ctx);
+  const tookDamage = Number.isFinite(autoPatrolRuntime.huntStallLastHp) && ctx.player.hp < autoPatrolRuntime.huntStallLastHp - 0.5;
+  autoPatrolRuntime.huntStallLastHp = ctx.player.hp;
+  if (!hostiles.length || autoPatrolAdjacentHostiles(ctx).length || tookDamage) {
+    autoPatrolRuntime.huntStallSignature = "";
+    autoPatrolRuntime.huntStallStartTurn = -1;
+    return;
+  }
+  const nearestDistance = hostiles.reduce((min, enemy) => Math.min(min, autoPatrolDistance(enemy, ctx.player)), 999);
+  const signature = `${ctx.depth}|${hostiles.map(enemy => enemy.id).sort().join(',')}|${Math.round(hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0))}|${Math.floor(nearestDistance / 3)}`;
+  if (autoPatrolRuntime.huntStallSignature !== signature) {
+    autoPatrolRuntime.huntStallSignature = signature;
+    autoPatrolRuntime.huntStallStartTurn = ctx.turnCount;
+    return;
+  }
+  if (autoPatrolRuntime.huntStallStartTurn >= 0 && ctx.turnCount - autoPatrolRuntime.huntStallStartTurn >= AUTO_PATROL_HUNT_STALL_TURNS) {
+    autoPatrolRuntime.floorHuntAbandonedDepth = ctx.depth;
+    autoPatrolRuntime.floorHuntAbandonReason = "hunt-stall";
+    autoPatrolRuntime.lurePlan = null;
+    autoPatrolRuntime.meleePlan = null;
+    autoPatrolRuntime.contactRoutePlan = null;
+  }
+}
+function autoPatrolStallBombDecision(ctx) {
+  const nearestHostile = autoPatrolHostiles(ctx).sort((a, b) => autoPatrolDistance(a, ctx.player) - autoPatrolDistance(b, ctx.player))[0];
+  const bombThreat = (cell) => ctx.bombs.some(bomb => (bomb.x === cell.x && Math.abs(bomb.y - cell.y) <= (bomb.range || ctx.player.bombRange || 1)) || (bomb.y === cell.y && Math.abs(bomb.x - cell.x) <= (bomb.range || ctx.player.bombRange || 1)));
+  if (ctx.bombs.length) {
+    if (bombThreat(ctx.player)) {
+      const retreat = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}]
+        .map(delta => ({ x: ctx.player.x + delta.dx, y: ctx.player.y + delta.dy }))
+        .find(cell => autoPatrolWalkable(ctx, cell.x, cell.y)
+          && !ctx.enemies.some(enemy => !enemy.isDead && enemy.x === cell.x && enemy.y === cell.y)
+          && !bombThreat(cell));
+      if (retreat) return { kind: "DISPATCH", event: autoPatrolDirectionEvent(retreat.x - ctx.player.x, retreat.y - ctx.player.y), reason: "stall-bomb-retreat" };
+    }
+    return { kind: "DISPATCH", event: "PASS", reason: "stall-bomb-wait" };
+  }
+  if (nearestHostile && guards.can_place_bomb(ctx)) {
+    if (autoPatrolDistance(nearestHostile, ctx.player) === 1) return { kind: "DISPATCH", event: "PLACE_BOMB", reason: "stall-bomb-strike" };
+    const approach = autoPatrolMoveDecision(ctx, [{ x: nearestHostile.x, y: nearestHostile.y }], "stall-bomb-approach", true);
+    if (approach) return { kind: "DISPATCH", ...approach };
+  }
+  if (nearestHostile && autoPatrolDistance(nearestHostile, ctx.player) <= 3) {
+    return { kind: "DISPATCH", event: "PASS", reason: "hunt-ambush-wait" };
+  }
+  return null;
+}
+function autoPatrolOscillationStairsFallback(ctx) {
+  if (ctx.currentMapType !== "dungeon") return null;
+  if (autoPatrolHostiles(ctx).some(enemy => enemy.hasDetectedPlayer) || autoPatrolAdjacentHostiles(ctx).length) return null;
+  const stairs = autoPatrolStairsTiles(ctx);
+  if (!stairs.length) {
+    if (!autoPatrolHostiles(ctx).length) return null;
+    autoPatrolRuntime.floorHuntAbandonedDepth = ctx.depth;
+    autoPatrolRuntime.floorHuntAbandonReason = "oscillation-no-alternative";
+    autoPatrolRuntime.lurePlan = null;
+    autoPatrolRuntime.meleePlan = null;
+    autoPatrolRuntime.contactRoutePlan = null;
+    return autoPatrolStallBombDecision(ctx);
+  }
+  autoPatrolRuntime.floorHuntAbandonedDepth = ctx.depth;
+  autoPatrolRuntime.floorHuntAbandonReason = "oscillation-no-alternative";
+  if (stairs.some(tile => tile.x === ctx.player.x && tile.y === ctx.player.y) && !ctx.enemies.some(enemy => enemy.isBoss)) {
+    return { kind: "DISPATCH", event: "INTERACT", reason: "oscillation-stairs-fallback" };
+  }
+  const move = autoPatrolMoveDecision(ctx, stairs, "oscillation-stairs-fallback");
+  return move ? { kind: "DISPATCH", ...move } : null;
+}
 function decideAutoPatrolBaseAction(ctx, frontendState) {
   if (ctx.currentMapType === "town") return autoPatrolTownDecision(ctx, frontendState);
   if (frontendState !== "FE_PLAYER_TURN") return { kind: "PAUSE", reason: `waiting:${frontendState}` };
@@ -6952,13 +7885,6 @@ function decideAutoPatrolBaseAction(ctx, frontendState) {
   const adjacent = autoPatrolAdjacentHostiles(ctx);
   if (hpRatio <= AUTO_PATROL_CONFIG.criticalHpRatio && ctx.player.returnScrolls > 0) return { kind: "DISPATCH", event: "USE_RETURN_SCROLL", reason: "critical-return-scroll" };
   if (adjacent.length) {
-    const boss = adjacent.find(enemy => enemy.isBoss);
-    if (boss) {
-      const bossDuel = autoPatrolDuel(ctx, boss);
-      if (!autoPatrolMeleeCommitmentIsSurvivable(ctx, boss, bossDuel)) return autoPatrolAttackDecision(ctx, boss, "melee-feasibility-rejected");
-      autoPatrolStartMeleePlan(boss, "boss-melee");
-      return autoPatrolAttackDecision(ctx, boss, "boss-melee");
-    }
     const selected = autoPatrolSelectAdjacent(ctx, adjacent);
     if (autoPatrolSafeToFinishForLevel(ctx, selected.enemy, selected.duel)) {
       autoPatrolRuntime.levelCommitAttacks += 1;
@@ -6973,12 +7899,12 @@ function decideAutoPatrolBaseAction(ctx, frontendState) {
     autoPatrolStartMeleePlan(selected.enemy, "melee-commit");
     return autoPatrolAttackDecision(ctx, selected.enemy, selected.duel.hits <= 2 ? "weak-melee" : "strong-melee");
   }
-  const detected = autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer && !enemy.isBoss).sort((a, b) => autoPatrolDistance(a, ctx.player) - autoPatrolDistance(b, ctx.player) || enemyThreatScore(ctx, b) - enemyThreatScore(ctx, a));
+  const detected = autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer).sort((a, b) => autoPatrolCombatTargetPriority(ctx, a) - autoPatrolCombatTargetPriority(ctx, b) || autoPatrolDistance(a, ctx.player) - autoPatrolDistance(b, ctx.player) || enemyThreatScore(ctx, b) - enemyThreatScore(ctx, a));
   if (detected.length) {
     const bomb = autoPatrolMaybeStartBombPlan(ctx, detected[0], autoPatrolDuel(ctx, detected[0]));
     if (bomb) return bomb;
   }
-  const foodHunt = autoPatrolFoodHuntDecision(ctx);
+  const foodHunt = autoPatrolRuntime.floorHuntAbandonedDepth === ctx.depth ? null : autoPatrolFoodHuntDecision(ctx);
   if (foodHunt) return foodHunt;
   const floorClear = ctx.enemies.length === 0;
   if (!isCombatActive(ctx) && !floorClear) {
@@ -7008,11 +7934,14 @@ function decideAutoPatrolBaseAction(ctx, frontendState) {
     ? autoPatrolRuntime.bombEscapeSuppressTargetId
     : null;
   const enemies = autoPatrolHostiles(ctx).filter(enemy => enemy.id !== suppressedApproachTargetId).sort((a, b) => {
-    if (a.isBoss !== b.isBoss) return a.isBoss ? -1 : 1;
     const da = autoPatrolDuel(ctx, a), db = autoPatrolDuel(ctx, b);
     return da.hits - db.hits || da.threat - db.threat;
   });
-  const enemyMove = autoPatrolMoveDecision(ctx, enemies.map(enemy => ({ x: enemy.x, y: enemy.y })), "approach-weakest", true);
+  if (autoPatrolRuntime.floorHuntAbandonedDepth === ctx.depth && !stairs.length) {
+    const stallBomb = autoPatrolStallBombDecision(ctx);
+    if (stallBomb) return stallBomb;
+  }
+  const enemyMove = autoPatrolRuntime.floorHuntAbandonedDepth === ctx.depth && stairs.length ? null : autoPatrolMoveDecision(ctx, enemies.map(enemy => ({ x: enemy.x, y: enemy.y })), "approach-weakest", true);
   if (enemyMove) return { kind: "DISPATCH", ...enemyMove };
   const stairsMove = autoPatrolMoveDecision(ctx, stairs, "seek-stairs");
   if (stairsMove) return { kind: "DISPATCH", ...stairsMove };
@@ -7030,6 +7959,11 @@ function autoPatrolClonePlanRuntime() {
     bombLurePlan: autoPatrolRuntime.bombLurePlan,
     bombLureEvaluatedDepth: autoPatrolRuntime.bombLureEvaluatedDepth,
     meleePlan: autoPatrolRuntime.meleePlan,
+    lurePlan: autoPatrolRuntime.lurePlan,
+    lurePlanState: autoPatrolRuntime.lurePlanState,
+    lurePlansStarted: autoPatrolRuntime.lurePlansStarted,
+    lurePlansCompleted: autoPatrolRuntime.lurePlansCompleted,
+    lurePlansInvalidated: autoPatrolRuntime.lurePlansInvalidated,
     contactRoutePlan: autoPatrolRuntime.contactRoutePlan,
     contactRouteState: autoPatrolRuntime.contactRouteState,
     initialRoutePlan: autoPatrolRuntime.initialRoutePlan,
@@ -7080,7 +8014,16 @@ function autoPatrolWalkableExitCount(ctx) {
 }
 function autoPatrolRolloutCandidates(ctx, baseDecision) {
   const candidates = [], seen = new Set();
-  const add = (event, label) => { if (event && !seen.has(event)) { seen.add(event); candidates.push({ event, label }); } };
+  const add = (event, label) => {
+    if (!event || seen.has(event)) return;
+    const candidateDecision = {
+      kind: "DISPATCH", event, route: [event],
+      reason: baseDecision?.reason || "integrated-rollout-candidate",
+      targetId: baseDecision?.targetId || null
+    };
+    if (autoPatrolDetectedCombatCandidateBlock(ctx, candidateDecision).blocked) return;
+    seen.add(event); candidates.push({ event, label });
+  };
   if (baseDecision?.kind === "DISPATCH") add(baseDecision.event, "base");
   for (const [x, y] of autoPatrolNeighbors(ctx.player.x, ctx.player.y)) {
     if (autoPatrolWalkable(ctx, x, y) || ctx.enemies.some(enemy => enemy.x === x && enemy.y === y)) add(autoPatrolDirectionEvent(x - ctx.player.x, y - ctx.player.y), "direction");
@@ -7090,7 +8033,7 @@ function autoPatrolRolloutCandidates(ctx, baseDecision) {
 async function autoPatrolSimulateEvent(event) {
   const contextSnapshot = structuredClone(context);
   const stateSnapshot = engine.currentState;
-  const runtimeSnapshot = autoPatrolClonePlanRuntime();
+  const runtimeSnapshot = autoPatrolCloneSimulationRuntime();
   const originalRandom = Math.random;
   const before = { hp: context.player.hp, enemyCount: autoPatrolHostiles(context).length };
   const seed = autoPatrolHashSeed([context.turnCount, context.depth, context.player.x, context.player.y, event, before.hp, before.enemyCount].join('|'));
@@ -7111,7 +8054,7 @@ async function autoPatrolSimulateEvent(event) {
       if (enemy.isBoss || enemyMovementPolicy(enemy) !== ENEMY_MOVEMENT_POLICY.HORIZONTAL_FIRST) return false;
       const aligned = enemy.x === context.player.x || enemy.y === context.player.y;
       const distance = autoPatrolDistance(enemy, context.player);
-      return enemy.hasDetectedPlayer && aligned && distance >= 2 && distance <= 4 && bombDamage(context) >= enemy.hp;
+      return enemy.hasDetectedPlayer && aligned && distance >= 2 && distance <= 4 && autoPatrolBombDamageAgainstEnemy(context, enemy) >= enemy.hp;
     }).map(enemy => ({ id: enemy.id, distance: autoPatrolDistance(enemy, context.player), threat: enemyThreatScore(context, enemy) }));
     const score = (dead ? 1000000 : 0) + Math.max(0, adjacent - 1) * 150000 + adjacent * 16000 + Math.max(0, near2 - 1) * 9000 + near2 * 1500 + hpLoss * 130 + (bombRisk ? 12000 : 0) - exits * 100 - kills * 36000;
     return { accepted, score, metrics: { dead, detected: detected.length, detectedIds: detected.map(enemy => enemy.id), adjacent, near2, hpLoss, kills, exits, bombRisk, safeBombTargets } };
@@ -7121,7 +8064,7 @@ async function autoPatrolSimulateEvent(event) {
     Math.random = originalRandom;
     autoPatrolRestoreContext(context, contextSnapshot);
     engine.currentState = stateSnapshot;
-    autoPatrolRestorePlanRuntime(runtimeSnapshot);
+    autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
   }
 }
 const AUTO_PATROL_ESCAPE_TRAJECTORY_HORIZON = 4;
@@ -7146,6 +8089,7 @@ async function autoPatrolSimulateEscapeTrajectory(targetId, firstEvent, horizon 
   const transaction = beginGameRandomTransaction();
   const hpBefore = context.player.hp;
   let best = null;
+  engine.beginProjectionSuppression();
   try {
     for (const events of autoPatrolEscapeTrajectorySequences(firstEvent, horizon)) {
       autoPatrolRestoreContext(context, contextSnapshot);
@@ -7205,12 +8149,13 @@ async function autoPatrolSimulateEscapeTrajectory(targetId, firstEvent, horizon 
     autoPatrolRestoreContext(context, contextSnapshot);
     engine.currentState = stateSnapshot;
     autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
+    engine.endProjectionSuppression();
   }
 }
 async function autoPatrolSimulateAdjacentBombEscape() {
   const contextSnapshot = structuredClone(context);
   const stateSnapshot = engine.currentState;
-  const runtimeSnapshot = autoPatrolClonePlanRuntime();
+  const runtimeSnapshot = autoPatrolCloneSimulationRuntime();
   const originalRandom = Math.random;
   const seed = autoPatrolHashSeed([context.turnCount, context.depth, context.player.x, context.player.y, "adjacent-bomb-escape"].join("|"));
   try {
@@ -7239,7 +8184,7 @@ async function autoPatrolSimulateAdjacentBombEscape() {
     Math.random = originalRandom;
     autoPatrolRestoreContext(context, contextSnapshot);
     engine.currentState = stateSnapshot;
-    autoPatrolRestorePlanRuntime(runtimeSnapshot);
+    autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
   }
 }
 function autoPatrolContactRouteSequences(maxLength = 2) {
@@ -7260,7 +8205,7 @@ function autoPatrolContactRouteSequences(maxLength = 2) {
 async function autoPatrolSimulateContactRoute(events, targetId) {
   const contextSnapshot = structuredClone(context);
   const stateSnapshot = engine.currentState;
-  const runtimeSnapshot = autoPatrolClonePlanRuntime();
+  const runtimeSnapshot = autoPatrolCloneSimulationRuntime();
   const originalRandom = Math.random;
   const beforeHp = context.player.hp;
   const seed = autoPatrolHashSeed([context.turnCount, context.depth, context.player.x, context.player.y, targetId, events.join(","), "contact-route"].join("|"));
@@ -7284,13 +8229,15 @@ async function autoPatrolSimulateContactRoute(events, targetId) {
     Math.random = originalRandom;
     autoPatrolRestoreContext(context, contextSnapshot);
     engine.currentState = stateSnapshot;
-    autoPatrolRestorePlanRuntime(runtimeSnapshot);
+    autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
   }
 }
 async function autoPatrolCreateContactRoutePlan(ctx, target) {
   const beforeDistance = autoPatrolDistance(target, ctx.player);
   const candidates = [];
   for (const events of autoPatrolContactRouteSequences(2)) {
+    const candidateDecision = { kind: "DISPATCH", event: events[0], route: events, reason: "contact-route-plan:candidate", targetId: target.id };
+    if (autoPatrolDetectedCombatCandidateBlock(ctx, candidateDecision).blocked) continue;
     const result = await autoPatrolSimulateContactRoute(events, target.id);
     const final = result.final;
     if (!result.accepted || !final || final.dead || !final.targetAlive || final.exits < 1) continue;
@@ -7339,7 +8286,7 @@ function autoPatrolInitialRouteSequences(maxLength = 3) {
   visit([]); return result;
 }
 async function autoPatrolSimulateInitialRoute(events, continuationHorizon = 16) {
-  const contextSnapshot = structuredClone(context), stateSnapshot = engine.currentState, runtimeSnapshot = autoPatrolClonePlanRuntime(), originalRandom = Math.random;
+  const contextSnapshot = structuredClone(context), stateSnapshot = engine.currentState, runtimeSnapshot = autoPatrolCloneSimulationRuntime(), originalRandom = Math.random;
   const beforeHp = context.player.hp, beforeHostiles = autoPatrolHostiles(context).length;
   const seed = autoPatrolHashSeed([context.turnCount, context.depth, context.player.x, context.player.y, events.join(","), "initial-route"].join("|"));
   const positions = new Set([`${context.player.x},${context.player.y}`]);
@@ -7364,11 +8311,13 @@ async function autoPatrolSimulateInitialRoute(events, continuationHorizon = 16) 
     }
     return null;
   } catch (_) { return null; }
-  finally { Math.random = originalRandom; autoPatrolRestoreContext(context, contextSnapshot); engine.currentState = stateSnapshot; autoPatrolRestorePlanRuntime(runtimeSnapshot); }
+  finally { Math.random = originalRandom; autoPatrolRestoreContext(context, contextSnapshot); engine.currentState = stateSnapshot; autoPatrolRestoreSimulationRuntime(runtimeSnapshot); }
 }
 async function autoPatrolCreateInitialRoutePlan(ctx) {
   const candidates = [];
   for (const events of autoPatrolInitialRouteSequences(3)) {
+    const candidateDecision = { kind: "DISPATCH", event: events[0], route: events, reason: "initial-route-plan:candidate" };
+    if (autoPatrolDetectedCombatCandidateBlock(ctx, candidateDecision).blocked) continue;
     const result = await autoPatrolSimulateInitialRoute(events, 16);
     if (!result) continue;
     candidates.push({ events: result.events, score: result.hpLoss * 300 - result.kills * 3000 - result.exits * 100 });
@@ -7406,7 +8355,7 @@ function autoPatrolBombLureTemplates() {
   return transforms.map(transform => base.map(transform));
 }
 async function autoPatrolSimulateBombLure(events) {
-  const contextSnapshot = structuredClone(context), stateSnapshot = engine.currentState, runtimeSnapshot = autoPatrolClonePlanRuntime(), originalRandom = Math.random;
+  const contextSnapshot = structuredClone(context), stateSnapshot = engine.currentState, runtimeSnapshot = autoPatrolCloneSimulationRuntime(), originalRandom = Math.random;
   const beforeHp = context.player.hp, beforeHostiles = autoPatrolHostiles(context).length;
   const seed = autoPatrolHashSeed([context.turnCount, context.depth, context.player.x, context.player.y, events.join(','), 'bomb-lure'].join('|'));
   let placementHp = null, placementAdjacent = null;
@@ -7423,7 +8372,7 @@ async function autoPatrolSimulateBombLure(events) {
     if (kills < 2 || context.bombs.length || autoPatrolAdjacentHostiles(context).length !== 0) return null;
     return { events: events.slice(), hp: context.player.hp, kills, hpLoss: beforeHp - context.player.hp, exits: autoPatrolWalkableExitCount(context) };
   } catch (_) { return null; }
-  finally { Math.random = originalRandom; autoPatrolRestoreContext(context, contextSnapshot); engine.currentState = stateSnapshot; autoPatrolRestorePlanRuntime(runtimeSnapshot); }
+  finally { Math.random = originalRandom; autoPatrolRestoreContext(context, contextSnapshot); engine.currentState = stateSnapshot; autoPatrolRestoreSimulationRuntime(runtimeSnapshot); }
 }
 async function autoPatrolCreateBombLurePlan(ctx) {
   const candidates = [];
@@ -7433,6 +8382,14 @@ async function autoPatrolCreateBombLurePlan(ctx) {
   }
   candidates.sort((a,b) => a.score - b.score || a.events.join(',').localeCompare(b.events.join(',')));
   return candidates[0] ? { events: candidates[0].events.slice(), createdDepth: ctx.depth } : null;
+}
+function autoPatrolPlannedMovementIsApplicable(ctx, event) {
+  const delta = autoPatrolDirectionDelta(event);
+  if (!delta) return true;
+  const nextX = ctx.player.x + delta.dx;
+  const nextY = ctx.player.y + delta.dy;
+  if (!autoPatrolWalkable(ctx, nextX, nextY)) return false;
+  return !ctx.enemies.some(enemy => enemy.x === nextX && enemy.y === nextY);
 }
 async function autoPatrolContinueBombLurePlan(ctx, frontendState) {
   const plan = autoPatrolRuntime.bombLurePlan;
@@ -7448,6 +8405,10 @@ async function autoPatrolContinueBombLurePlan(ctx, frontendState) {
     autoPatrolRuntime.bombLurePlan = null;
     return placement;
   }
+  if (!autoPatrolPlannedMovementIsApplicable(ctx, event)) {
+    autoPatrolRuntime.bombLurePlan = null;
+    return null;
+  }
   const result = await autoPatrolSimulateEvent(event);
   if (!result.accepted || result.metrics.dead || result.metrics.adjacent >= 2 || result.metrics.exits < 1) { autoPatrolRuntime.bombLurePlan = null; return null; }
   autoPatrolRuntime.bombLurePlan.events.shift();
@@ -7456,7 +8417,7 @@ async function autoPatrolContinueBombLurePlan(ctx, frontendState) {
 }
 
 async function autoPatrolSimulateSafeFloorBombTrap(events) {
-  const contextSnapshot = structuredClone(context), stateSnapshot = engine.currentState, runtimeSnapshot = autoPatrolClonePlanRuntime(), originalRandom = Math.random;
+  const contextSnapshot = structuredClone(context), stateSnapshot = engine.currentState, runtimeSnapshot = autoPatrolCloneSimulationRuntime(), originalRandom = Math.random;
   const seed = autoPatrolHashSeed([context.turnCount, context.depth, context.player.x, context.player.y, events.join(','), 'safe-floor-bomb'].join('|'));
   try {
     Math.random = autoPatrolDeterministicRandom(seed);
@@ -7486,7 +8447,7 @@ async function autoPatrolSimulateSafeFloorBombTrap(events) {
     if (autoPatrolAdjacentHostiles(context).length >= 2) return null;
     return { events: [...events, 'PLACE_BOMB'], targetId: target.id, targetCount: targets.length, exits: autoPatrolWalkableExitCount(context) };
   } catch (_) { return null; }
-  finally { Math.random = originalRandom; autoPatrolRestoreContext(context, contextSnapshot); engine.currentState = stateSnapshot; autoPatrolRestorePlanRuntime(runtimeSnapshot); }
+  finally { Math.random = originalRandom; autoPatrolRestoreContext(context, contextSnapshot); engine.currentState = stateSnapshot; autoPatrolRestoreSimulationRuntime(runtimeSnapshot); }
 }
 
 async function autoPatrolContinueBombEscapeAlternativePlan(ctx, frontendState) {
@@ -7784,7 +8745,7 @@ async function autoPatrolSelectBombRejectedFallback(ctx, targetId) {
     const trajectoryScore = trajectory
       ? trajectory.turns * 100000 + trajectory.maxAdjacent * 10000 + trajectory.hpLoss * 100 - trajectory.finalDistance
       : 0;
-    const score = trajectoryScore + result.metrics.adjacent * 100000 + result.metrics.hpLoss * 1000 + result.metrics.detected * 100 + result.metrics.exits;
+    const score = trajectoryScore + result.metrics.adjacent * 100000 + result.metrics.hpLoss * 1000 + result.metrics.detected * 100 - result.metrics.exits;
     candidates.push({ event, score, result, trajectory });
   }
   candidates.sort((a, b) => a.score - b.score || a.event.localeCompare(b.event));
@@ -7891,13 +8852,14 @@ async function autoPatrolDispatchSimulationEvent(event, policy = AUTO_PATROL_SIM
 async function autoPatrolSimulateObjectiveTrajectory(initialEvents, randomSource, horizon = 24, dispatchPolicy = AUTO_PATROL_SIMULATION_DISPATCH_POLICY.ENGINE_ONLY) {
   const contextSnapshot = structuredClone(context);
   const stateSnapshot = engine.currentState;
-  const runtimeSnapshot = autoPatrolClonePlanRuntime();
+  const runtimeSnapshot = autoPatrolCloneSimulationRuntime();
   const replaySnapshot = gameRandomRuntime.canonicalReplay.slice();
   const simulationStackSnapshot = gameRandomRuntime.simulationStack.slice();
   const transaction = randomSource && !Array.isArray(randomSource) ? randomSource : null;
   const transactionFork = transaction ? beginGameRandomTransactionFork(transaction) : null;
   const beforeHp = context.player.hp;
   const reasons = [];
+  engine.beginProjectionSuppression();
   let maxAdjacent = autoPatrolAdjacentHostiles(context).length;
   let multiAdjacentTurns = maxAdjacent >= 2 ? 1 : 0;
   const capturePressure = () => {
@@ -7926,24 +8888,28 @@ async function autoPatrolSimulateObjectiveTrajectory(initialEvents, randomSource
       capturePressure();
     }
     const dead = autoPatrolPlayerIsCurrentlyDead(context);
+    const hostilesAfter = autoPatrolHostiles(context);
     const adjacent = autoPatrolAdjacentHostiles(context).length;
-    const detected = autoPatrolHostiles(context).filter(enemy => enemy.hasDetectedPlayer).length;
+    const detected = hostilesAfter.filter(enemy => enemy.hasDetectedPlayer).length;
     const hpLoss = Math.max(0, beforeHp - context.player.hp);
+    const kills = Math.max(0, autoPatrolHostiles(contextSnapshot).length - hostilesAfter.length);
+    const hostileHpLoss = Math.max(0, autoPatrolHostileHpTotal(contextSnapshot) - autoPatrolHostileHpTotal(context));
     const trapped = reasons.filter(reason => reason === 'bomb-plan-trapped').length;
     const noObjective = reasons.filter(reason => reason === 'no-objective').length;
     const score = (dead ? 1000000000 : 0) + trapped * 10000000 + Math.max(0, adjacent - 1) * 1000000 + adjacent * 100000 + hpLoss * 1000 + noObjective * 100;
-    return { dead, adjacent, detected, hpLoss, trapped, noObjective, maxAdjacent, multiAdjacentTurns, score };
+    return { dead, adjacent, detected, hpLoss, kills, hostileHpLoss, trapped, noObjective, maxAdjacent, multiAdjacentTurns, score };
   } catch (_) {
     return { dead: true, adjacent: 99, detected: 99, hpLoss: beforeHp, trapped: 99, noObjective: 99, maxAdjacent: 99, multiAdjacentTurns: 99, score: 1000000000 };
   } finally {
     autoPatrolRestoreContext(context, contextSnapshot);
     engine.currentState = stateSnapshot;
-    autoPatrolRestorePlanRuntime(runtimeSnapshot);
+    autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
     if (transactionFork && gameRandomRuntime.simulationStack[gameRandomRuntime.simulationStack.length - 1] === transactionFork) endGameRandomSimulationFork(transactionFork);
     gameRandomRuntime.canonicalReplay.length = 0;
     gameRandomRuntime.canonicalReplay.push(...replaySnapshot);
     gameRandomRuntime.simulationStack.length = 0;
     gameRandomRuntime.simulationStack.push(...simulationStackSnapshot);
+    engine.endProjectionSuppression();
   }
 }
 async function autoPatrolCompareMultiStrongWallTrajectory(ctx, baseline, runtimeAfterBaseline, candidate) {
@@ -8034,6 +9000,8 @@ function autoPatrolResetCombatPlansForBossReturn() {
   autoPatrolRuntime.bombSetupPlan = null;
   autoPatrolRuntime.bombLurePlan = null;
   autoPatrolRuntime.meleePlan = null;
+  autoPatrolRuntime.lurePlan = null;
+  autoPatrolRuntime.lurePlanState = "LURE_PLAN_NONE";
   autoPatrolRuntime.contactRoutePlan = null;
   autoPatrolRuntime.initialRoutePlan = null;
   autoPatrolRuntime.foodHuntPlan = null;
@@ -8072,9 +9040,310 @@ async function autoPatrolBossReturnRuntimeDecision(ctx) {
   if (best) return { kind: "DISPATCH", event: best.candidate.event, reason: "boss-clear-return-town:guarded-route" };
   return { kind: "DISPATCH", ...direct };
 }
-async function decideAutoPatrolRuntimeAction(ctx, frontendState, skipInitialRoute = false) {
+
+const AUTO_PATROL_HORIZONTAL_FLOW_CONFIG = Object.freeze({ maxPreSteps:4, maxEvaluationsPerFloor:1000, reserveThree:0.35, reserveTwo:0.25, reserveOne:0.18, reserveDesperate:0.10, desperateAllowedLoss:0.15, desperateMargin:0.02, rejectionRearmTurns:5 });
+function autoPatrolHorizontalFlowMinimumReserve(detectedCount, currentHpRatio) {
+  const cfg = AUTO_PATROL_HORIZONTAL_FLOW_CONFIG;
+  const configuredReserve = detectedCount >= 3 ? cfg.reserveThree : detectedCount >= 2 ? cfg.reserveTwo : cfg.reserveOne;
+  const desperateFloor = Math.min(configuredReserve, Math.max(cfg.reserveDesperate, currentHpRatio - cfg.desperateAllowedLoss));
+  if (currentHpRatio >= configuredReserve + cfg.desperateMargin) return { configuredReserve, minimumReserve: configuredReserve, desperate: false };
+  if (currentHpRatio <= configuredReserve) return { configuredReserve, minimumReserve: desperateFloor, desperate: true };
+  const blend = (currentHpRatio - configuredReserve) / cfg.desperateMargin;
+  return { configuredReserve, minimumReserve: desperateFloor + (configuredReserve - desperateFloor) * blend, desperate: true };
+}
+const AUTO_PATROL_HORIZONTAL_FLOW_ESCAPE_PATTERNS = Object.freeze([
+  ["OPPOSITE","OPPOSITE","FORWARD","OPPOSITE","PASS"],
+  ["FORWARD","FORWARD","FORWARD","FORWARD","FORWARD"],
+  ["FORWARD","FORWARD","FORWARD","FORWARD","PASS"],
+  ["PERP_A","PERP_A","FORWARD","FORWARD","PASS"],
+  ["PERP_B","PERP_B","FORWARD","FORWARD","PASS"]
+]);
+function autoPatrolHorizontalFlowDirectionEvents(direction) {
+  const horizontal = direction === "MOVE_LEFT" ? { forward:"MOVE_LEFT", opposite:"MOVE_RIGHT" } : { forward:"MOVE_RIGHT", opposite:"MOVE_LEFT" };
+  return { ...horizontal, perpA:"MOVE_UP", perpB:"MOVE_DOWN" };
+}
+function autoPatrolHorizontalFlowExpandPattern(direction, pattern) {
+  const e = autoPatrolHorizontalFlowDirectionEvents(direction);
+  return pattern.map(token => ({ FORWARD:e.forward, OPPOSITE:e.opposite, PERP_A:e.perpA, PERP_B:e.perpB, PASS:"PASS" })[token]);
+}
+function autoPatrolHorizontalFlowSignature(ctx) {
+  const detected = autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer).map(enemy => `${enemy.id}:${enemy.x},${enemy.y}:${Math.ceil(enemy.hp)}`).sort();
+  return `${ctx.depth}|${ctx.turnCount}|${ctx.player.x},${ctx.player.y}|${Math.ceil(ctx.player.hp)}|${detected.join(';')}|${ctx.bombs.map(b=>`${b.x},${b.y}:${b.fuse}`).join(';')}`;
+}
+function autoPatrolHorizontalFlowEligible(ctx) {
+  if (autoPatrolRuntime.horizontalFlowDisabled) return false;
+  if (gameRandomRuntime.simulationStack.length || gameRandomRuntime.transactionStack.length) return false;
+  if (ctx.currentMapType !== "dungeon" || autoPatrolPlayerIsCurrentlyDead(ctx)) return false;
+  if (!guards.can_place_bomb(ctx) || ctx.bombs.length || autoPatrolRuntime.pendingBombPlan || autoPatrolRuntime.bombPlan) return false;
+  const detected = autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer);
+  if (!detected.length) return false;
+  if (detected.some(enemy => enemyMovementPolicy(enemy) !== ENEMY_MOVEMENT_POLICY.HORIZONTAL_FIRST)) return false;
+  const adjacentEnemies = autoPatrolAdjacentHostiles(ctx);
+  const adjacent = adjacentEnemies.length;
+  const placementDamage = adjacentEnemies.reduce((sum, enemy) => sum + enemyDamageAgainstPlayer(ctx, enemy), 0);
+  if (ctx.player.hp - placementDamage < ctx.player.maxHp * 0.18) return false;
+  const continuing = Boolean(autoPatrolRuntime.horizontalFlowDirection);
+  const singleTarget = detected.length === 1 ? detected[0] : null;
+  const singleDuel = singleTarget ? autoPatrolDuel(ctx, singleTarget) : null;
+  const singleNeedsFlow = Boolean(singleTarget && continuing && ctx.player.hp >= ctx.player.maxHp * 0.28
+    && (!autoPatrolMeleeCommitmentIsSurvivable(ctx, singleTarget)
+      || singleDuel.hits >= 4
+      || singleDuel.damage >= ctx.player.maxHp * 0.30));
+  const crisisStart = !continuing && (detected.length >= 3 || adjacent >= 2);
+  const crisisContinuation = continuing && (detected.length >= 2 || singleNeedsFlow);
+  return (crisisStart || crisisContinuation) && (adjacent >= 1 || detected.some(enemy => autoPatrolDistance(enemy, ctx.player) <= 4));
+}
+function autoPatrolHorizontalFlowPrefixGroups(direction) {
+  const groups = [];
+  for (let preSteps = 0; preSteps <= AUTO_PATROL_HORIZONTAL_FLOW_CONFIG.maxPreSteps; preSteps += 1) {
+    for (const preTurn of [null, "MOVE_UP", "MOVE_DOWN"]) {
+      const prefixEvents = [...Array(preSteps).fill(direction), ...(preTurn ? [preTurn] : []), "PLACE_BOMB"];
+      const sequences = AUTO_PATROL_HORIZONTAL_FLOW_ESCAPE_PATTERNS.map(pattern => ({ direction, preSteps, preTurn, events:[...prefixEvents, ...autoPatrolHorizontalFlowExpandPattern(direction, pattern)] }));
+      groups.push({ direction, preSteps, preTurn, prefixEvents, sequences });
+    }
+  }
+  return groups;
+}
+async function autoPatrolSimulateHorizontalFlowPrefixGroup(group, prefixOnly = false) {
+  const contextSnapshot = structuredClone(context);
+  const stateSnapshot = engine.currentState;
+  const runtimeSnapshot = autoPatrolCloneSimulationRuntime();
+  const transaction = beginGameRandomTransaction();
+  const fork = beginGameRandomTransactionFork(transaction);
+  const beforeHp = context.player.hp;
+  const beforeCount = autoPatrolHostiles(context).length;
+  const detectedAtStart = autoPatrolHostiles(context).filter(enemy => enemy.hasDetectedPlayer).map(enemy => ({ id: enemy.id, x: enemy.x, y: enemy.y }));
+  const beforeDetected = detectedAtStart.length;
+  const startAdjacent = autoPatrolAdjacentHostiles(context).length;
+  const results = [];
+  const poisoned = (sequence) => ({ ...sequence, dead:true, kills:0, hpLoss:beforeHp, detected:99, adjacent:99, maxAdjacent:99, multiAdjacentTurns:99, exits:0, contactBreak:false, pursuit:0, acceptedEvents:0, score:1000000000 });
+  const runEvents = async (events, stats) => {
+    for (const rawEvent of events) {
+      let event = rawEvent;
+      if (["MOVE_LEFT","MOVE_RIGHT","MOVE_UP","MOVE_DOWN"].includes(event)) {
+        const destination = autoPatrolEventDestination(context, event);
+        const occupied = destination && context.enemies.some(enemy => enemy.x === destination.x && enemy.y === destination.y);
+        if (!destination || !autoPatrolWalkable(context, destination.x, destination.y) || occupied) {
+          if (context.bombs.length) event = "PASS";
+          else return;
+        }
+      }
+      const accepted = Boolean(await engine.transition(event));
+      if (!accepted) return;
+      stats.acceptedEvents += 1;
+      stats.dead = autoPatrolPlayerIsCurrentlyDead(context);
+      const adjacent = autoPatrolAdjacentHostiles(context).length;
+      stats.maxAdjacent = Math.max(stats.maxAdjacent, adjacent);
+      if (adjacent >= 2) stats.multiAdjacentTurns += 1;
+      if (stats.dead) return;
+    }
+  };
+  const finalize = (sequence, stats) => {
+    const hostiles = autoPatrolHostiles(context);
+    const detected = hostiles.filter(enemy => enemy.hasDetectedPlayer);
+    const kills = Math.max(0, beforeCount - hostiles.length);
+    const hpLoss = Math.max(0, beforeHp - context.player.hp);
+    const adjacent = autoPatrolAdjacentHostiles(context).length;
+    const exits = autoPatrolWalkableExitCount(context);
+    const contactBreak = beforeDetected > 0 && detected.length === 0;
+    const pursuit = detectedAtStart.reduce((moved, start) => {
+      const enemy = context.enemies.find(candidate => candidate.id === start.id);
+      return Math.max(moved, enemy ? Math.abs(enemy.x - start.x) + Math.abs(enemy.y - start.y) : moved);
+    }, 0);
+    const directionDelta = sequence.direction === "MOVE_RIGHT" ? context.player.x - contextSnapshot.player.x : contextSnapshot.player.x - context.player.x;
+    const remainingHpRatio = context.player.hp / Math.max(1, context.player.maxHp);
+    const reservePenalty = remainingHpRatio < 0.18 ? 3000000 : remainingHpRatio < 0.25 ? 500000 : remainingHpRatio < 0.40 ? 200000 : 0;
+    const score = (stats.dead ? 1000000000 : 0)
+      + reservePenalty
+      - kills * 1000000
+      - (contactBreak ? 180000 : 0)
+      + stats.multiAdjacentTurns * 22000
+      + stats.maxAdjacent * 18000
+      + adjacent * 16000
+      + detected.length * 5000
+      + hpLoss * 1000
+      - exits * 800
+      - Math.max(0, directionDelta) * 600
+      + (stats.acceptedEvents < sequence.events.length ? 200000 : 0);
+    return { ...sequence, dead:stats.dead, kills, hpLoss, remainingHpRatio, detected:detected.length, adjacent, maxAdjacent:stats.maxAdjacent, multiAdjacentTurns:stats.multiAdjacentTurns, exits, contactBreak, pursuit, acceptedEvents:stats.acceptedEvents, endX:context.player.x, endY:context.player.y, score };
+  };
+  engine.beginProjectionSuppression();
+  try {
+    const prefixStats = { maxAdjacent:startAdjacent, multiAdjacentTurns:startAdjacent >= 2 ? 1 : 0, acceptedEvents:0, dead:false };
+    let prefixFailed = false;
+    try { await runEvents(group.prefixEvents, prefixStats); } catch (_) { prefixFailed = true; }
+    if (prefixOnly) {
+      const complete = !prefixFailed && !prefixStats.dead && prefixStats.acceptedEvents === group.prefixEvents.length;
+      const hpLoss = Math.max(0, beforeHp - context.player.hp);
+      return { probe:true, group, viable:complete, prefixScore: complete ? hpLoss * 1000 + autoPatrolAdjacentHostiles(context).length * 100 + prefixStats.maxAdjacent * 50 : Infinity };
+    }
+    if (prefixFailed) {
+      for (const sequence of group.sequences) results.push(poisoned(sequence));
+      return results;
+    }
+    if (prefixStats.dead || prefixStats.acceptedEvents < group.prefixEvents.length) {
+      for (const sequence of group.sequences) results.push(finalize(sequence, prefixStats));
+      return results;
+    }
+    const midContext = structuredClone(context);
+    const midState = engine.currentState;
+    const midRuntime = autoPatrolCloneSimulationRuntime();
+    const midCursor = fork.cursor;
+    for (let index = 0; index < group.sequences.length; index += 1) {
+      const sequence = group.sequences[index];
+      if (index > 0) {
+        autoPatrolRestoreContext(context, midContext);
+        engine.currentState = midState;
+        autoPatrolRestoreSimulationRuntime(midRuntime);
+        fork.cursor = midCursor;
+      }
+      const stats = { ...prefixStats };
+      try {
+        await runEvents(sequence.events.slice(group.prefixEvents.length), stats);
+        results.push(finalize(sequence, stats));
+      } catch (_) {
+        results.push(poisoned(sequence));
+        autoPatrolRestoreContext(context, midContext);
+        engine.currentState = midState;
+        autoPatrolRestoreSimulationRuntime(midRuntime);
+        fork.cursor = midCursor;
+      }
+    }
+    return results;
+  } finally {
+    engine.endProjectionSuppression();
+    autoPatrolRestoreContext(context, contextSnapshot);
+    engine.currentState = stateSnapshot;
+    autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
+    if (gameRandomRuntime.simulationStack[gameRandomRuntime.simulationStack.length - 1] === fork) endGameRandomSimulationFork(fork);
+    if (gameRandomRuntime.transactionStack[gameRandomRuntime.transactionStack.length - 1] === transaction) rollbackGameRandomTransaction(transaction);
+  }
+}
+async function autoPatrolCreateHorizontalFlowPlan(ctx) {
+  if (autoPatrolRuntime.horizontalFlowBudgetDepth !== ctx.depth) {
+    autoPatrolRuntime.horizontalFlowBudgetDepth = ctx.depth;
+    autoPatrolRuntime.horizontalFlowBudgetUsed = 0;
+    autoPatrolRuntime.horizontalFlowDirection = null;
+    autoPatrolRuntime.horizontalFlowLastSignature = "";
+    autoPatrolRuntime.horizontalFlowLastRejectionSignature = "";
+    autoPatrolRuntime.horizontalFlowLastRejectionTurn = -999;
+    autoPatrolRuntime.horizontalFlowLastRejectionHpRatio = 0;
+  }
+  if (!autoPatrolHorizontalFlowEligible(ctx)) return null;
+  const signature = autoPatrolHorizontalFlowSignature(ctx);
+  if (autoPatrolRuntime.horizontalFlowLastSignature === signature) return null;
+  const detectedHostiles = autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer);
+  const startAdjacent = autoPatrolAdjacentHostiles(ctx).length;
+  const currentHpRatio = ctx.player.hp / Math.max(1, ctx.player.maxHp);
+  const rejectionSignature = `${ctx.depth}|${detectedHostiles.map(enemy => enemy.id).sort().join(',')}`;
+  if (autoPatrolRuntime.horizontalFlowLastRejectionSignature === rejectionSignature
+    && currentHpRatio <= autoPatrolRuntime.horizontalFlowLastRejectionHpRatio + 0.01
+    && ctx.turnCount - autoPatrolRuntime.horizontalFlowLastRejectionTurn < AUTO_PATROL_HORIZONTAL_FLOW_CONFIG.rejectionRearmTurns) return null;
+  const preferred = autoPatrolRuntime.horizontalFlowDirection;
+  const directions = preferred ? [preferred] : ["MOVE_LEFT","MOVE_RIGHT"];
+  const results = [];
+  const beamWidth = Number(autoPatrolRuntime.horizontalFlowBeamWidth) || 0;
+  let probeCount = 0;
+  outer: for (const direction of directions) {
+    let groups = autoPatrolHorizontalFlowPrefixGroups(direction);
+    if (beamWidth > 0) {
+      const beamGroups = Math.max(1, Math.ceil(beamWidth / AUTO_PATROL_HORIZONTAL_FLOW_ESCAPE_PATTERNS.length));
+      const probes = [];
+      for (const group of groups) {
+        if (autoPatrolRuntime.horizontalFlowBudgetUsed + results.length + probeCount + 1 > AUTO_PATROL_HORIZONTAL_FLOW_CONFIG.maxEvaluationsPerFloor) break outer;
+        probes.push(await autoPatrolSimulateHorizontalFlowPrefixGroup(group, true));
+        probeCount += 1;
+      }
+      groups = probes.filter(probe => probe.viable).sort((a,b) => a.prefixScore - b.prefixScore).slice(0, beamGroups).map(probe => probe.group);
+    }
+    for (const group of groups) {
+      if (autoPatrolRuntime.horizontalFlowBudgetUsed + results.length + probeCount + group.sequences.length > AUTO_PATROL_HORIZONTAL_FLOW_CONFIG.maxEvaluationsPerFloor) break outer;
+      results.push(...await autoPatrolSimulateHorizontalFlowPrefixGroup(group));
+    }
+  }
+  results.sort((a,b) => a.score-b.score || b.kills-a.kills || a.hpLoss-b.hpLoss || a.events.join('|').localeCompare(b.events.join('|')));
+  const detectedCount = detectedHostiles.length;
+  const { minimumReserve, desperate } = autoPatrolHorizontalFlowMinimumReserve(detectedCount, currentHpRatio);
+  const best = results.find(result => !result.dead
+    && result.remainingHpRatio >= minimumReserve
+    && result.acceptedEvents === result.events.length
+    && (result.kills > 0 || (result.contactBreak && result.pursuit > 0))
+    && (!desperate || (
+      result.adjacent <= startAdjacent
+      && result.exits >= 1
+      && (result.hpLoss <= ctx.player.maxHp * AUTO_PATROL_HORIZONTAL_FLOW_CONFIG.desperateAllowedLoss || result.detected < detectedCount)
+    )));
+  autoPatrolRuntime.horizontalFlowEvaluations += results.length + probeCount;
+  autoPatrolRuntime.horizontalFlowBudgetUsed += results.length + probeCount;
+  autoPatrolRuntime.horizontalFlowLastSignature = signature;
+  autoPatrolRuntime.horizontalFlowLastResult = best ? structuredClone(best) : { rejected:true, candidateCount:results.length, best:results[0] ? structuredClone(results[0]) : null };
+  if (!best) {
+    autoPatrolRuntime.horizontalFlowLastRejectionSignature = rejectionSignature;
+    autoPatrolRuntime.horizontalFlowLastRejectionTurn = ctx.turnCount;
+    autoPatrolRuntime.horizontalFlowLastRejectionHpRatio = currentHpRatio;
+    return null;
+  }
+  autoPatrolRuntime.horizontalFlowLastRejectionSignature = "";
+  autoPatrolRuntime.horizontalFlowLastRejectionTurn = -999;
+  autoPatrolRuntime.horizontalFlowLastRejectionHpRatio = 0;
+  return { depth:ctx.depth, direction:best.direction, events:best.events.slice(), expected:{ kills:best.kills, hpLoss:best.hpLoss, maxAdjacent:best.maxAdjacent, contactBreak:best.contactBreak }, createdTurn:ctx.turnCount };
+}
+async function autoPatrolContinueHorizontalFlowPlan(ctx, frontendState) {
+  const plan = autoPatrolRuntime.horizontalFlowPlan;
+  if (!plan || frontendState !== "FE_PLAYER_TURN") return null;
+  if (plan.depth !== ctx.depth || autoPatrolPlayerIsCurrentlyDead(ctx)) {
+    autoPatrolRuntime.horizontalFlowPlan = null;
+    autoPatrolRuntime.horizontalFlowPlansInvalidated += 1;
+    return null;
+  }
+  if (!plan.events.length) {
+    autoPatrolRuntime.horizontalFlowPlan = null;
+    autoPatrolRuntime.horizontalFlowPlansCompleted += 1;
+    if (!autoPatrolHostiles(ctx).length) autoPatrolRuntime.horizontalFlowDirection = null;
+    return null;
+  }
+  let event = plan.events.shift();
+  if (["MOVE_LEFT","MOVE_RIGHT","MOVE_UP","MOVE_DOWN"].includes(event)) {
+    const destination = autoPatrolEventDestination(ctx, event);
+    const occupied = destination && ctx.enemies.some(enemy => enemy.x === destination.x && enemy.y === destination.y);
+    if (!destination || !autoPatrolWalkable(ctx, destination.x, destination.y) || occupied) {
+      if (ctx.bombs.length) event = "PASS";
+      else {
+        autoPatrolRuntime.horizontalFlowPlan = null;
+        autoPatrolRuntime.horizontalFlowPlansInvalidated += 1;
+        return null;
+      }
+    }
+  }
+  return { kind:"DISPATCH", event, reason:event === "PASS" ? "horizontal-flow-controlled-detonation-wait" : "horizontal-flow-terrain-serialization", targetId:null };
+}
+async function autoPatrolMaybeStartHorizontalFlowPlan(ctx, frontendState) {
+  if (frontendState !== "FE_PLAYER_TURN" || autoPatrolRuntime.horizontalFlowPlan) return null;
+  const plan = await autoPatrolCreateHorizontalFlowPlan(ctx);
+  if (!plan) return null;
+  autoPatrolRuntime.horizontalFlowPlan = plan;
+  autoPatrolRuntime.horizontalFlowDirection = plan.direction;
+  autoPatrolRuntime.horizontalFlowPlansStarted += 1;
+  return autoPatrolContinueHorizontalFlowPlan(ctx, frontendState);
+}
+
+async function decideAutoPatrolRuntimeAction(ctx, frontendState, rolloutContext = false) {
+  if (!rolloutContext) autoPatrolUpdateFloorHuntStall(ctx);
+  // rolloutContext=true means this decision is being taken INSIDE a rollout simulation:
+  // multi-turn planning (initial route, horizontal flow, lure/bomb-lure evaluation)
+  // is skipped so rollouts neither start new plan evaluations nor consume plan state.
   const bossReturn = await autoPatrolBossReturnRuntimeDecision(ctx);
   if (bossReturn) return bossReturn;
+  if (!rolloutContext) {
+    const horizontalFlowStep = await autoPatrolContinueHorizontalFlowPlan(ctx, frontendState);
+    if (horizontalFlowStep) return horizontalFlowStep;
+    const horizontalFlowStart = await autoPatrolMaybeStartHorizontalFlowPlan(ctx, frontendState);
+    if (horizontalFlowStart) return horizontalFlowStart;
+    if (frontendState === "FE_PLAYER_TURN") {
+      const engagementStep = autoPatrolEngagementDecision(ctx);
+      if (engagementStep) return engagementStep;
+    }
+  }
   const bombEscapeAlternativeStep = await autoPatrolContinueBombEscapeAlternativePlan(ctx, frontendState);
   if (bombEscapeAlternativeStep) return bombEscapeAlternativeStep;
   const bombLureStep = await autoPatrolContinueBombLurePlan(ctx, frontendState);
@@ -8087,19 +9356,42 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, skipInitialRout
   }
   const bombSetupStep = await autoPatrolContinueBombSetupPlan(ctx, frontendState);
   if (bombSetupStep) return bombSetupStep;
-  if (!skipInitialRoute) { const initialStep = await autoPatrolContinueInitialRoutePlan(ctx, frontendState); if (initialStep) return initialStep; }
+  if (!rolloutContext) { const initialStep = await autoPatrolContinueInitialRoutePlan(ctx, frontendState); if (initialStep) return initialStep; }
+  const lureStep = await autoPatrolContinueLurePlan(ctx, frontendState);
+  if (lureStep) return lureStep;
   const contactStep = await autoPatrolContinueContactRoutePlan(ctx, frontendState);
   if (contactStep) return contactStep;
   const runtimeBefore = autoPatrolClonePlanRuntime();
-  if (!skipInitialRoute && !autoPatrolRuntime.bombPlan && !autoPatrolRuntime.pendingBombPlan && !autoPatrolRuntime.meleePlan && autoPatrolAdjacentHostiles(ctx).length) {
+  if (!rolloutContext && !autoPatrolRuntime.bombPlan && !autoPatrolRuntime.pendingBombPlan && !autoPatrolRuntime.meleePlan && autoPatrolAdjacentHostiles(ctx).length) {
     const setup = await autoPatrolCreateBombSetupMove(ctx);
     autoPatrolRestorePlanRuntime(runtimeBefore);
     if (setup) {
-      autoPatrolRuntime.bombSetupPlan = { targetId: setup.targetId, createdDepth: ctx.depth, createdTurn: ctx.turnCount };
-      return { kind: "DISPATCH", event: setup.event, reason: "bomb-trap-create-safe-placement", targetId: setup.targetId };
+      const setupDecision = { kind: "DISPATCH", event: setup.event, route: [setup.event], reason: "bomb-trap-create-safe-placement", targetId: setup.targetId };
+      const selected = autoPatrolSelectDetectedCombatTacticCandidate(ctx, [setupDecision]);
+      if (selected.candidate) {
+        autoPatrolRuntime.bombSetupPlan = { targetId: setup.targetId, createdDepth: ctx.depth, createdTurn: ctx.turnCount };
+        return selected.candidate;
+      }
     }
   }
   let baseline = decideAutoPatrolBaseAction(ctx, frontendState);
+  if (!rolloutContext && baseline?.kind === "DISPATCH" && baseline.reason === "approach-weakest" && !autoPatrolRuntime.lurePlan && autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer).length === 0 && autoPatrolAdjacentHostiles(ctx).length === 0) {
+    transitionAutoPatrolLurePlan("PROJECT");
+    const lurePlan = autoPatrolCreateStaticLurePlan(ctx);
+    if (lurePlan) {
+      autoPatrolRuntime.lurePlan = lurePlan;
+      autoPatrolRuntime.lurePlansStarted += 1;
+      transitionAutoPatrolLurePlan("ROUTE_AVAILABLE");
+      const lureStep = await autoPatrolContinueLurePlan(ctx, frontendState);
+      if (lureStep) return lureStep;
+      autoPatrolClearLurePlan(false);
+      return { ...baseline, reason: "approach-undetected-hostile:lure-plan-invalidated" };
+    } else {
+      transitionAutoPatrolLurePlan("ROUTE_UNAVAILABLE");
+      autoPatrolClearLurePlan(false);
+      return { ...baseline, reason: "approach-undetected-hostile:lure-route-unavailable" };
+    }
+  }
   let runtimeAfterBaseline = autoPatrolClonePlanRuntime();
   if (baseline?.kind === 'DISPATCH' && baseline.event === 'PLACE_BOMB' && autoPatrolRuntime.pendingBombPlan) {
     const guardedBaseline = await autoPatrolPreflightBombEscape(ctx, baseline, runtimeAfterBaseline);
@@ -8118,7 +9410,10 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, skipInitialRout
         autoPatrolRuntime.meleePlan = null;
         autoPatrolRuntime.pendingBombPlan = structuredClone(candidate.pendingPlan);
         autoPatrolRuntime.multiStrongWallPlansStarted += 1;
-        return { kind: 'DISPATCH', event: 'PLACE_BOMB', reason: 'multi-strong-bomb-wall', targetId: candidate.targetId };
+        const bombDecision = { kind: 'DISPATCH', event: 'PLACE_BOMB', route: ['PLACE_BOMB'], reason: 'multi-strong-bomb-wall', targetId: candidate.targetId };
+        const selected = autoPatrolSelectDetectedCombatTacticCandidate(ctx, [bombDecision]);
+        if (selected.candidate) return selected.candidate;
+        autoPatrolRuntime.pendingBombPlan = null;
       }
     }
   }
@@ -8145,7 +9440,10 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, skipInitialRout
               autoPatrolRuntime.meleePlan = null;
               autoPatrolRuntime.pendingBombPlan = structuredClone(wallCandidate.pendingPlan);
               autoPatrolRuntime.multiStrongWallPlansStarted += 1;
-              return { kind: 'DISPATCH', event: 'PLACE_BOMB', reason: 'multi-strong-bomb-wall:rejected-adjacent-fallback', targetId: wallCandidate.targetId };
+              const bombDecision = { kind: 'DISPATCH', event: 'PLACE_BOMB', route: ['PLACE_BOMB'], reason: 'multi-strong-bomb-wall:rejected-adjacent-fallback', targetId: wallCandidate.targetId };
+              const selected = autoPatrolSelectDetectedCombatTacticCandidate(ctx, [bombDecision]);
+              if (selected.candidate) return selected.candidate;
+              autoPatrolRuntime.pendingBombPlan = null;
             }
           }
         }
@@ -8157,7 +9455,9 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, skipInitialRout
   const baselineResult = await autoPatrolSimulateEvent(baseline.event);
   autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
   if (!baselineResult.accepted) return baseline;
-  if (!skipInitialRoute && baseline.reason === "collect-loot" && autoPatrolRuntime.bombLureEvaluatedDepth !== ctx.depth && autoPatrolRuntime.floorBombPlacementRejectedDepth !== ctx.depth && autoPatrolAdjacentHostiles(ctx).length === 0 && baselineResult.metrics.detected >= 3) {
+  await autoPatrolMaybeEvaluateManualBombTrajectoryShadow(ctx, baseline, runtimeAfterBaseline);
+  autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
+  if (!rolloutContext && baseline.reason === "collect-loot" && autoPatrolRuntime.bombLureEvaluatedDepth !== ctx.depth && autoPatrolRuntime.floorBombPlacementRejectedDepth !== ctx.depth && autoPatrolAdjacentHostiles(ctx).length === 0 && baselineResult.metrics.detected >= 3) {
     const plan = await autoPatrolCreateSafeFloorBombTrapPlan(ctx);
     autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
     autoPatrolRuntime.bombLureEvaluatedDepth = ctx.depth;
@@ -8172,7 +9472,7 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, skipInitialRout
       return { ...baseline, reason: 'floor-bomb-trajectory-rejected:baseline' };
     }
   }
-  if (!skipInitialRoute && baseline.reason === "collect-loot" && ctx.depth === 1 && ctx.turnCount === 0 && autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer).length === 0 && baselineResult.metrics.detected >= 2) {
+  if (!rolloutContext && baseline.reason === "collect-loot" && ctx.depth === 1 && ctx.turnCount === 0 && autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer).length === 0 && baselineResult.metrics.detected >= 2) {
     const plan = await autoPatrolCreateInitialRoutePlan(ctx);
     autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
     if (plan) {
@@ -8185,7 +9485,7 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, skipInitialRout
     if (autoPatrolRuntime.initialRouteState === "INITIAL_ROUTE_EVALUATE") { transitionAutoPatrolInitialRoute("PLAN_UNAVAILABLE"); transitionAutoPatrolInitialRoute("NEXT_TICK"); }
   }
   if (baseline.reason === "collect-loot") {
-    const detected = autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer && !enemy.isBoss);
+    const detected = autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer);
     const hpRatio = ctx.player.hp / Math.max(1, ctx.player.maxHp);
     if (detected.length === 1 && autoPatrolDistance(detected[0], ctx.player) <= 3 && hpRatio >= AUTO_PATROL_SURVIVAL_MODEL.betweenRecover && ctx.player.hunger > AUTO_PATROL_SURVIVAL_MODEL.hungerFloor && (baselineResult.metrics.adjacent >= 2 || baselineResult.metrics.detected >= 2)) {
       const plan = await autoPatrolCreateContactRoutePlan(ctx, detected[0]);
@@ -8207,39 +9507,86 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, skipInitialRout
   const severe = rejectedMeleeCommitment || baselineResult.metrics.dead || baselineResult.metrics.adjacent >= 2 || baselineResult.metrics.hpLoss >= ctx.player.maxHp * AUTO_PATROL_SURVIVAL_MODEL.severeHpLossRatio;
   if (!severe || (!rejectedMeleeCommitment && baselineResult.metrics.kills > 0 && !baselineResult.metrics.dead && baselineResult.metrics.adjacent <= 2)) return baseline;
   let best = null;
+  if (rejectedMeleeCommitment && (autoPatrolRuntime.contactAftermathTargetId !== baseline.targetId || autoPatrolRuntime.contactAftermathDepth !== ctx.depth)) {
+    autoPatrolRuntime.contactAftermathTargetId = baseline.targetId;
+    autoPatrolRuntime.contactAftermathDepth = ctx.depth;
+    autoPatrolRuntime.contactAftermathVisitedCells = [`${ctx.player.x},${ctx.player.y}`];
+    autoPatrolRuntime.contactAftermathTargetAvoidances = 0;
+  }
   autoPatrolRestorePlanRuntime(runtimeBefore);
   for (const candidate of autoPatrolRolloutCandidates(ctx, baseline).filter(item => item.label === "direction")) {
     if (escapeFailureBlocked) continue;
     const result = await autoPatrolSimulateEvent(candidate.event);
     if (!result.accepted) continue;
-    const materiallySafer = (baselineResult.metrics.dead && !result.metrics.dead) || result.metrics.adjacent < baselineResult.metrics.adjacent || result.metrics.hpLoss + ctx.player.maxHp * AUTO_PATROL_SURVIVAL_MODEL.materiallySaferHpRatio < baselineResult.metrics.hpLoss;
+    const adjacentIncomingDamage = autoPatrolAdjacentHostiles(ctx)
+      .reduce((lowest, enemy) => Math.min(lowest, enemyDamageAgainstPlayer(ctx, enemy)), Infinity);
+    const avoidedContactHit = Number.isFinite(adjacentIncomingDamage)
+      && result.metrics.hpLoss + Math.max(1, adjacentIncomingDamage * 0.75) <= baselineResult.metrics.hpLoss;
+    const materiallySafer = (baselineResult.metrics.dead && !result.metrics.dead)
+      || result.metrics.adjacent < baselineResult.metrics.adjacent
+      || avoidedContactHit
+      || result.metrics.hpLoss + ctx.player.maxHp * AUTO_PATROL_SURVIVAL_MODEL.materiallySaferHpRatio < baselineResult.metrics.hpLoss;
     if (!materiallySafer) continue;
-    const escapeTrajectory = rejectedMeleeCommitment && baseline.targetId != null
+    const boundedDetectionTradeoff = result.metrics.detected <= baselineResult.metrics.detected
+      || (result.metrics.detected <= baselineResult.metrics.detected + 1
+        && result.metrics.exits > baselineResult.metrics.exits);
+    const oneTurnContactRelief = (autoPatrolRuntime.contactAftermathTargetAvoidances || 0) < 3
+      && avoidedContactHit
+      && !result.metrics.dead
+      && result.metrics.adjacent <= baselineResult.metrics.adjacent
+      && boundedDetectionTradeoff;
+    const escapeTrajectory = rejectedMeleeCommitment && baseline.targetId != null && !oneTurnContactRelief
       ? await autoPatrolSimulateEscapeTrajectory(baseline.targetId, candidate.event)
       : null;
-    if (escapeTrajectory && !escapeTrajectory.safe) continue;
-    const trajectoryScore = escapeTrajectory
+    if (escapeTrajectory && !escapeTrajectory.safe && !oneTurnContactRelief) continue;
+    const lastMovement = autoPatrolRuntime.movementHistory.at(-1);
+    const immediateContactReversal = lastMovement?.reason === "contact-aftermath:avoid-immediate-hit"
+      && autoPatrolOppositeMovementEvent(lastMovement.event) === candidate.event;
+    const delta = ({ MOVE_UP: [0, -1], MOVE_RIGHT: [1, 0], MOVE_DOWN: [0, 1], MOVE_LEFT: [-1, 0] })[candidate.event] || [0, 0];
+    const destinationCell = `${ctx.player.x + delta[0]},${ctx.player.y + delta[1]}`;
+    const destinationVisited = (autoPatrolRuntime.contactAftermathVisitedCells || []).includes(destinationCell);
+    const reversalPenalty = immediateContactReversal ? 1000000 : 0;
+    const visitedCellPenalty = destinationVisited ? 750000 : 0;
+    const trajectoryScore = (escapeTrajectory?.safe
       ? escapeTrajectory.turns * 100000 + escapeTrajectory.maxAdjacent * 10000 + escapeTrajectory.hpLoss * 100 - escapeTrajectory.finalDistance
-      : 0;
+      : oneTurnContactRelief
+        ? 500000 + result.metrics.adjacent * 10000 + result.metrics.hpLoss * 100 - result.metrics.exits
+        : 0) + reversalPenalty + visitedCellPenalty;
     if (!best || trajectoryScore < best.trajectoryScore || (trajectoryScore === best.trajectoryScore && result.score < best.result.score)) best = { candidate, result, escapeTrajectory, trajectoryScore };
   }
   if (!best) {
     autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
     if (rejectedMeleeCommitment) {
       const target = autoPatrolEnemyById(ctx, baseline.targetId);
+      if (target && guards.can_place_bomb(ctx) && (autoPatrolRuntime.contactAftermathVisitedCells || []).length >= 3) {
+        const bombFallback = autoPatrolStartBombPlan(ctx, target, "contact-aftermath:bomb-disengage");
+        if (bombFallback) {
+          autoPatrolRuntime.contactAftermathBombEscalations = (autoPatrolRuntime.contactAftermathBombEscalations || 0) + 1;
+          return bombFallback;
+        }
+      }
       if (target) return { ...baseline, reason: "last-stand:no-survivable-melee-or-retreat" };
     }
     return baseline;
   }
   autoPatrolRestorePlanRuntime(runtimeBefore);
-  const lastStand = autoPatrolLastStandDecision(ctx);
-  if (lastStand) return lastStand;
+  // A verified materially safer retreat is authoritative. LAST_STAND is only
+  // eligible when no survivable retreat candidate exists.
   autoPatrolRuntime.emergencyPositions += 1;
+  if (!best.escapeTrajectory?.safe && rejectedMeleeCommitment) {
+    autoPatrolRuntime.contactAftermathAvoidances = (autoPatrolRuntime.contactAftermathAvoidances || 0) + 1;
+    autoPatrolRuntime.contactAftermathTargetAvoidances = (autoPatrolRuntime.contactAftermathTargetAvoidances || 0) + 1;
+    const delta = ({ MOVE_UP: [0, -1], MOVE_RIGHT: [1, 0], MOVE_DOWN: [0, 1], MOVE_LEFT: [-1, 0] })[best.candidate.event] || [0, 0];
+    const destinationCell = `${ctx.player.x + delta[0]},${ctx.player.y + delta[1]}`;
+    const visited = autoPatrolRuntime.contactAftermathVisitedCells || [];
+    if (!visited.includes(destinationCell)) visited.push(destinationCell);
+    autoPatrolRuntime.contactAftermathVisitedCells = visited.slice(-24);
+  }
   return {
     kind: "DISPATCH",
     event: best.candidate.event,
     reason: rejectedMeleeCommitment && baseline.targetId != null
-      ? "escape-lethal-target:emergency-position"
+      ? (best.escapeTrajectory?.safe ? "escape-lethal-target:emergency-position" : "contact-aftermath:avoid-immediate-hit")
       : "integrated-rollout-strict:emergency-position",
     targetId: rejectedMeleeCommitment ? baseline.targetId : undefined
   };
@@ -8271,17 +9618,20 @@ function autoPatrolEmergencyOscillationIsIrrecoverable(ctx) {
 function autoPatrolLastStandDecision(ctx) {
   if (!autoPatrolEmergencyOscillationIsIrrecoverable(ctx)) return null;
   const target = autoPatrolAdjacentHostiles(ctx).slice().sort((left, right) => {
-    if (left.isBoss !== right.isBoss) return left.isBoss ? -1 : 1;
     return left.hp - right.hp || left.id - right.id;
   })[0];
   if (!target) return null;
-  autoPatrolRuntime.lastStandStarts = (autoPatrolRuntime.lastStandStarts || 0) + 1;
-  return {
+  const candidate = {
     kind: "DISPATCH",
     event: autoPatrolDirectionEvent(target.x - ctx.player.x, target.y - ctx.player.y),
+    route: [autoPatrolDirectionEvent(target.x - ctx.player.x, target.y - ctx.player.y)],
     reason: "last-stand:no-survivable-action",
     targetId: target.id
   };
+  const selected = autoPatrolSelectDetectedCombatTacticCandidate(ctx, [candidate]);
+  if (!selected.candidate) return null;
+  autoPatrolRuntime.lastStandStarts = (autoPatrolRuntime.lastStandStarts || 0) + 1;
+  return selected.candidate;
 }
 function autoPatrolIsMovementEvent(event) { return event === "MOVE_UP" || event === "MOVE_RIGHT" || event === "MOVE_DOWN" || event === "MOVE_LEFT"; }
 function autoPatrolOppositeMovementEvent(event) {
@@ -8378,6 +9728,7 @@ async function autoPatrolSelectConflictAlternative(ctx, suppressedCategory, deci
 }
 async function autoPatrolBreakTwoCellOscillation(ctx, decision) {
   if (!decision || decision.kind !== "DISPATCH") return decision;
+  if (String(decision.reason || "").startsWith("horizontal-flow-") && autoPatrolRuntime.horizontalFlowPlan) return decision;
   autoPatrolPruneObjectiveSuppressions(ctx);
   const decisionCategory = autoPatrolObjectiveCategory(decision.reason);
   const activeSuppression = autoPatrolRuntime.objectiveSuppressions[decisionCategory];
@@ -8433,6 +9784,12 @@ async function autoPatrolBreakTwoCellOscillation(ctx, decision) {
       autoPatrolRuntime.objectiveAlternativeCommits += 1;
       return lastStand;
     }
+    const stairsFallback = autoPatrolOscillationStairsFallback(ctx);
+    if (stairsFallback) {
+      autoPatrolRuntime.oscillationBreaks += 1;
+      autoPatrolRuntime.objectiveAlternativeCommits += 1;
+      return stairsFallback;
+    }
     return { kind: "PAUSE", reason: "same-objective-oscillation-no-alternative", targetId: decision.targetId || null };
   }
   return decision;
@@ -8474,7 +9831,7 @@ async function runAutoPatrolTick(generation) {
     const bombPlanBeforeDispatch = { mapType: context.currentMapType, depth: context.depth };
     const movementBefore = { ...autoPatrolObjectiveCanonicalSnapshot(context), depth: context.depth, x: context.player.x, y: context.player.y, enemies: autoPatrolHostiles(context).length, items: context.items.length };
     const beforeBombIds = new Set(context.bombs.map(bomb => bomb.id));
-    const accepted = await engine.transition(decision.event);
+    const accepted = await transitionWithAnalysisTrace(decision.event, "AUTO_PATROL", { reason: decision.reason || null, targetId: decision.targetId || null });
     if (!accepted) throw new Error(`dispatch-rejected:${decision.event}`);
     autoPatrolRecordMovement(movementBefore, decision, accepted);
     autoPatrolRecordObjectiveProjection(movementBefore, decision, accepted);
@@ -8502,7 +9859,7 @@ function startAutoPatrol() {
   if (engine.currentState !== "FE_PLAYER_TURN" || !["dungeon", "town"].includes(context.currentMapType) || context.player.hp <= 0) { autoPatrolRuntime.stopReason = "start-condition-rejected"; renderAutoPatrolStatus(); return false; }
   autoPatrolRuntime.generation += 1; autoPatrolRuntime.stopReason = ""; autoPatrolRuntime.decision = null; autoPatrolRuntime.repeatCount = 0; autoPatrolRuntime.repeatedSignature = "";
   autoPatrolRuntime.bombPlan = null; autoPatrolRuntime.pendingBombPlan = null; autoPatrolRuntime.bombSetupPlan = null; autoPatrolRuntime.bombLurePlan = null; autoPatrolRuntime.bombLureEvaluatedDepth = 0; autoPatrolRuntime.meleePlan = null; autoPatrolRuntime.contactRoutePlan = null; autoPatrolRuntime.contactRouteState = "CONTACT_ROUTE_EVALUATE"; autoPatrolRuntime.initialRoutePlan = null; autoPatrolRuntime.initialRouteState = "INITIAL_ROUTE_EVALUATE"; autoPatrolRuntime.foodHuntPlan = null; autoPatrolRuntime.foodHuntState = "FOOD_HUNT_EVALUATE";
-  autoPatrolRuntime.plansStarted = 0; autoPatrolRuntime.plannedBombKills = 0; autoPatrolRuntime.meleePlansCompleted = 0; autoPatrolRuntime.contactRoutePlansStarted = 0; autoPatrolRuntime.contactRoutePlansCompleted = 0; autoPatrolRuntime.initialRoutePlansStarted = 0; autoPatrolRuntime.initialRoutePlansCompleted = 0; autoPatrolRuntime.foodHuntPlansStarted = 0; autoPatrolRuntime.foodHuntTargetsDefeated = 0; autoPatrolRuntime.levelCommitAttacks = 0; autoPatrolRuntime.emergencyPositions = 0; autoPatrolRuntime.multiStrongWallLastEvaluationTurn = -999; autoPatrolRuntime.multiStrongWallLastEvaluationDepth = 0; autoPatrolRuntime.multiStrongWallLastEvaluationSignature = ""; autoPatrolRuntime.multiStrongWallEvaluations = 0; autoPatrolRuntime.multiStrongWallPlansStarted = 0; autoPatrolRuntime.bombEscapePreflightEvaluations = 0; autoPatrolRuntime.bombEscapePreflightRejected = 0; autoPatrolRuntime.bombEscapeSuppressUntilTurn = -1; autoPatrolRuntime.bombEscapeSuppressTargetId = null; autoPatrolRuntime.floorBombPlacementRejectedDepth = 0; autoPatrolRuntime.bombEscapeAlternativePlan = null; autoPatrolRuntime.bombEscapeAlternativePlansStarted = 0; autoPatrolRuntime.bombEscapeAlternativePlansCompleted = 0; autoPatrolRuntime.movementHistory = []; autoPatrolRuntime.oscillationState = "OBJECTIVE_CONFLICT_EVALUATE"; autoPatrolRuntime.oscillationBreaks = 0; autoPatrolRuntime.oscillationFallbacks = 0; autoPatrolRuntime.objectiveSuppressions = {}; autoPatrolRuntime.objectiveConflictDetections = 0; autoPatrolRuntime.objectiveDemotions = 0; autoPatrolRuntime.objectiveAlternativeCommits = 0; autoPatrolRuntime.objectiveState = "OBJECTIVE_NONE"; autoPatrolRuntime.activeObjective = null; autoPatrolRuntime.objectiveSequence = 0; autoPatrolRuntime.objectiveHistory = []; autoPatrolRuntime.objectiveCreatedCount = 0; autoPatrolRuntime.objectiveCompletedCount = 0; autoPatrolRuntime.objectiveFailedCount = 0; autoPatrolRuntime.objectiveDeathCount = 0; autoPatrolRuntime.lastBombPlanTerminal = null; autoPatrolRuntime.escapeFailureMemory = [];
+  autoPatrolRuntime.plansStarted = 0; autoPatrolRuntime.plannedBombKills = 0; autoPatrolRuntime.meleePlansCompleted = 0; autoPatrolRuntime.contactRoutePlansStarted = 0; autoPatrolRuntime.contactRoutePlansCompleted = 0; autoPatrolRuntime.initialRoutePlansStarted = 0; autoPatrolRuntime.initialRoutePlansCompleted = 0; autoPatrolRuntime.foodHuntPlansStarted = 0; autoPatrolRuntime.foodHuntTargetsDefeated = 0; autoPatrolRuntime.levelCommitAttacks = 0; autoPatrolRuntime.emergencyPositions = 0; autoPatrolRuntime.multiStrongWallLastEvaluationTurn = -999; autoPatrolRuntime.multiStrongWallLastEvaluationDepth = 0; autoPatrolRuntime.multiStrongWallLastEvaluationSignature = ""; autoPatrolRuntime.multiStrongWallEvaluations = 0; autoPatrolRuntime.multiStrongWallPlansStarted = 0; autoPatrolRuntime.bombEscapePreflightEvaluations = 0; autoPatrolRuntime.bombEscapePreflightRejected = 0; autoPatrolRuntime.bombEscapeSuppressUntilTurn = -1; autoPatrolRuntime.bombEscapeSuppressTargetId = null; autoPatrolRuntime.floorBombPlacementRejectedDepth = 0; autoPatrolRuntime.bombEscapeAlternativePlan = null; autoPatrolRuntime.bombEscapeAlternativePlansStarted = 0; autoPatrolRuntime.bombEscapeAlternativePlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlan = null; autoPatrolRuntime.horizontalFlowDirection = null; autoPatrolRuntime.horizontalFlowDisabled = false; autoPatrolRuntime.horizontalFlowBeamWidth = 0; autoPatrolRuntime.horizontalFlowEvaluations = 0; autoPatrolRuntime.horizontalFlowBudgetDepth = 0; autoPatrolRuntime.horizontalFlowBudgetUsed = 0; autoPatrolRuntime.horizontalFlowPlansStarted = 0; autoPatrolRuntime.horizontalFlowPlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlansInvalidated = 0; autoPatrolRuntime.horizontalFlowLastResult = null; autoPatrolRuntime.horizontalFlowLastSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionTurn = -999; autoPatrolRuntime.horizontalFlowLastRejectionHpRatio = 0; autoPatrolRuntime.movementHistory = []; autoPatrolRuntime.oscillationState = "OBJECTIVE_CONFLICT_EVALUATE"; autoPatrolRuntime.oscillationBreaks = 0; autoPatrolRuntime.oscillationFallbacks = 0; autoPatrolRuntime.objectiveSuppressions = {}; autoPatrolRuntime.objectiveConflictDetections = 0; autoPatrolRuntime.objectiveDemotions = 0; autoPatrolRuntime.objectiveAlternativeCommits = 0; autoPatrolRuntime.objectiveState = "OBJECTIVE_NONE"; autoPatrolRuntime.activeObjective = null; autoPatrolRuntime.objectiveSequence = 0; autoPatrolRuntime.objectiveHistory = []; autoPatrolRuntime.objectiveCreatedCount = 0; autoPatrolRuntime.objectiveCompletedCount = 0; autoPatrolRuntime.objectiveFailedCount = 0; autoPatrolRuntime.objectiveDeathCount = 0; autoPatrolRuntime.lastBombPlanTerminal = null; autoPatrolRuntime.escapeFailureMemory = []; autoPatrolRuntime.huntStallSignature = ""; autoPatrolRuntime.huntStallStartTurn = -1; autoPatrolRuntime.floorHuntAbandonedDepth = 0; autoPatrolRuntime.floorHuntAbandonReason = ""; autoPatrolRuntime.engagementPlan = null; autoPatrolRuntime.engagementPlansStarted = 0; autoPatrolRuntime.engagementPlansEnded = 0; autoPatrolRuntime.engagementLastEndReason = ""; autoPatrolRuntime.huntStallLastHp = null;
   transitionAutoPatrol("TOGGLE_ON"); scheduleAutoPatrolTick(0); return true;
 }
 function toggleAutoPatrol() { return autoPatrolIsActive() ? (stopAutoPatrol("user-toggle"), false) : startAutoPatrol(); }
@@ -8516,11 +9873,146 @@ function renderAutoPatrolStatus() {
 }
 
 
+
+const ANALYSIS_TRACE_MAX_TURNS = 500;
+const ANALYSIS_TRACE_MAX_KEYFRAMES = 64;
+const ANALYSIS_TRACE_FORMAT = "sfa-rogue-analysis-trace";
+const analysisTraceRuntime = {
+  format: ANALYSIS_TRACE_FORMAT,
+  floorKey: "",
+  startedAtTurn: 0,
+  firstRecordedTurn: null,
+  lastRecordedTurn: null,
+  droppedTurnCount: 0,
+  turnRecords: [],
+  keyframes: []
+};
+function analysisTraceFloorKey(ctx = context) {
+  if (ctx.currentMapType === "dungeon") return `${ctx.dungeonMode === "abyss" ? "A" : "B"}${ctx.depth}`;
+  return String(ctx.currentMapType || "unknown");
+}
+function analysisTraceEntitySummary(ctx = context) {
+  const hostiles = (ctx.enemies || []).filter(enemy => enemy.hostile !== false && !enemy.isPassiveFood);
+  const detected = hostiles.filter(enemy => enemy.hasDetectedPlayer);
+  const adjacent = hostiles.filter(enemy => Math.abs(enemy.x - ctx.player.x) + Math.abs(enemy.y - ctx.player.y) === 1);
+  return {
+    mapType: ctx.currentMapType,
+    dungeonMode: ctx.dungeonMode,
+    depth: ctx.depth,
+    turn: ctx.turnCount,
+    player: { x: ctx.player.x, y: ctx.player.y, hp: ctx.player.hp, maxHp: ctx.player.maxHp, hunger: ctx.player.hunger, level: ctx.player.level },
+    hostileCount: hostiles.length,
+    hostileHp: hostiles.reduce((sum, enemy) => sum + Math.max(0, Number(enemy.hp) || 0), 0),
+    detectedEnemyIds: detected.map(enemy => enemy.id),
+    adjacentEnemyIds: adjacent.map(enemy => enemy.id),
+    enemyStates: hostiles.map(enemy => ({ id: enemy.id, x: enemy.x, y: enemy.y, hp: enemy.hp, maxHp: enemy.maxHp, detected: Boolean(enemy.hasDetectedPlayer), name: enemy.name })),
+    bombs: (ctx.bombs || []).map(bomb => ({ id: bomb.id, x: bomb.x, y: bomb.y, fuse: bomb.fuse, range: bomb.range })),
+    itemCount: (ctx.items || []).length,
+    objective: autoPatrolRuntime.activeObjective ? { id: autoPatrolRuntime.activeObjective.objectiveId, type: autoPatrolRuntime.activeObjective.type, status: autoPatrolRuntime.activeObjective.status } : null,
+    tactic: autoPatrolRuntime.activeCombatTactic,
+    tacticState: autoPatrolRuntime.combatTacticState,
+    random: { state: deterministicRandomRuntime.state, calls: deterministicRandomRuntime.calls }
+  };
+}
+function resetAnalysisTrace(reason = "reset", ctx = context) {
+  analysisTraceRuntime.floorKey = analysisTraceFloorKey(ctx);
+  analysisTraceRuntime.startedAtTurn = Number(ctx.turnCount) || 0;
+  analysisTraceRuntime.firstRecordedTurn = null;
+  analysisTraceRuntime.lastRecordedTurn = null;
+  analysisTraceRuntime.droppedTurnCount = 0;
+  analysisTraceRuntime.turnRecords = [];
+  analysisTraceRuntime.keyframes = [{ reason, state: analysisTraceEntitySummary(ctx) }];
+  analysisTraceRuntime.traceOrigin = "LIVE_FLOOR";
+  analysisTraceRuntime.sourceDebugCapturedAt = null;
+  analysisTraceRuntime.retryIndex = 0;
+}
+function analysisTraceMeaningfulChanges(before, after) {
+  const changes = [];
+  if (before.mapType !== after.mapType || before.depth !== after.depth || before.dungeonMode !== after.dungeonMode) changes.push("FLOOR_CHANGED");
+  if (before.detectedEnemyIds.length === 0 && after.detectedEnemyIds.length > 0) changes.push("COMBAT_STARTED");
+  if (before.detectedEnemyIds.length > 0 && after.detectedEnemyIds.length === 0) changes.push("COMBAT_ENDED");
+  if (after.detectedEnemyIds.some(id => !before.detectedEnemyIds.includes(id))) changes.push("ENEMY_JOINED");
+  if (after.hostileCount < before.hostileCount) changes.push("ENEMY_DEFEATED");
+  if (after.hostileHp < before.hostileHp) changes.push("ENEMY_HP_REDUCED");
+  if (after.player.hp > before.player.hp) changes.push("PLAYER_HEALED");
+  if (after.player.hp < before.player.hp) changes.push("PLAYER_DAMAGED");
+  if (before.adjacentEnemyIds.length < 2 && after.adjacentEnemyIds.length >= 2) changes.push("ENCIRCLEMENT_PRESSURE");
+  if (before.bombs.length < after.bombs.length) changes.push("BOMB_PLACED");
+  if (before.bombs.length > after.bombs.length) changes.push("BOMB_RESOLVED");
+  if ((before.objective?.id || null) !== (after.objective?.id || null)) changes.push("OBJECTIVE_CHANGED");
+  if ((before.tactic || null) !== (after.tactic || null)) changes.push("TACTIC_CHANGED");
+  return changes;
+}
+function appendAnalysisTraceKeyframe(reason, state) {
+  analysisTraceRuntime.keyframes.push({ reason, state: structuredClone(state) });
+  if (analysisTraceRuntime.keyframes.length > ANALYSIS_TRACE_MAX_KEYFRAMES) analysisTraceRuntime.keyframes.shift();
+}
+function commitAnalysisTraceRecord(record) {
+  analysisTraceRuntime.turnRecords.push(record);
+  if (analysisTraceRuntime.turnRecords.length > ANALYSIS_TRACE_MAX_TURNS) {
+    analysisTraceRuntime.turnRecords.shift();
+    analysisTraceRuntime.droppedTurnCount += 1;
+  }
+  analysisTraceRuntime.firstRecordedTurn = analysisTraceRuntime.turnRecords[0]?.after?.turn ?? null;
+  analysisTraceRuntime.lastRecordedTurn = record.after.turn;
+  if (record.meaningfulChanges.length) appendAnalysisTraceKeyframe(record.meaningfulChanges.join("+"), record.after);
+}
+async function transitionWithAnalysisTrace(event, source = "MANUAL", metadata = null) {
+  const stateBefore = engine.currentState;
+  const before = analysisTraceEntitySummary(context);
+  const accepted = await engine.transition(event);
+  const after = analysisTraceEntitySummary(context);
+  const turnAdvanced = after.turn > before.turn;
+  if (accepted && turnAdvanced && !gameRandomRuntime.simulationStack.length && !gameRandomRuntime.transactionStack.length) {
+    const meaningfulChanges = analysisTraceMeaningfulChanges(before, after);
+    commitAnalysisTraceRecord({
+      floorKey: analysisTraceRuntime.floorKey || analysisTraceFloorKey(context),
+      source,
+      event,
+      metadata: metadata ? structuredClone(metadata) : null,
+      engineStateBefore: stateBefore,
+      engineStateAfter: engine.currentState,
+      before,
+      after,
+      playerResult: { from: { x: before.player.x, y: before.player.y }, to: { x: after.player.x, y: after.player.y }, hpDelta: after.player.hp - before.player.hp, hungerDelta: after.player.hunger - before.player.hunger },
+      enemyTurn: structuredClone(context.lastEnemyTurnDecision || null),
+      bombLifecycle: structuredClone(context.lastBombLifecycleDecision || null),
+      meaningfulChanges
+    });
+  }
+  return accepted;
+}
+function cloneAnalysisTraceForExport() {
+  return structuredClone({
+    format: ANALYSIS_TRACE_FORMAT,
+    maxTurns: ANALYSIS_TRACE_MAX_TURNS,
+    maxKeyframes: ANALYSIS_TRACE_MAX_KEYFRAMES,
+    floorKey: analysisTraceRuntime.floorKey,
+    startedAtTurn: analysisTraceRuntime.startedAtTurn,
+    firstRecordedTurn: analysisTraceRuntime.firstRecordedTurn,
+    lastRecordedTurn: analysisTraceRuntime.lastRecordedTurn,
+    droppedTurnCount: analysisTraceRuntime.droppedTurnCount,
+    turnRecords: analysisTraceRuntime.turnRecords,
+    keyframes: analysisTraceRuntime.keyframes,
+    traceOrigin: analysisTraceRuntime.traceOrigin || "LIVE_FLOOR",
+    sourceDebugCapturedAt: analysisTraceRuntime.sourceDebugCapturedAt || null,
+    retryIndex: Number(analysisTraceRuntime.retryIndex) || 0
+  });
+}
+resetAnalysisTrace("runtime-initialized", context);
+
 const DEBUG_SNAPSHOT_FORMAT = "sfa-rogue-debug-snapshot";
-const DEBUG_SNAPSHOT_SCHEMA_VERSION = 1;
-const DEBUG_SNAPSHOT_MAX_CHARS = 8 * 1024 * 1024;
+const DEBUG_SNAPSHOT_SCHEMA_VERSION = 2;
+const DEBUG_SNAPSHOT_MAX_CHARS = 16 * 1024 * 1024;
 const DEBUG_SNAPSHOT_KEYS = Object.freeze({ export: "F8", import: "F9", resume: "F10" });
-const debugSnapshotRuntime = { importInput: null, loaded: false, capturedAutoPatrolState: "AUTO_PATROL_OFF" };
+const debugSnapshotRuntime = {
+  importInput: null,
+  loaded: false,
+  capturedAutoPatrolState: "AUTO_PATROL_OFF",
+  floorStartSnapshot: null,
+  retryIndex: 0,
+  sourceCapturedAt: null
+};
 
 function cloneDebugAutoPatrolRuntime() {
   const snapshot = {};
@@ -8530,6 +10022,52 @@ function cloneDebugAutoPatrolRuntime() {
   }
   return snapshot;
 }
+function cloneDebugRandomRuntime() {
+  return {
+    seed: deterministicRandomRuntime.seed,
+    state: deterministicRandomRuntime.state,
+    calls: deterministicRandomRuntime.calls,
+    canonicalReplay: gameRandomRuntime.canonicalReplay.slice()
+  };
+}
+function createDebugRestorePoint(ctx = context, engineState = engine.currentState) {
+  return {
+    engineState,
+    floorKey: analysisTraceFloorKey(ctx),
+    context: structuredClone(ctx),
+    random: cloneDebugRandomRuntime(),
+    autoPatrol: cloneDebugAutoPatrolRuntime()
+  };
+}
+function captureDebugFloorStartSnapshot(ctx = context) {
+  if (gameRandomRuntime.simulationStack.length || gameRandomRuntime.transactionStack.length) throw new Error("Cannot capture floor start during a random simulation or transaction.");
+  debugSnapshotRuntime.floorStartSnapshot = createDebugRestorePoint(ctx, "FE_PLAYER_TURN");
+  debugSnapshotRuntime.retryIndex = 0;
+  debugSnapshotRuntime.sourceCapturedAt = null;
+  return debugSnapshotRuntime.floorStartSnapshot;
+}
+function cloneDebugFloorStartSnapshotForExport() {
+  return debugSnapshotRuntime.floorStartSnapshot ? structuredClone(debugSnapshotRuntime.floorStartSnapshot) : null;
+}
+function restoreDebugRandomRuntime(snapshot) {
+  deterministicRandomRuntime.seed = normalizeRandomSeed(snapshot.seed);
+  deterministicRandomRuntime.state = Number(snapshot.state) >>> 0;
+  deterministicRandomRuntime.calls = snapshot.calls;
+  gameRandomRuntime.canonicalReplay.length = 0;
+  gameRandomRuntime.canonicalReplay.push(...snapshot.canonicalReplay);
+  gameRandomRuntime.simulationStack.length = 0;
+  gameRandomRuntime.transactionStack.length = 0;
+}
+function validateDebugRestorePoint(point, path, errors) {
+  if (!point || typeof point !== "object") { errors.push(path); return; }
+  if (!point.context || typeof point.context !== "object") errors.push(`${path}.context`);
+  if (typeof point.engineState !== "string" || !SFA_DEFINITIONS[point.engineState]) errors.push(`${path}.engineState`);
+  if (typeof point.floorKey !== "string" || !point.floorKey) errors.push(`${path}.floorKey`);
+  if (!point.random || !Number.isSafeInteger(point.random.seed) || !Number.isSafeInteger(point.random.state) || !Number.isSafeInteger(point.random.calls) || point.random.calls < 0) errors.push(`${path}.random`);
+  if (!Array.isArray(point?.random?.canonicalReplay) || point.random.canonicalReplay.some(value => !Number.isFinite(value) || value < 0 || value >= 1)) errors.push(`${path}.random.canonicalReplay`);
+  if (!point.autoPatrol || typeof point.autoPatrol !== "object" || Object.prototype.hasOwnProperty.call(point.autoPatrol, "timerId")) errors.push(`${path}.autoPatrol`);
+}
+
 function restoreDebugAutoPatrolRuntime(snapshot) {
   clearAutoPatrolTimer();
   for (const key of Object.keys(autoPatrolRuntime)) {
@@ -8551,13 +10089,10 @@ function buildDebugSnapshot() {
   const payload = {
     engineState: engine.currentState,
     context: structuredClone(context),
-    random: {
-      seed: deterministicRandomRuntime.seed,
-      state: deterministicRandomRuntime.state,
-      calls: deterministicRandomRuntime.calls,
-      canonicalReplay: gameRandomRuntime.canonicalReplay.slice()
-    },
-    autoPatrol: cloneDebugAutoPatrolRuntime()
+    random: cloneDebugRandomRuntime(),
+    autoPatrol: cloneDebugAutoPatrolRuntime(),
+    floorStartSnapshot: cloneDebugFloorStartSnapshotForExport(),
+    analysisTrace: cloneAnalysisTraceForExport()
   };
   const payloadText = JSON.stringify(payload);
   return {
@@ -8583,6 +10118,11 @@ function validateDebugSnapshot(snapshot) {
   if (!payload?.random || !Number.isSafeInteger(payload.random.seed) || !Number.isSafeInteger(payload.random.state) || !Number.isSafeInteger(payload.random.calls) || payload.random.calls < 0) errors.push("payload.random");
   if (!Array.isArray(payload?.random?.canonicalReplay) || payload.random.canonicalReplay.some(value => !Number.isFinite(value) || value < 0 || value >= 1)) errors.push("payload.random.canonicalReplay");
   if (!payload?.autoPatrol || typeof payload.autoPatrol !== "object" || Object.prototype.hasOwnProperty.call(payload.autoPatrol, "timerId")) errors.push("payload.autoPatrol");
+  if (!payload?.floorStartSnapshot) errors.push("payload.floorStartSnapshot");
+  else validateDebugRestorePoint(payload.floorStartSnapshot, "payload.floorStartSnapshot", errors);
+  if (payload?.analysisTrace !== undefined) {
+    if (!payload.analysisTrace || payload.analysisTrace.format !== ANALYSIS_TRACE_FORMAT || !Array.isArray(payload.analysisTrace.turnRecords) || payload.analysisTrace.turnRecords.length > ANALYSIS_TRACE_MAX_TURNS || !Array.isArray(payload.analysisTrace.keyframes) || payload.analysisTrace.keyframes.length > ANALYSIS_TRACE_MAX_KEYFRAMES) errors.push("payload.analysisTrace");
+  }
   if (payload) {
     const actualHash = debugSnapshotHash(JSON.stringify(payload));
     if (snapshot.payloadHash !== actualHash) errors.push("payloadHash");
@@ -8603,20 +10143,22 @@ function downloadDebugSnapshot() {
 function applyDebugSnapshot(snapshot) {
   const validation = validateDebugSnapshot(snapshot);
   if (!validation.ok) throw new Error(`Invalid debug snapshot: ${validation.errors.join(", ")}`);
-  const stagedContext = structuredClone(snapshot.payload.context);
-  const stagedRandom = structuredClone(snapshot.payload.random);
-  const stagedAutoPatrol = structuredClone(snapshot.payload.autoPatrol);
+  const restorePoint = snapshot.payload.floorStartSnapshot;
+  const stagedContext = structuredClone(restorePoint.context);
+  const stagedRandom = structuredClone(restorePoint.random);
+  const stagedAutoPatrol = structuredClone(restorePoint.autoPatrol);
   stopAutoPatrol("debug-snapshot-load");
   autoPatrolRestoreContext(context, stagedContext);
-  engine.currentState = snapshot.payload.engineState;
-  deterministicRandomRuntime.seed = normalizeRandomSeed(stagedRandom.seed);
-  deterministicRandomRuntime.state = Number(stagedRandom.state) >>> 0;
-  deterministicRandomRuntime.calls = stagedRandom.calls;
-  gameRandomRuntime.canonicalReplay.length = 0;
-  gameRandomRuntime.canonicalReplay.push(...stagedRandom.canonicalReplay);
-  gameRandomRuntime.simulationStack.length = 0;
-  gameRandomRuntime.transactionStack.length = 0;
+  engine.currentState = restorePoint.engineState;
+  restoreDebugRandomRuntime(stagedRandom);
   restoreDebugAutoPatrolRuntime(stagedAutoPatrol);
+  debugSnapshotRuntime.floorStartSnapshot = structuredClone(restorePoint);
+  debugSnapshotRuntime.retryIndex = Number(debugSnapshotRuntime.retryIndex || 0) + 1;
+  debugSnapshotRuntime.sourceCapturedAt = snapshot.capturedAt || null;
+  resetAnalysisTrace("debug-floor-retry-started", context);
+  analysisTraceRuntime.traceOrigin = "DEBUG_FLOOR_RETRY";
+  analysisTraceRuntime.sourceDebugCapturedAt = debugSnapshotRuntime.sourceCapturedAt;
+  analysisTraceRuntime.retryIndex = debugSnapshotRuntime.retryIndex;
   debugSnapshotRuntime.loaded = true;
   render(engine.currentState, context);
 }
@@ -8631,7 +10173,7 @@ function ensureDebugSnapshotInput() {
       const raw = await file.text();
       if (raw.length > DEBUG_SNAPSHOT_MAX_CHARS) throw new Error("Debug snapshot is too large.");
       applyDebugSnapshot(JSON.parse(raw));
-      addLog(context, `Debug snapshot loaded. Auto patrol paused; press ${DEBUG_SNAPSHOT_KEYS.resume} to resume exactly.`);
+      addLog(context, `Debug floor start loaded. Auto patrol paused; press ${DEBUG_SNAPSHOT_KEYS.resume} to resume.`);
       render(engine.currentState, context);
     } catch (error) { addLog(context, `Debug snapshot load failed: ${error?.message || String(error)}`); render(engine.currentState, context); }
   });
@@ -8794,7 +10336,20 @@ class SFAEngine {
     this.guards = guards;
     this.actions = actions;
     this.onTransitioned = onTransitioned;
-    this.onTransitioned(this.currentState, this.context);
+    this.projectionSuppressionDepth = 0;
+    this.notifyTransitioned();
+  }
+
+  beginProjectionSuppression() {
+    this.projectionSuppressionDepth += 1;
+  }
+
+  endProjectionSuppression() {
+    this.projectionSuppressionDepth = Math.max(0, this.projectionSuppressionDepth - 1);
+  }
+
+  notifyTransitioned() {
+    if (this.projectionSuppressionDepth === 0) this.onTransitioned(this.currentState, this.context);
   }
 
   async transition(event) {
@@ -8815,7 +10370,7 @@ class SFAEngine {
 
         if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
 
-        this.onTransitioned(this.currentState, this.context);
+        this.notifyTransitioned();
 
         await this.handleAutoTransition();
         return true;
@@ -8846,7 +10401,7 @@ class SFAEngine {
 
         if (nextStateDef.on_enter) this.actions[nextStateDef.on_enter](this.context);
 
-        this.onTransitioned(this.currentState, this.context);
+        this.notifyTransitioned();
 
         await this.handleAutoTransition(autoDepth + 1);
         return;
@@ -9161,7 +10716,7 @@ document.addEventListener("keydown", (e) => {
   if (!sfaEvent) return;
   if (autoPatrolIsActive()) stopAutoPatrol("manual-input");
   e.preventDefault();
-  void engine.transition(sfaEvent);
+  void transitionWithAnalysisTrace(sfaEvent, "MANUAL", { key: e.key });
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
@@ -9175,4 +10730,3 @@ document.addEventListener("visibilitychange", () => {
 </script>
 </body>
 </html>
-
