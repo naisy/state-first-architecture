@@ -94,6 +94,14 @@
             padding: 20px;
             box-sizing: border-box;
         }
+        #game-information {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #game-status-information {
+            width: 360px;
+        }
         #hud-top {
             width: 360px;
             display: flex;
@@ -145,6 +153,7 @@
         .inventory-positive { color: #66e3a4; }
         .inventory-negative { color: #ff7777; }
         #auto-patrol-status { width:360px; min-height:14px; margin-top:4px; font-size:10px; color:#777; text-align:left; }
+        #game-controls { max-width: 760px; }
         #auto-patrol-status.active { color:#66e3a4; }
         #auto-patrol-status.paused { color:#ffcc66; }
         #auto-patrol-status.failed { color:#ff7777; }
@@ -182,12 +191,12 @@
         </div>
         <p id="game-controls" style="font-size: 11px; color: #666; text-align: center; margin-top: 10px;">
             [Enter]: Select / Action | [Esc]: Title / Exit Menu <br>
-            [←/→/↑/↓]: Move & Attack | [Space]: Place Bomb | [R]: Return Scroll | [.]: Pass 1 Turn | [I]: Equipment | [P]: Auto Patrol<br>[F8]: Export Floor Debug Package | [F9]: Retry Floor Start | [F10]: Resume Loaded Auto Patrol
+            [←/→/↑/↓]: Move & Attack | [Space]: Place Bomb | [R]: Return Scroll | [.]: Pass 1 Turn | [I]: Equipment | [P]: Auto Patrol<br>[F8]: Export Floor Debug Package | [F9]: Retry Floor Start | [F10]: Resume Captured Point
         </p>
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage152ax-contact-aftermath-hit-avoidance-20260721";
+const SFA_ROGUE_BUILD_ID = "stage152bx-debug-captured-point-resume-20260722";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -692,13 +701,16 @@ const AUTO_EQUIP_CONFIG = {
   preserveOptionRarity: 'rare'
 };
 
+// Debug/operation flag: true resumes town service after rescue; false leaves the death summary waiting for manual input.
+const AUTO_PATROL_CONTINUE_AFTER_DEATH = true;
 const AUTO_PATROL_CONFIG = Object.freeze({
   toggleKey: "p",
   defaultSpeed: "fast",
   speeds: Object.freeze({ slow: 500, normal: 180, fast: 60, benchmark: 16 }),
   criticalHpRatio: 0.25,
   recoveryHpRatio: 0.72,
-  stuckLimit: 12
+  stuckLimit: 12,
+  continueAfterDeath: AUTO_PATROL_CONTINUE_AFTER_DEATH
 });
 
 const autoPatrolRuntime = {
@@ -712,7 +724,7 @@ const autoPatrolRuntime = {
   objectiveSuppressions: {}, objectiveConflictDetections: 0, objectiveDemotions: 0, objectiveAlternativeCommits: 0,
   objectiveState: "OBJECTIVE_NONE", activeObjective: null, objectiveSequence: 0, objectiveHistory: [],
   objectiveCreatedCount: 0, objectiveCompletedCount: 0, objectiveFailedCount: 0, objectiveDeathCount: 0,
-  lastStandStarts: 0, contactAftermathAvoidances: 0, contactAftermathBombEscalations: 0, contactAftermathTargetAvoidances: 0, contactAftermathTargetId: null, contactAftermathDepth: 0, contactAftermathVisitedCells: [], lastBombPlanTerminal: null, escapeFailureMemory: [], huntStallSignature: "", huntStallStartTurn: -1, floorHuntAbandonedDepth: 0, floorHuntAbandonReason: "", engagementPlan: null, engagementPlansStarted: 0, engagementPlansEnded: 0, engagementLastEndReason: "", huntStallLastHp: null,
+  lastStandStarts: 0, contactAftermathAvoidances: 0, contactAftermathBombEscalations: 0, contactAftermathTargetAvoidances: 0, contactAftermathTargetId: null, contactAftermathDepth: 0, contactAftermathVisitedCells: [], lastBombPlanTerminal: null, bombTrajectoryFailureMemory: [], escapeFailureMemory: [], huntStallSignature: "", huntStallStartTurn: -1, floorHuntAbandonedDepth: 0, floorHuntAbandonReason: "", engagementPlan: null, engagementPlansStarted: 0, engagementPlansEnded: 0, engagementLastEndReason: "", huntStallLastHp: null,
   combatObjectiveSequence: 0, activeCombatTactic: null, combatTacticState: "TACTIC_NONE",
   combatTacticalAttempts: [], combatRejectedTrajectorySignatures: [], combatVisitedStateActions: [],
   combatVisitedStates: [], combatStateVersion: 0, combatNoProgressCount: 0,
@@ -721,8 +733,412 @@ const autoPatrolRuntime = {
   tacticalShadowBudgetDepth: 0, tacticalShadowBudgetUsed: 0, tacticalShadowLastResult: null,
   tacticalShadowLastTriggerSignature: "", tacticalShadowLastTriggerState: null, tacticalShadowTriggerCounts: {},
   tacticalShadowSameStateSkips: 0, tacticalShadowLastSkipReason: "",
-  horizontalFlowPlan: null, horizontalFlowDirection: null, horizontalFlowDisabled: false, horizontalFlowBeamWidth: 0, horizontalFlowEvaluations: 0, horizontalFlowBudgetDepth: 0, horizontalFlowBudgetUsed: 0, horizontalFlowPlansStarted: 0, horizontalFlowPlansCompleted: 0, horizontalFlowPlansInvalidated: 0, horizontalFlowLastResult: null, horizontalFlowLastSignature: "", horizontalFlowLastRejectionSignature: "", horizontalFlowLastRejectionTurn: -999, horizontalFlowLastRejectionHpRatio: 0
+  horizontalFlowPlan: null, horizontalFlowDirection: null, horizontalFlowDisabled: false, horizontalFlowBeamWidth: 0, horizontalFlowEvaluations: 0, horizontalFlowBudgetDepth: 0, horizontalFlowBudgetUsed: 0, horizontalFlowPlansStarted: 0, horizontalFlowPlansCompleted: 0, horizontalFlowPlansInvalidated: 0, horizontalFlowLastResult: null, horizontalFlowLastSignature: "", horizontalFlowLastRejectionSignature: "", horizontalFlowLastRejectionTurn: -999, horizontalFlowLastRejectionHpRatio: 0,
+  encirclementShadowEvaluations: 0, encirclementShadowLastResult: null, encirclementBreakPlan: null, encirclementBreakState: "ENCIRCLEMENT_BREAK_EVALUATE", encirclementBreakBudgetDepth: 0, encirclementBreakBudgetUsed: 0, encirclementBreakLastTriggerSignature: "", encirclementBreakPlansStarted: 0, encirclementBreakPlansCompleted: 0, encirclementBreakPlansInvalidated: 0, encirclementBreakEvaluationBudgetExhausted: 0, encirclementBreakLastEvaluationSimulations: 0, encirclementBreakLastEvaluationReason: "",
+  targetFinishShadowEvaluations: 0, targetFinishShadowLastResult: null,
+  townGoldWithdrawalRequest: 0, townGoldWithdrawalPurpose: null
 };
+
+const AUTO_PATROL_PRODUCTION_SHADOW_CONFIG = Object.freeze({
+  enabled: true,
+  sliceBudget: 120,
+  maxBudget: 1600,
+  maxDepth: 12,
+  beamWidth: 250,
+  contactSliceBudget: 120,
+  contactMaxBudget: 1800,
+  contactMaxRouteDepth: 5,
+  contactMaxRouteCells: 40,
+  contactMaxResolveDepth: 12
+});
+
+const AUTO_PATROL_PRODUCTION_SHADOW_SFA = Object.freeze({
+  SHADOW_SEARCH_IDLE: { state_id: "SHADOW_SEARCH_IDLE", next_transitions: [{ event: "ELIGIBLE", target_state: "SHADOW_SEARCH_EVALUATE" }] },
+  SHADOW_SEARCH_EVALUATE: { state_id: "SHADOW_SEARCH_EVALUATE", next_transitions: [{ event: "START", target_state: "SHADOW_SEARCH_RUNNING" }, { event: "REJECT", target_state: "SHADOW_SEARCH_REJECTED" }] },
+  SHADOW_SEARCH_RUNNING: { state_id: "SHADOW_SEARCH_RUNNING", next_transitions: [{ event: "SLICE", target_state: "SHADOW_SEARCH_RUNNING" }, { event: "COMPLETE", target_state: "SHADOW_SEARCH_COMPLETED" }, { event: "INVALIDATE", target_state: "SHADOW_SEARCH_INVALIDATED" }, { event: "REJECT", target_state: "SHADOW_SEARCH_REJECTED" }] },
+  SHADOW_SEARCH_COMPLETED: { state_id: "SHADOW_SEARCH_COMPLETED", next_transitions: [{ event: "COMMIT", target_state: "SHADOW_ROUTE_ACTIVE" }, { event: "INVALIDATE", target_state: "SHADOW_SEARCH_INVALIDATED" }] },
+  SHADOW_ROUTE_ACTIVE: { state_id: "SHADOW_ROUTE_ACTIVE", next_transitions: [{ event: "NEXT", target_state: "SHADOW_ROUTE_ACTIVE" }, { event: "FINISH", target_state: "SHADOW_SEARCH_IDLE" }, { event: "INVALIDATE", target_state: "SHADOW_SEARCH_INVALIDATED" }] },
+  SHADOW_SEARCH_INVALIDATED: { state_id: "SHADOW_SEARCH_INVALIDATED", next_transitions: [{ event: "CLEAR", target_state: "SHADOW_SEARCH_IDLE" }] },
+  SHADOW_SEARCH_REJECTED: { state_id: "SHADOW_SEARCH_REJECTED", next_transitions: [{ event: "CLEAR", target_state: "SHADOW_SEARCH_IDLE" }] }
+});
+
+// Transient production shadow cache. This is intentionally separate from
+// autoPatrolRuntime so F8/F9/F10 packages keep the canonical gameplay state
+// without embedding a potentially large, recomputable search frontier.
+const autoPatrolProductionShadowRuntime = {
+  state: "SHADOW_SEARCH_IDLE",
+  session: null,
+  targetId: null,
+  rootSignature: "",
+  budgetUsed: 0,
+  committedRoute: [],
+  committedRouteClass: null,
+  ownedBombId: null,
+  lastInvalidationReason: "",
+  lastDiagnostic: null
+};
+
+function transitionAutoPatrolProductionShadow(event) {
+  const definition = AUTO_PATROL_PRODUCTION_SHADOW_SFA[autoPatrolProductionShadowRuntime.state];
+  const transition = definition?.next_transitions?.find(item => item.event === event);
+  if (!transition) throw new Error(`Invalid production shadow transition ${autoPatrolProductionShadowRuntime.state} x ${event}`);
+  autoPatrolProductionShadowRuntime.state = transition.target_state;
+  return autoPatrolProductionShadowRuntime.state;
+}
+
+function resetAutoPatrolProductionShadow(reason = "reset") {
+  autoPatrolProductionShadowRuntime.state = "SHADOW_SEARCH_IDLE";
+  autoPatrolProductionShadowRuntime.session = null;
+  autoPatrolProductionShadowRuntime.targetId = null;
+  autoPatrolProductionShadowRuntime.rootSignature = "";
+  autoPatrolProductionShadowRuntime.budgetUsed = 0;
+  autoPatrolProductionShadowRuntime.committedRoute = [];
+  autoPatrolProductionShadowRuntime.committedRouteClass = null;
+  autoPatrolProductionShadowRuntime.ownedBombId = null;
+  autoPatrolProductionShadowRuntime.lastInvalidationReason = reason;
+  autoPatrolProductionShadowRuntime.lastDiagnostic = null;
+}
+
+const AUTO_PATROL_PRODUCTION_SHADOW_ACTIONS = Object.freeze(["MOVE_UP", "MOVE_RIGHT", "MOVE_DOWN", "MOVE_LEFT", "PASS"]);
+
+function autoPatrolProductionShadowConflictEvidence(objective) {
+  if (!objective || objective.status !== "ACTIVE") return false;
+  const attempts = objective.tacticalAttempts || [];
+  const reasons = new Set(attempts.slice(-12).map(entry => entry.reason));
+  const approachAndLure = reasons.has("melee-plan-approach")
+    && [...reasons].some(reason => String(reason).includes("lure-plan"));
+  return approachAndLure
+    || (objective.rejectedTrajectorySignatures?.length || 0) > 0
+    || (objective.combatNoProgressCount || 0) > 0;
+}
+
+function autoPatrolProductionShadowTargetId(objective) {
+  if (Number.isFinite(objective?.primaryTargetId)) return objective.primaryTargetId;
+  return Array.isArray(objective?.targetEnemyIds) && Number.isFinite(objective.targetEnemyIds[0])
+    ? objective.targetEnemyIds[0] : null;
+}
+
+function autoPatrolProductionShadowEligible(ctx) {
+  if (!AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.enabled || engine.currentState !== "FE_PLAYER_TURN") return null;
+  if (ctx.currentMapType !== "dungeon" || ctx.player.hp <= 0 || playerBombs(ctx).length !== 0) return null;
+  const objective = autoPatrolRuntime.activeObjective;
+  if (!objective || objective.type !== "DEFEAT_DETECTED_ENEMIES") return null;
+  const targetId = autoPatrolProductionShadowTargetId(objective);
+  const objectiveTarget = targetId == null ? null : autoPatrolEnemyById(ctx, targetId);
+  const hasConflictingPlan = autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan || autoPatrolRuntime.bombSetupPlan
+    || autoPatrolRuntime.bombLurePlan || autoPatrolRuntime.contactRoutePlan || autoPatrolRuntime.initialRoutePlan;
+  if (objectiveTarget && autoPatrolProductionShadowConflictEvidence(objective) && !hasConflictingPlan) {
+    return { objective, targetId, target: objectiveTarget, candidateClass: "TARGET_REACQUISITION_OWNERSHIP" };
+  }
+  const imminentStrong = autoPatrolDetectedStrongHostiles(ctx).filter(enemy => autoPatrolArrivalTurns(ctx, enemy) <= 2);
+  const contactTarget = imminentStrong.sort((left, right) => autoPatrolArrivalTurns(ctx, left) - autoPatrolArrivalTurns(ctx, right)
+    || left.hp - right.hp || left.id - right.id)[0] || null;
+  return contactTarget
+    ? { objective, targetId: contactTarget.id, target: contactTarget, candidateClass: "SINGLE_BOMB_CONTACT_OWNERSHIP" }
+    : null;
+}
+
+function autoPatrolProductionShadowRootSignature(ctx, targetId, candidateClass = "TARGET_REACQUISITION_OWNERSHIP") {
+  const target = autoPatrolEnemyById(ctx, targetId);
+  const hostiles = autoPatrolHostiles(ctx).map(enemy => [enemy.id, enemy.x, enemy.y, Math.round(enemy.hp * 1000), enemy.hasDetectedPlayer ? 1 : 0]);
+  const bombs = playerBombs(ctx).map(bomb => [bomb.id, bomb.x, bomb.y, bomb.fuse, bomb.range]);
+  const objective = autoPatrolRuntime.activeObjective;
+  return JSON.stringify({
+    mapType: ctx.currentMapType, dungeonMode: ctx.dungeonMode, depth: ctx.depth, turn: ctx.turnCount, engineState: engine.currentState,
+    player: [ctx.player.x, ctx.player.y, Math.round(ctx.player.hp * 1000), Math.round(ctx.player.hunger * 1000)],
+    target: target ? [target.id, target.x, target.y, Math.round(target.hp * 1000)] : null, hostiles, bombs,
+    random: [deterministicRandomRuntime.seed, deterministicRandomRuntime.state, deterministicRandomRuntime.calls],
+    candidateClass
+  });
+}
+
+function autoPatrolCaptureProductionShadowState(lightweight = true) {
+  const capturedContext = structuredClone(context);
+  if (lightweight && Array.isArray(capturedContext.logs)) capturedContext.logs = [];
+  if (lightweight && capturedContext.saveUi && Object.prototype.hasOwnProperty.call(capturedContext.saveUi, "canonicalSavedSnapshot")) capturedContext.saveUi.canonicalSavedSnapshot = null;
+  const capturedAuto = cloneDebugAutoPatrolRuntime();
+  if (lightweight && Array.isArray(capturedAuto.movementHistory)) capturedAuto.movementHistory = [];
+  if (lightweight && Array.isArray(capturedAuto.objectiveHistory)) capturedAuto.objectiveHistory = [];
+  return { context: capturedContext, engineState: engine.currentState, random: cloneDebugRandomRuntime(), auto: capturedAuto };
+}
+
+function autoPatrolRestoreProductionShadowState(captured) {
+  autoPatrolRestoreContext(context, structuredClone(captured.context));
+  engine.currentState = captured.engineState;
+  restoreDebugRandomRuntime(structuredClone(captured.random));
+  restoreDebugAutoPatrolRuntime(structuredClone(captured.auto));
+  autoPatrolRuntime.generation = Number.isSafeInteger(captured.auto?.generation) ? captured.auto.generation : autoPatrolRuntime.generation;
+  autoPatrolRuntime.state = "AUTO_PATROL_READY";
+  autoPatrolRuntime.timerId = null;
+}
+
+function autoPatrolProductionShadowMetrics(targetId) {
+  const target = autoPatrolEnemyById(context, targetId);
+  const adjacentStrong = autoPatrolAdjacentHostiles(context).filter(enemy => autoPatrolIsStrongHostile(context, enemy)).length;
+  const strongArrival2 = autoPatrolHostiles(context).filter(enemy => autoPatrolIsStrongHostile(context, enemy))
+    .filter(enemy => autoPatrolArrivalTurns(context, enemy) <= 2).length;
+  const nextDamage = autoPatrolAdjacentHostiles(context).reduce((sum, enemy) => sum + enemyDamageAgainstPlayer(context, enemy), 0);
+  return {
+    turn: context.turnCount, hp: context.player.hp, x: context.player.x, y: context.player.y, death: autoPatrolPlayerIsCurrentlyDead(context),
+    targetAlive: Boolean(target), targetHp: target ? Math.max(0, target.hp) : 0, targetDistance: target ? autoPatrolDistance(context.player, target) : 0,
+    bombCount: context.bombs.length, adjacentStrong, strongArrival2, nextDamage, exits: autoPatrolWalkableExitCount(context),
+    hostiles: autoPatrolHostiles(context).length,
+    hostileHp: autoPatrolHostiles(context).reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0),
+    strongHostiles: autoPatrolHostiles(context).filter(enemy => autoPatrolIsStrongHostile(context, enemy)).length
+  };
+}
+
+function autoPatrolProductionShadowRank(node) {
+  return [node.end.death ? 1 : 0, node.end.targetAlive ? 1 : 0, node.end.targetHp, node.end.targetDistance,
+    node.end.nextDamage > 0 ? 1 : 0, node.end.adjacentStrong, node.end.strongArrival2, -node.minHp, -node.end.hp, node.events.length, node.events.join(",")];
+}
+
+function autoPatrolCompareProductionShadowNodes(left, right) {
+  const a = autoPatrolProductionShadowRank(left), b = autoPatrolProductionShadowRank(right);
+  for (let index = 0; index < a.length - 1; index += 1) if (a[index] !== b[index]) return a[index] - b[index];
+  return a.at(-1).localeCompare(b.at(-1));
+}
+
+function autoPatrolProductionShadowStateKey(node) {
+  const enemies = node.captured.context.enemies.filter(enemy => enemy.hp > 0 && !enemy.isFoodEnemy)
+    .map(enemy => `${enemy.id}:${enemy.x},${enemy.y},${Math.round(enemy.hp)},${enemy.hasDetectedPlayer ? 1 : 0}`).sort().join(";");
+  return `${node.end.x},${node.end.y},${Math.round(node.end.hp * 10)}|${node.end.targetAlive ? `${node.end.targetHp},${node.end.targetDistance}` : "DEAD"}|${enemies}`;
+}
+
+function autoPatrolCreateTargetReacquisitionProductionShadowSession(ctx, targetId, rootSignature) {
+  const captured = autoPatrolCaptureProductionShadowState();
+  const root = autoPatrolProductionShadowMetrics(targetId);
+  return {
+    kind: "TARGET_REACQUISITION_PRODUCTION_SESSION", targetId, rootSignature, root, depth: 1, nodeIndex: 0, actionIndex: 0,
+    frontier: [{ events: [], captured, end: root, minHp: root.hp }], nextByState: new Map(), completed: [], bestPartial: null,
+    budgetUsed: 0, complete: false
+  };
+}
+
+
+const AUTO_PATROL_PRODUCTION_CONTACT_DIRECTIONS = Object.freeze([
+  { dx: 1, dy: 0, event: "MOVE_RIGHT" }, { dx: -1, dy: 0, event: "MOVE_LEFT" },
+  { dx: 0, dy: 1, event: "MOVE_DOWN" }, { dx: 0, dy: -1, event: "MOVE_UP" }
+]);
+
+function autoPatrolProductionShadowOpenCell(ctx, x, y) { return ctx.grid?.[y]?.[x] === 0; }
+function autoPatrolProductionContactRoutes(ctx) {
+  const start = { x: ctx.player.x, y: ctx.player.y }, queue = [[start, []]], seen = new Set([`${start.x},${start.y}`]);
+  const output = [{ cell: start, route: [] }];
+  while (queue.length) {
+    const [position, path] = queue.shift();
+    if (path.length >= AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.contactMaxRouteDepth) continue;
+    for (const direction of AUTO_PATROL_PRODUCTION_CONTACT_DIRECTIONS) {
+      const next = { x: position.x + direction.dx, y: position.y + direction.dy }, key = `${next.x},${next.y}`;
+      if (!autoPatrolProductionShadowOpenCell(ctx, next.x, next.y) || seen.has(key)) continue;
+      seen.add(key); const route = [...path, direction.event]; output.push({ cell: next, route }); queue.push([next, route]);
+    }
+  }
+  return output.sort((a, b) => a.route.length - b.route.length || a.cell.y - b.cell.y || a.cell.x - b.cell.x)
+    .slice(0, AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.contactMaxRouteCells);
+}
+function autoPatrolProductionContactBlastCells(ctx) {
+  const output = new Set();
+  for (const bomb of playerBombs(ctx)) {
+    output.add(`${bomb.x},${bomb.y}`); const range = bomb.range || ctx.player.bombRange || 1;
+    for (const direction of AUTO_PATROL_PRODUCTION_CONTACT_DIRECTIONS) for (let step = 1; step <= range; step += 1) {
+      const x = bomb.x + direction.dx * step, y = bomb.y + direction.dy * step;
+      if (!autoPatrolProductionShadowOpenCell(ctx, x, y)) break; output.add(`${x},${y}`);
+    }
+  }
+  return output;
+}
+function autoPatrolProductionContactStateKey(node, targetId) {
+  const ctx = node.captured.context, target = ctx.enemies.find(enemy => enemy.id === targetId && enemy.hp > 0);
+  const bombs = ctx.bombs.map(bomb => `${bomb.id}:${bomb.x},${bomb.y},${bomb.fuse ?? bomb.turns ?? ""}`).sort().join(";");
+  const enemies = ctx.enemies.filter(enemy => enemy.hp > 0 && !enemy.isFoodEnemy)
+    .map(enemy => `${enemy.id}:${enemy.x},${enemy.y},${Math.round(enemy.hp)},${enemy.hasDetectedPlayer ? 1 : 0}`).sort().join(";");
+  return `${ctx.player.x},${ctx.player.y},${Math.round(ctx.player.hp * 10)}|${target ? `${target.x},${target.y},${Math.round(target.hp)}` : "DEAD"}|${bombs}|${enemies}`;
+}
+function autoPatrolProductionContactRank(node, session) {
+  const target = node.captured.context.enemies.find(enemy => enemy.id === session.targetId && enemy.hp > 0), targetHp = target?.hp || 0;
+  const inBlast = autoPatrolProductionContactBlastCells(node.captured.context).has(`${node.end.x},${node.end.y}`);
+  return [node.end.death ? 1 : 0, target ? 1 : 0, targetHp < session.targetStartHp - 0.5 ? 0 : 1,
+    node.end.bombCount > 0 ? 1 : 0, inBlast ? 1 : 0, node.end.nextDamage > 0 ? 1 : 0,
+    node.end.adjacentStrong, node.end.strongArrival2, -node.minHp, -node.end.hp, targetHp, node.events.length, node.events.join(",")];
+}
+function autoPatrolCompareProductionContactNodes(left, right, session) {
+  const a = autoPatrolProductionContactRank(left, session), b = autoPatrolProductionContactRank(right, session);
+  for (let i = 0; i < a.length - 1; i += 1) if (a[i] !== b[i]) return a[i] - b[i];
+  return a.at(-1).localeCompare(b.at(-1));
+}
+function autoPatrolProductionContactComplete(node, session) {
+  const pressure = node.end.hostiles < session.root.hostiles || node.end.strongHostiles < session.root.strongHostiles
+    || node.end.hostileHp < session.root.hostileHp - 0.5;
+  return !node.end.death && node.end.bombCount === 0 && node.end.adjacentStrong === 0
+    && node.end.strongArrival2 === 0 && node.end.nextDamage === 0 && pressure;
+}
+function autoPatrolCreateSingleBombContactProductionShadowSession(ctx, targetId, rootSignature) {
+  const captured = autoPatrolCaptureProductionShadowState(), root = autoPatrolProductionShadowMetrics(targetId);
+  const target = autoPatrolEnemyById(ctx, targetId);
+  return { kind: "SINGLE_BOMB_CONTACT_PRODUCTION_SESSION", targetId, targetStartHp: target?.hp || 0, rootSignature, root, base: captured,
+    phase: "ROUTE", routes: autoPatrolProductionContactRoutes(captured.context), routeIndex: 0, routeActionIndex: 0,
+    routeNode: null, placed: [], frontier: [], depth: 1, nodeIndex: 0, actionIndex: 0, next: [], completed: [], internal: [],
+    seen: new Map(), budgetUsed: 0, complete: false };
+}
+function autoPatrolPrepareNextContactRoute(session) {
+  if (session.routeIndex >= session.routes.length) {
+    session.placed.sort((a, b) => autoPatrolCompareProductionContactNodes(a, b, session));
+    session.frontier = session.placed.slice(0, 100); session.phase = "RESOLVE"; session.nodeIndex = 0; session.actionIndex = 0; session.next = []; return;
+  }
+  session.routeNode = { events: [], captured: session.base, end: session.root, minHp: session.root.hp };
+  session.routeActionIndex = 0;
+}
+function autoPatrolFinishProductionContactDepth(session) {
+  session.next.sort((a, b) => autoPatrolCompareProductionContactNodes(a, b, session));
+  const groups = new Map();
+  for (const node of session.next) {
+    const target = node.captured.context.enemies.find(enemy => enemy.id === session.targetId && enemy.hp > 0);
+    const phase = node.end.bombCount > 0 ? "BOMB_ACTIVE" : target && target.hp < session.targetStartHp - 0.5 ? "TARGET_CHANGED" : "POST_BOMB";
+    const blast = autoPatrolProductionContactBlastCells(node.captured.context).has(`${node.end.x},${node.end.y}`) ? "BLAST" : "CLEAR";
+    const key = `${phase}|${blast}|${node.end.nextDamage > 0 ? "EXPOSED" : "SAFE"}|${node.end.adjacentStrong}`;
+    if (!groups.has(key)) groups.set(key, []); if (groups.get(key).length < 8) groups.get(key).push(node);
+  }
+  session.frontier = [...groups.values()].flat().sort((a, b) => autoPatrolCompareProductionContactNodes(a, b, session)).slice(0, 100);
+  session.depth += 1; session.nodeIndex = 0; session.actionIndex = 0; session.next = [];
+  if (session.completed.length || session.depth > AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.contactMaxResolveDepth || session.frontier.length === 0) {
+    session.complete = true; session.phase = "DONE";
+  }
+}
+async function autoPatrolAdvanceSingleBombContactProductionShadowSession(session, additionalBudget) {
+  const live = autoPatrolCaptureProductionShadowState(false); let remaining = Math.max(0, Math.floor(additionalBudget));
+  engine.beginProjectionSuppression();
+  try {
+    while (remaining > 0 && !session.complete && session.budgetUsed < AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.contactMaxBudget) {
+      if (session.phase === "ROUTE") {
+        if (!session.routeNode) autoPatrolPrepareNextContactRoute(session); if (session.phase !== "ROUTE") continue;
+        const spec = session.routes[session.routeIndex];
+        if (session.routeActionIndex < spec.route.length) {
+          const action = spec.route[session.routeActionIndex++]; session.budgetUsed += 1; remaining -= 1;
+          autoPatrolRestoreProductionShadowState(session.routeNode.captured); const accepted = Boolean(await engine.transition(action));
+          if (!accepted || autoPatrolPlayerIsCurrentlyDead(context) || context.currentMapType !== "dungeon") { session.routeIndex += 1; session.routeNode = null; continue; }
+          const end = autoPatrolProductionShadowMetrics(session.targetId);
+          session.routeNode = { events: [...session.routeNode.events, action], captured: autoPatrolCaptureProductionShadowState(), end, minHp: Math.min(session.routeNode.minHp, end.hp) };
+          continue;
+        }
+        session.budgetUsed += 1; remaining -= 1; autoPatrolRestoreProductionShadowState(session.routeNode.captured);
+        const accepted = Boolean(await engine.transition("PLACE_BOMB"));
+        if (accepted && !autoPatrolPlayerIsCurrentlyDead(context) && playerBombs(context).length === 1) {
+          const end = autoPatrolProductionShadowMetrics(session.targetId);
+          session.placed.push({ events: [...session.routeNode.events, "PLACE_BOMB"], captured: autoPatrolCaptureProductionShadowState(), end, minHp: Math.min(session.routeNode.minHp, end.hp) });
+        }
+        session.routeIndex += 1; session.routeNode = null; continue;
+      }
+      if (session.depth > AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.contactMaxResolveDepth || session.frontier.length === 0) { session.complete = true; session.phase = "DONE"; continue; }
+      if (session.nodeIndex >= session.frontier.length) { autoPatrolFinishProductionContactDepth(session); continue; }
+      const node = session.frontier[session.nodeIndex];
+      if (session.actionIndex >= AUTO_PATROL_PRODUCTION_SHADOW_ACTIONS.length) { session.nodeIndex += 1; session.actionIndex = 0; continue; }
+      const action = AUTO_PATROL_PRODUCTION_SHADOW_ACTIONS[session.actionIndex++]; session.budgetUsed += 1; remaining -= 1;
+      autoPatrolRestoreProductionShadowState(node.captured); const accepted = Boolean(await engine.transition(action));
+      if (!accepted || autoPatrolPlayerIsCurrentlyDead(context) || context.currentMapType !== "dungeon") continue;
+      const end = autoPatrolProductionShadowMetrics(session.targetId);
+      const child = { events: [...node.events, action], captured: autoPatrolCaptureProductionShadowState(), end, minHp: Math.min(node.minHp, end.hp) };
+      const key = autoPatrolProductionContactStateKey(child, session.targetId);
+      if (session.seen.has(key) && session.seen.get(key) <= child.events.length) continue; session.seen.set(key, child.events.length);
+      if (end.targetAlive && end.targetHp < session.targetStartHp - 0.5 && end.bombCount > 0 && end.nextDamage === 0) session.internal.push(child);
+      if (autoPatrolProductionContactComplete(child, session)) session.completed.push(child);
+      if (end.bombCount > 0 || !autoPatrolProductionContactComplete(child, session)) session.next.push(child);
+    }
+    if (!session.complete && session.phase === "RESOLVE" && session.nodeIndex >= session.frontier.length) autoPatrolFinishProductionContactDepth(session);
+  } finally { autoPatrolRestoreProductionShadowState(live); engine.endProjectionSuppression(); }
+  const best = session.complete ? session.completed.slice().sort((a, b) => autoPatrolCompareProductionContactNodes(a, b, session))[0] || null : null;
+  const internal = session.internal.slice().sort((a, b) => autoPatrolCompareProductionContactNodes(a, b, session))[0] || null;
+  return { best, internal, complete: session.complete, budgetUsed: session.budgetUsed };
+}
+
+function autoPatrolFinishProductionShadowDepth(session) {
+  if (session.completed.length > 0) { session.complete = true; return; }
+  session.frontier = [...session.nextByState.values()].sort(autoPatrolCompareProductionShadowNodes).slice(0, AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.beamWidth);
+  session.nextByState = new Map(); session.depth += 1; session.nodeIndex = 0; session.actionIndex = 0;
+  if (session.depth > AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.maxDepth || session.frontier.length === 0 || session.budgetUsed >= AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.maxBudget) session.complete = true;
+}
+
+async function autoPatrolAdvanceProductionShadowSession(session, additionalBudget) {
+  const live = autoPatrolCaptureProductionShadowState(false);
+  let remaining = Math.max(0, Math.floor(additionalBudget));
+  engine.beginProjectionSuppression();
+  try {
+    while (remaining > 0 && !session.complete && session.budgetUsed < AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.maxBudget) {
+      if (session.nodeIndex >= session.frontier.length) { autoPatrolFinishProductionShadowDepth(session); continue; }
+      const node = session.frontier[session.nodeIndex];
+      if (session.actionIndex >= AUTO_PATROL_PRODUCTION_SHADOW_ACTIONS.length) { session.nodeIndex += 1; session.actionIndex = 0; continue; }
+      const action = AUTO_PATROL_PRODUCTION_SHADOW_ACTIONS[session.actionIndex++];
+      session.budgetUsed += 1; remaining -= 1;
+      autoPatrolRestoreProductionShadowState(node.captured);
+      const accepted = Boolean(await engine.transition(action));
+      if (!accepted || autoPatrolPlayerIsCurrentlyDead(context) || context.currentMapType !== "dungeon" || playerBombs(context).length > 0) continue;
+      const end = autoPatrolProductionShadowMetrics(session.targetId);
+      const candidate = { events: [...node.events, action], captured: autoPatrolCaptureProductionShadowState(), end, minHp: Math.min(node.minHp, end.hp) };
+      if (!end.targetAlive && !end.death && end.bombCount === 0 && end.adjacentStrong === 0 && end.strongArrival2 === 0 && end.nextDamage === 0 && end.exits > 0) { session.completed.push(candidate); continue; }
+      if (!end.targetAlive) continue;
+      if (!session.bestPartial || autoPatrolCompareProductionShadowNodes(candidate, session.bestPartial) < 0) session.bestPartial = candidate;
+      const key = autoPatrolProductionShadowStateKey(candidate);
+      const previous = session.nextByState.get(key);
+      if (!previous || autoPatrolCompareProductionShadowNodes(candidate, previous) < 0) session.nextByState.set(key, candidate);
+    }
+    if (!session.complete && session.nodeIndex >= session.frontier.length) autoPatrolFinishProductionShadowDepth(session);
+  } finally { autoPatrolRestoreProductionShadowState(live); engine.endProjectionSuppression(); }
+  const best = session.complete ? session.completed.slice().sort(autoPatrolCompareProductionShadowNodes)[0] || null : null;
+  return { best, internal: best ? null : session.bestPartial, complete: session.complete, budgetUsed: session.budgetUsed };
+}
+
+async function autoPatrolMaybeAdvanceProductionShadow(ctx) {
+  if (autoPatrolProductionShadowRuntime.committedRoute.length > 0) {
+    const target = autoPatrolProductionShadowRuntime.targetId == null ? null : autoPatrolEnemyById(ctx, autoPatrolProductionShadowRuntime.targetId);
+    const routeBombs = playerBombs(ctx), bombCount = routeBombs.length;
+    const ownedBombActive = bombCount === 1 && routeBombs[0].id === autoPatrolProductionShadowRuntime.ownedBombId;
+    const allowsOwnedBomb = autoPatrolProductionShadowRuntime.committedRouteClass === "SINGLE_BOMB_CONTACT_OWNERSHIP"
+      && (bombCount === 0 || ownedBombActive);
+    if (!target || ctx.currentMapType !== "dungeon" || ctx.player.hp <= 0 || (!allowsOwnedBomb && bombCount > 0) || bombCount > 1) {
+      if (autoPatrolProductionShadowRuntime.state === "SHADOW_ROUTE_ACTIVE") transitionAutoPatrolProductionShadow("INVALIDATE");
+      resetAutoPatrolProductionShadow("committed-route-invalidated"); return null;
+    }
+    return { kind: "DISPATCH", event: autoPatrolProductionShadowRuntime.committedRoute[0], route: autoPatrolProductionShadowRuntime.committedRoute.slice(),
+      reason: `production-shadow-${autoPatrolProductionShadowRuntime.committedRouteClass === "SINGLE_BOMB_CONTACT_OWNERSHIP" ? "single-bomb-contact" : "target-reacquisition"}-route`,
+      targetId: autoPatrolProductionShadowRuntime.targetId, shadowRouteCommit: true };
+  }
+  const eligible = autoPatrolProductionShadowEligible(ctx);
+  if (!eligible) { if (autoPatrolProductionShadowRuntime.session) resetAutoPatrolProductionShadow("ineligible"); return null; }
+  const rootSignature = autoPatrolProductionShadowRootSignature(ctx, eligible.targetId, eligible.candidateClass);
+  if (autoPatrolProductionShadowRuntime.session && (autoPatrolProductionShadowRuntime.rootSignature !== rootSignature
+      || autoPatrolProductionShadowRuntime.session.kind !== (eligible.candidateClass === "SINGLE_BOMB_CONTACT_OWNERSHIP" ? "SINGLE_BOMB_CONTACT_PRODUCTION_SESSION" : "TARGET_REACQUISITION_PRODUCTION_SESSION"))) {
+    resetAutoPatrolProductionShadow("root-changed");
+  }
+  if (!autoPatrolProductionShadowRuntime.session) {
+    transitionAutoPatrolProductionShadow("ELIGIBLE");
+    autoPatrolProductionShadowRuntime.session = eligible.candidateClass === "SINGLE_BOMB_CONTACT_OWNERSHIP"
+      ? autoPatrolCreateSingleBombContactProductionShadowSession(ctx, eligible.targetId, rootSignature)
+      : autoPatrolCreateTargetReacquisitionProductionShadowSession(ctx, eligible.targetId, rootSignature);
+    autoPatrolProductionShadowRuntime.targetId = eligible.targetId; autoPatrolProductionShadowRuntime.rootSignature = rootSignature;
+    transitionAutoPatrolProductionShadow("START");
+  }
+  const isContact = eligible.candidateClass === "SINGLE_BOMB_CONTACT_OWNERSHIP";
+  const result = isContact
+    ? await autoPatrolAdvanceSingleBombContactProductionShadowSession(autoPatrolProductionShadowRuntime.session, AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.contactSliceBudget)
+    : await autoPatrolAdvanceProductionShadowSession(autoPatrolProductionShadowRuntime.session, AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.sliceBudget);
+  autoPatrolProductionShadowRuntime.budgetUsed = result.budgetUsed;
+  autoPatrolProductionShadowRuntime.lastDiagnostic = { candidateClass: eligible.candidateClass, targetId: eligible.targetId,
+    complete: result.complete, budgetUsed: result.budgetUsed, internalEvents: result.internal?.events || [] };
+  if (result.best) {
+    transitionAutoPatrolProductionShadow("COMPLETE"); const event = result.best.events[0];
+    autoPatrolProductionShadowRuntime.committedRoute = result.best.events.slice();
+    autoPatrolProductionShadowRuntime.committedRouteClass = eligible.candidateClass;
+    autoPatrolProductionShadowRuntime.session = null; autoPatrolRuntime.meleePlan = null; autoPatrolRuntime.lurePlan = null;
+    autoPatrolRuntime.lurePlanState = "LURE_PLAN_NONE";
+    autoPatrolProductionShadowRuntime.lastDiagnostic = { ...autoPatrolProductionShadowRuntime.lastDiagnostic, completedEvents: result.best.events.slice() };
+    return { kind: "DISPATCH", event, route: result.best.events.slice(),
+      reason: isContact ? "production-shadow-single-bomb-contact" : "production-shadow-target-reacquisition",
+      targetId: eligible.targetId, shadowCompleted: true, shadowRouteCommit: true };
+  }
+  if (result.complete) { transitionAutoPatrolProductionShadow("REJECT"); resetAutoPatrolProductionShadow("search-rejected"); return null; }
+  transitionAutoPatrolProductionShadow("SLICE");
+  return { kind: "SEARCH_PENDING", reason: isContact ? "production-shadow-single-bomb-contact-search" : "production-shadow-target-reacquisition-search", targetId: eligible.targetId };
+}
 
 const AUTO_PATROL_SCHEDULER_RUNTIME_KEYS = Object.freeze([
   "state", "generation", "timerId", "speed", "decision", "stopReason",
@@ -1467,8 +1883,8 @@ function rebuildHomeMenuEntries(ctx) {
   ctx.homeMenuEntries = [
     ...ctx.equipmentInventory.map((item, index) => ({ kind: 'carried', index, item })),
     ...ctx.homeStorage.equipment.map((item, index) => ({ kind: 'stored', index, item })),
-    { kind: 'deposit_gold', amount: Math.min(10, ctx.player.gold) },
-    { kind: 'withdraw_gold', amount: Math.min(10, ctx.homeStorage.gold) }
+    { kind: 'deposit_gold', amount: ctx.player.gold },
+    { kind: 'withdraw_gold', amount: Math.min(Math.max(0, Math.floor(autoPatrolRuntime.townGoldWithdrawalRequest || 0)) || 10, ctx.homeStorage.gold) }
   ];
   ctx.homeSelectedIndex = Math.min(ctx.homeSelectedIndex, Math.max(0, ctx.homeMenuEntries.length - 1));
 }
@@ -2078,8 +2494,12 @@ function createBoss(ctxOrDepth, depthOrRarity = null, forcedRarity = null) {
 function allocateEquipmentInstanceId(ctx, type) {
   if (!ctx || !["weapon", "armor"].includes(type)) throw new Error("invalid equipment identity request");
   if (!Number.isInteger(ctx.equipmentInstanceSequence) || ctx.equipmentInstanceSequence < 1) ctx.equipmentInstanceSequence = 1;
-  const instanceId = `equipment.${type}.${ctx.equipmentInstanceSequence}`;
-  ctx.equipmentInstanceSequence++;
+  const usedIds = new Set(collectPersistentEquipment(ctx).map(item => item?.instanceId).filter(Boolean));
+  let instanceId = null;
+  do {
+    instanceId = `equipment.${type}.${ctx.equipmentInstanceSequence}`;
+    ctx.equipmentInstanceSequence++;
+  } while (usedIds.has(instanceId));
   return instanceId;
 }
 
@@ -2243,7 +2663,7 @@ function generateTreasureChestReward(ctx, roll = gameRandom()) {
   if (roll < 0.28) return withItemRarity({ name: "Treasure Gold", type: "gold", amount: 80 + ctx.depth * 12 }, "common");
   if (roll < 0.62) return generateConsumable(ctx.depth);
   const eqType = gameRandom() > 0.5 ? "weapon" : "armor";
-  return generateRandomEquipment(ctx.depth + 3, eqType, 1.14);
+  return generateRandomEquipment(ctx.depth + 3, eqType, 1.14, 'common', ctx);
 }
 
 function equipmentPrimaryStat(item) {
@@ -2775,6 +3195,43 @@ function applyBlastDamage(ctx, x, y, damage) {
   }
 }
 
+function bombBlastCells(ctx, bomb) {
+  const cells = [{ x: bomb.x, y: bomb.y }];
+  const directions = [[1,0],[-1,0],[0,1],[0,-1]];
+  const range = Math.max(1, Number(bomb.range) || 1);
+  for (const [dx, dy] of directions) {
+    for (let distance = 1; distance <= range; distance += 1) {
+      const x = bomb.x + dx * distance;
+      const y = bomb.y + dy * distance;
+      const tile = ctx.grid[y]?.[x];
+      if (tile === undefined || tile === 2) break;
+      cells.push({ x, y });
+      if (tile === 1) break;
+    }
+  }
+  return cells;
+}
+function bombThreatCellKeys(ctx, bombs = ctx.bombs) {
+  const keys = new Set();
+  const queue = [...bombs];
+  const visited = new Set();
+  while (queue.length) {
+    const bomb = queue.shift();
+    if (!bomb || visited.has(bomb)) continue;
+    visited.add(bomb);
+    for (const cell of bombBlastCells(ctx, bomb)) {
+      keys.add(coordinateKey(cell.x, cell.y));
+      for (const chained of bombs) {
+        if (!visited.has(chained) && chained.chainReactive !== false && chained.x === cell.x && chained.y === cell.y) queue.push(chained);
+      }
+    }
+  }
+  return keys;
+}
+function bombThreatensCell(ctx, bomb, cell) {
+  return bombBlastCells(ctx, bomb).some(candidate => candidate.x === cell.x && candidate.y === cell.y);
+}
+
 function detonateBomb(ctx, bombRef, detonated = new Set(), affected = new Set()) {
   const bomb = typeof bombRef === 'object' && bombRef !== null
     ? bombRef
@@ -2783,19 +3240,11 @@ function detonateBomb(ctx, bombRef, detonated = new Set(), affected = new Set())
   detonated.add(bomb);
   ctx.bombs = ctx.bombs.filter(candidate => candidate !== bomb);
   const damage = bombDamage(ctx);
-  const blastCells = [{ x: bomb.x, y: bomb.y }];
-  const directions = [[1,0],[-1,0],[0,1],[0,-1]];
-  for (const [dx, dy] of directions) {
-    for (let distance = 1; distance <= bomb.range; distance++) {
-      const x = bomb.x + dx * distance;
-      const y = bomb.y + dy * distance;
-      if (ctx.grid[y][x] === 2) break;
-      blastCells.push({ x, y });
-      if (ctx.grid[y][x] === 1) {
-        ctx.grid[y][x] = 0;
-        addLog(ctx, `The blast shattered a rock at ${x},${y}.`);
-        break;
-      }
+  const blastCells = bombBlastCells(ctx, bomb);
+  for (const cell of blastCells) {
+    if (ctx.grid[cell.y]?.[cell.x] === 1) {
+      ctx.grid[cell.y][cell.x] = 0;
+      addLog(ctx, `The blast shattered a rock at ${cell.x},${cell.y}.`);
     }
   }
   for (const cell of blastCells) {
@@ -3746,11 +4195,8 @@ function commitEnemyTurnTransaction(ctx, transaction) {
 function executeEnemyTurnSfa(ctx) {
   const transaction = createEnemyTurnTransaction(ctx);
   const staged = transaction.staged;
-  const blastThreatened = (x, y) => staged.bombs.some(bomb => {
-    if (bomb.x === x && Math.abs(bomb.y - y) <= bomb.range) return true;
-    if (bomb.y === y && Math.abs(bomb.x - x) <= bomb.range) return true;
-    return false;
-  });
+  const blastThreatKeys = bombThreatCellKeys(staged);
+  const blastThreatened = (x, y) => blastThreatKeys.has(coordinateKey(x, y));
   const turnProjection = {
     turn: staged.turnCount,
     policy: { ...ENEMY_TURN_POLICY },
@@ -4034,6 +4480,8 @@ const mapGenerationActions = {
     ctx.bombs = [];
     ctx.explosionCells = [];
     if (runtime.mapKind === "town") {
+      const repairedEquipmentIds = repairPersistentEquipmentIdentity(ctx);
+      if (repairedEquipmentIds > 0) addLog(ctx, `Repaired ${repairedEquipmentIds} duplicate equipment identity record${repairedEquipmentIds === 1 ? '' : 's'} before town services.`);
       ctx.grid = Array(15).fill(null).map(() => Array(15).fill(0));
       for (let i = 0; i < 15; i++) {
         ctx.grid[0][i] = 2; ctx.grid[14][i] = 2;
@@ -4211,7 +4659,7 @@ function executeMapGenerationSfa(ctx) {
 // 3B. Save schema / storage adapter / persistent rebuild
 // ==========================================
 const SAVE_FORMAT = "sfa-rogue-save";
-const SAVE_SCHEMA_VERSION = 1;
+const SAVE_SCHEMA_VERSION = 2;
 const SAVE_GAME_VERSION = "2026.07.19";
 const SAVE_BALANCE_VERSION = 1;
 const SAVE_ITEM_SCHEMA_VERSION = 1;
@@ -4263,6 +4711,23 @@ function assertPersistentEquipmentIdentity(ctx) {
   if (ids.some(id => typeof id !== "string" || !id)) throw new Error("persistent equipment instanceId missing");
   if (new Set(ids).size !== ids.length) throw new Error("persistent equipment instanceId duplicate");
 }
+function repairPersistentEquipmentIdentity(ctx) {
+  const equipment = collectPersistentEquipment(ctx);
+  const usedIds = new Set();
+  let repaired = 0;
+  for (const item of equipment) {
+    const currentId = typeof item?.instanceId === "string" ? item.instanceId : "";
+    if (currentId && !usedIds.has(currentId)) {
+      usedIds.add(currentId);
+      continue;
+    }
+    const nextId = allocateEquipmentInstanceId(ctx, item?.type);
+    item.instanceId = nextId;
+    usedIds.add(nextId);
+    repaired += 1;
+  }
+  return repaired;
+}
 function serializeEquipment(item) {
   if (!item || !["weapon", "armor"].includes(item.type)) throw new Error("invalid equipment");
   const statKey = item.type === "weapon" ? "atk" : "def";
@@ -4293,12 +4758,31 @@ function deserializeEquipment(saved) {
     })
   };
 }
+function createTimelineSnapshot(ctx) {
+  return {
+    turnCount: ctx.turnCount,
+    timePhase: ctx.timePhase,
+    timePhaseElapsedTurns: ctx.timePhaseElapsedTurns
+  };
+}
+function validateTimelineSnapshot(timeline, path, errors) {
+  if (!timeline || typeof timeline !== "object") { errors.push(path); return; }
+  if (!validateSafeNonNegativeInteger(timeline.turnCount)) errors.push(`${path}.turnCount`);
+  if (!Number.isInteger(timeline.timePhase) || timeline.timePhase < 0 || timeline.timePhase >= TIME_NAMES.length) errors.push(`${path}.timePhase`);
+  if (!validateSafeNonNegativeInteger(timeline.timePhaseElapsedTurns) || timeline.timePhaseElapsedTurns >= TURNS_PER_TIME_PHASE) errors.push(`${path}.timePhaseElapsedTurns`);
+}
+function applyTimelineSnapshot(ctx, timeline) {
+  ctx.turnCount = timeline.turnCount;
+  ctx.timePhase = timeline.timePhase;
+  ctx.timePhaseElapsedTurns = timeline.timePhaseElapsedTurns;
+}
 function buildSaveSnapshot(ctx, savedAt = new Date().toISOString()) {
   assertPersistentEquipmentIdentity(ctx);
   return {
     format: SAVE_FORMAT, schemaVersion: SAVE_SCHEMA_VERSION, gameVersion: SAVE_GAME_VERSION,
     balanceVersion: SAVE_BALANCE_VERSION, itemSchemaVersion: SAVE_ITEM_SCHEMA_VERSION, savedAt,
     payload: {
+      timeline: createTimelineSnapshot(ctx),
       player: {
         level: ctx.player.level, exp: ctx.player.exp, gold: ctx.player.gold,
         permanentMaxHpBonus: ctx.player.permanentMaxHpBonus,
@@ -4372,6 +4856,7 @@ function validateSaveSnapshot(save) {
   if (save?.itemSchemaVersion !== SAVE_ITEM_SCHEMA_VERSION) errors.push("itemSchemaVersion");
   if (typeof save?.savedAt !== "string" || Number.isNaN(Date.parse(save.savedAt))) errors.push("savedAt");
   const payload = save?.payload; const player = payload?.player;
+  validateTimelineSnapshot(payload?.timeline, "payload.timeline", errors);
   for (const [name, value] of Object.entries({ level: player?.level, exp: player?.exp, gold: player?.gold, permanentMaxHpBonus: player?.permanentMaxHpBonus, bombCapacity: player?.bombCapacity, bombRange: player?.bombRange, bombRangeShopPurchases: player?.bombRangeShopPurchases, bombCapacityShopPurchases: player?.bombCapacityShopPurchases, returnScrolls: player?.returnScrolls })) {
     if (!validateSafeNonNegativeInteger(value) || (name === "level" && value < 1)) errors.push(`payload.player.${name}`);
   }
@@ -4483,7 +4968,8 @@ function applyPersistentPayload(ctx, payload) {
   ctx.warpDestinations = [1, ...ctx.discoveredWarpFloors];
   const generatedSequences = collectPersistentEquipment(ctx).map(item => /^equipment\.(?:weapon|armor)\.(\d+)$/.exec(item.instanceId || "")).filter(Boolean).map(match => Number(match[1]));
   ctx.equipmentInstanceSequence = Math.max(1, ...(generatedSequences.map(value => value + 1)));
-  ctx.currentMapType = "town"; ctx.dungeonMode = "standard"; ctx.depth = 0; ctx.timePhase = 0; ctx.timePhaseElapsedTurns = 0; ctx.turnCount = 0;
+  ctx.currentMapType = "town"; ctx.dungeonMode = "standard"; ctx.depth = 0;
+  applyTimelineSnapshot(ctx, payload.timeline);
   ctx.enemies = []; ctx.items = []; ctx.bombs = []; ctx.explosionCells = []; ctx.player.statusEffects = { poisonTurns: 0 }; ctx.player.hpFlow = "stable";
 }
 function loadPersistentPayloadAtomically(ctx, payload) {
@@ -4870,6 +5356,7 @@ const actions = {
     clearTransientInteractionRuntime(staged);
     executeMapGenerationSfa(staged);
     commitMapGenerationStagingContext(ctx, staged);
+    autoPatrolResetBombTrajectoryFailureMemory();
     resetAnalysisTrace("floor-entered", ctx);
     captureDebugFloorStartSnapshot(ctx);
   },
@@ -4885,6 +5372,9 @@ const actions = {
       const nextDepth = staged.depth + 1;
       const label = staged.dungeonMode === 'abyss' ? `A${nextDepth}` : `B${nextDepth}`;
       resolveBombsOnMapExit(staged, label);
+      if (staged.dungeonMode === 'standard') {
+        staged.pendingBossTownServiceFloors = (staged.pendingBossTownServiceFloors || []).filter(floor => floor !== staged.depth);
+      }
       staged.depth = nextDepth;
       if (staged.dungeonMode === 'abyss') {
         addLog(staged, `Descended deeper into Abyss A${staged.depth}.`);
@@ -5069,7 +5559,7 @@ const actions = {
   },
   deposit_home_gold: (ctx) => {
     const staged = createHomeStorageStagingContext(ctx);
-    const amount = Math.min(10, staged.player.gold);
+    const amount = staged.player.gold;
     if (amount <= 0) return;
     staged.player.gold -= amount;
     staged.homeStorage.gold += amount;
@@ -5079,11 +5569,15 @@ const actions = {
   },
   withdraw_home_gold: (ctx) => {
     const staged = createHomeStorageStagingContext(ctx);
-    const amount = Math.min(10, staged.homeStorage.gold);
+    const requested = Math.max(0, Math.floor(autoPatrolRuntime.townGoldWithdrawalRequest || 0));
+    const amount = Math.min(requested > 0 ? requested : 10, staged.homeStorage.gold);
     if (amount <= 0) return;
     staged.homeStorage.gold -= amount;
     staged.player.gold += amount;
-    addLog(staged, `Withdrew ${amount} gold from home.`);
+    const purpose = autoPatrolRuntime.townGoldWithdrawalPurpose;
+    addLog(staged, purpose ? `Withdrew ${amount} gold from home for ${purpose}.` : `Withdrew ${amount} gold from home.`);
+    autoPatrolRuntime.townGoldWithdrawalRequest = 0;
+    autoPatrolRuntime.townGoldWithdrawalPurpose = null;
     rebuildHomeMenuEntries(staged);
     commitHomeStorageStagingContext(ctx, staged);
   },
@@ -5867,7 +6361,7 @@ function executePlayerPassTurn(ctx) {
 const AUTO_PATROL_SFA = Object.freeze({
   AUTO_PATROL_OFF: { role: "frontend", next_transitions: [{ event: "TOGGLE_ON", target_state: "AUTO_PATROL_READY" }] },
   AUTO_PATROL_READY: { role: "frontend", next_transitions: [{ event: "DECIDE", target_state: "AUTO_PATROL_DECIDING" }, { event: "TOGGLE_OFF", target_state: "AUTO_PATROL_STOPPING" }] },
-  AUTO_PATROL_DECIDING: { role: "shared", next_transitions: [{ event: "DECISION_READY", target_state: "AUTO_PATROL_DISPATCHING" }, { event: "PAUSE", target_state: "AUTO_PATROL_PAUSED" }, { event: "FAIL", target_state: "AUTO_PATROL_FAILED" }, { event: "TOGGLE_OFF", target_state: "AUTO_PATROL_STOPPING" }] },
+  AUTO_PATROL_DECIDING: { role: "shared", next_transitions: [{ event: "DECISION_READY", target_state: "AUTO_PATROL_DISPATCHING" }, { event: "SEARCH_PENDING", target_state: "AUTO_PATROL_READY" }, { event: "PAUSE", target_state: "AUTO_PATROL_PAUSED" }, { event: "FAIL", target_state: "AUTO_PATROL_FAILED" }, { event: "TOGGLE_OFF", target_state: "AUTO_PATROL_STOPPING" }] },
   AUTO_PATROL_DISPATCHING: { role: "frontend", next_transitions: [{ event: "DISPATCHED", target_state: "AUTO_PATROL_WAITING_FOR_PLAYER_TURN" }, { event: "FAIL", target_state: "AUTO_PATROL_FAILED" }, { event: "TOGGLE_OFF", target_state: "AUTO_PATROL_STOPPING" }] },
   AUTO_PATROL_WAITING_FOR_PLAYER_TURN: { role: "frontend", next_transitions: [{ event: "PLAYER_TURN_READY", target_state: "AUTO_PATROL_READY" }, { event: "PAUSE", target_state: "AUTO_PATROL_PAUSED" }, { event: "FAIL", target_state: "AUTO_PATROL_FAILED" }, { event: "TOGGLE_OFF", target_state: "AUTO_PATROL_STOPPING" }] },
   AUTO_PATROL_PAUSED: { role: "frontend", next_transitions: [{ event: "RESUME", target_state: "AUTO_PATROL_READY" }, { event: "TOGGLE_OFF", target_state: "AUTO_PATROL_STOPPING" }, { event: "FAIL", target_state: "AUTO_PATROL_FAILED" }] },
@@ -6194,7 +6688,7 @@ function autoPatrolTacticalShadowTrigger(ctx, target) {
   return { reason, signature, state };
 }
 async function autoPatrolMaybeEvaluateManualBombTrajectoryShadow(ctx, baseline, runtimeAfterBaseline) {
-  if (autoPatrolManualBombTrajectoryDepth > 0 || !baseline || baseline.kind !== "DISPATCH" || baseline.event === "PLACE_BOMB") return null;
+  if (autoPatrolManualBombTrajectoryDepth > 0 || !baseline || baseline.kind !== "DISPATCH" || baseline.event === "PLACE_BOMB" || baseline.reason === "collect-loot") return null;
   if (autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan || autoPatrolRuntime.bombSetupPlan || autoPatrolRuntime.bombLurePlan) return null;
   const detected = autoPatrolDetectedCombatEnemies(ctx);
   const adjacent = autoPatrolAdjacentHostiles(ctx);
@@ -6321,6 +6815,32 @@ async function autoPatrolResolveDetectedCombatTrajectory(ctx, decision) {
     const altBlocked = (objective.rejectedTrajectorySignatures || []).some(entry => entry.signature === altSignature && entry.version === objective.combatStateVersion)
       || (objective.visitedStateActions || []).some(entry => entry.key === altStateAction && entry.version === objective.combatStateVersion);
     if (!altBlocked) return { ...alternative, reason: `detected-combat-alternative:${alternative.reason || "available"}` };
+  }
+  let safestUntriedPosition = null;
+  for (const candidate of autoPatrolRolloutCandidates(ctx, decision).filter(item => item.label === "direction")) {
+    const candidateDecision = {
+      kind: "DISPATCH",
+      event: candidate.event,
+      route: [candidate.event],
+      reason: "detected-combat-alternative:untried-position",
+      targetId: decision.targetId || objective.primaryTargetId || null
+    };
+    if (autoPatrolDetectedCombatCandidateBlock(ctx, candidateDecision, objective).blocked) continue;
+    const result = await autoPatrolSimulateEvent(candidate.event);
+    if (!result.accepted || result.metrics.dead || result.metrics.adjacent > 1 || result.metrics.exits < 1) continue;
+    if (result.metrics.hpLoss >= ctx.player.maxHp * AUTO_PATROL_SURVIVAL_MODEL.severeHpLossRatio) continue;
+    if (!safestUntriedPosition || result.score < safestUntriedPosition.result.score
+        || (result.score === safestUntriedPosition.result.score && candidate.event.localeCompare(safestUntriedPosition.event) < 0)) {
+      safestUntriedPosition = { event: candidate.event, result };
+    }
+  }
+  if (safestUntriedPosition) {
+    return {
+      kind: "DISPATCH",
+      event: safestUntriedPosition.event,
+      reason: "detected-combat-alternative:untried-position",
+      targetId: decision.targetId || objective.primaryTargetId || null
+    };
   }
   return autoPatrolLastStandDecision(ctx) || { kind: "PAUSE", reason: "detected-combat-no-untried-trajectory", targetId: decision.targetId || null };
 }
@@ -7040,8 +7560,16 @@ function autoPatrolSelectAdjacent(ctx, enemies) {
     return { enemy, duel, pressure };
   }).sort((a, b) => autoPatrolCombatTargetPriority(ctx, a.enemy) - autoPatrolCombatTargetPriority(ctx, b.enemy) || a.duel.threat - b.duel.threat || a.enemy.id - b.enemy.id)[0];
 }
-function autoPatrolStartMeleePlan(target, reason) {
-  autoPatrolRuntime.meleePlan = { targetId: target.id, reason };
+function autoPatrolStartMeleePlan(target, reason, mode = "STANDARD") {
+  autoPatrolRuntime.meleePlan = { targetId: target.id, reason, mode, committedAtTurn: context.turnCount };
+}
+function autoPatrolCommittedMeleePlanIsValid(ctx, plan, target) {
+  if (!plan || plan.mode !== "COMMIT_SAFE_MELEE_CONTACT_ROUTE" || !target) return false;
+  if (autoPatrolAdjacentHostiles(ctx).length > 1) return false;
+  if (autoPatrolWalkableExitCount(ctx) <= 0) return false;
+  const detectedOthers = autoPatrolHostiles(ctx).filter(enemy => enemy.id !== target.id && enemy.hasDetectedPlayer);
+  if (detectedOthers.length) return false;
+  return true;
 }
 function autoPatrolContinueMeleePlan(ctx) {
   const plan = autoPatrolRuntime.meleePlan;
@@ -7062,9 +7590,10 @@ function autoPatrolContinueMeleePlan(ctx) {
     if (bomb) { autoPatrolRuntime.meleePlan = null; return bomb; }
     return autoPatrolAttackDecision(ctx, target, "melee-plan-finish-target");
   }
-  if (isCombatActive(ctx)) {
-    const move = autoPatrolMoveDecision(ctx, [{ x: target.x, y: target.y }], "melee-plan-approach", true);
-    if (move) return { kind: "DISPATCH", ...move };
+  if (isCombatActive(ctx) || autoPatrolCommittedMeleePlanIsValid(ctx, plan, target)) {
+    const reason = plan.mode === "COMMIT_SAFE_MELEE_CONTACT_ROUTE" ? "committed-safe-melee-contact-route" : "melee-plan-approach";
+    const move = autoPatrolMoveDecision(ctx, [{ x: target.x, y: target.y }], reason, true);
+    if (move) return { kind: "DISPATCH", ...move, targetId: target.id };
   }
   autoPatrolRuntime.meleePlan = null;
   return null;
@@ -7074,8 +7603,7 @@ function autoPatrolBombEscapeCandidates(ctx, bomb, preferred) {
   for (const [x, y] of autoPatrolNeighbors(ctx.player.x, ctx.player.y)) {
     if (!autoPatrolWalkable(ctx, x, y)) continue;
     if (ctx.enemies.some(enemy => enemy.x === x && enemy.y === y)) continue;
-    const aligned = x === bomb.x || y === bomb.y;
-    const inBlast = aligned && autoPatrolDistance({ x, y }, bomb) <= bomb.range;
+    const inBlast = bombThreatensCell(ctx, bomb, { x, y });
     let score = (inBlast ? -100000 : 0) + autoPatrolDistance({ x, y }, bomb) * 100;
     if (preferred && x - ctx.player.x === preferred.dx && y - ctx.player.y === preferred.dy) score += 250;
     score += ctx.enemies.reduce((sum, enemy) => sum + autoPatrolDistance({ x, y }, enemy), 0);
@@ -7109,6 +7637,7 @@ function autoPatrolFinalizeBombPlan(ctx, reason) {
     depth: ctx.depth,
     turn: ctx.turnCount
   };
+  autoPatrolRecordUnproductiveBombTrajectory(ctx, plan, reason);
   autoPatrolRuntime.lastBombPlanTerminal = projection;
   autoPatrolRuntime.bombPlan = null;
   return projection;
@@ -7137,15 +7666,13 @@ function autoPatrolContinueBombPlan(ctx) {
     autoPatrolRuntime.bombPlan = null;
     return null;
   }
-  const aligned = ctx.player.x === bomb.x || ctx.player.y === bomb.y;
-  const inBlast = aligned && autoPatrolDistance(ctx.player, bomb) <= bomb.range;
+  const inBlast = bombThreatensCell(ctx, bomb, ctx.player);
   if (inBlast) {
     const next = autoPatrolSafeBombNeighbor(ctx, bomb, plan.escape);
     if (next) return { kind: "DISPATCH", event: autoPatrolDirectionEvent(next.x - ctx.player.x, next.y - ctx.player.y), reason: "bomb-plan-escape" };
     const blockers = autoPatrolHostiles(ctx).filter(enemy => {
       if (autoPatrolDistance(enemy, ctx.player) !== 1) return false;
-      const alignedWithBomb = enemy.x === bomb.x || enemy.y === bomb.y;
-      const enemyInBlast = alignedWithBomb && autoPatrolDistance(enemy, bomb) <= bomb.range;
+      const enemyInBlast = bombThreatensCell(ctx, bomb, enemy);
       if (enemyInBlast) return false;
       const hits = Math.max(1, Math.ceil(enemy.hp / autoPatrolPlayerAttack(ctx)));
       const damage = Math.max(0, hits - 1) * enemyDamageAgainstPlayer(ctx, enemy);
@@ -7164,8 +7691,8 @@ function autoPatrolContinueBombPlan(ctx) {
   const adjacent = autoPatrolHostiles(ctx)
     .filter(enemy => autoPatrolDistance(enemy, ctx.player) === 1)
     .sort((a, b) => {
-      const aInBlast = (a.x === bomb.x || a.y === bomb.y) && autoPatrolDistance(a, bomb) <= bomb.range;
-      const bInBlast = (b.x === bomb.x || b.y === bomb.y) && autoPatrolDistance(b, bomb) <= bomb.range;
+      const aInBlast = bombThreatensCell(ctx, bomb, a);
+      const bInBlast = bombThreatensCell(ctx, bomb, b);
       if (aInBlast !== bInBlast) return aInBlast ? 1 : -1;
       if (a.id === plan.targetId) return -1;
       if (b.id === plan.targetId) return 1;
@@ -7180,7 +7707,35 @@ function autoPatrolPreferredBombEscape(ctx, target) {
   if (target.y < ctx.player.y) return { dx: 0, dy: 1 };
   return { dx: 0, dy: -1 };
 }
+function autoPatrolBombTrajectorySignature(ctx, target, bombX, bombY, escape) {
+  const hostiles = autoPatrolHostiles(ctx);
+  return [ctx.currentMapType, ctx.depth, ctx.player.x, ctx.player.y, target?.id ?? "", target?.x ?? "", target?.y ?? "", Math.round(target?.hp || 0),
+    hostiles.length, Math.round(hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0)), bombX, bombY,
+    escape?.toX ?? "", escape?.toY ?? "", escape?.event || ""].join("|");
+}
+function autoPatrolBombTrajectoryWasUnproductive(ctx, signature) {
+  return Boolean(signature) && (autoPatrolRuntime.bombTrajectoryFailureMemory || []).some(entry =>
+    entry.signature === signature && entry.mapType === ctx.currentMapType && entry.depth === ctx.depth
+  );
+}
+function autoPatrolResetBombTrajectoryFailureMemory() {
+  autoPatrolRuntime.bombTrajectoryFailureMemory = [];
+}
+function autoPatrolRecordUnproductiveBombTrajectory(ctx, plan, reason) {
+  if (!plan?.trajectorySignature) return;
+  const target = autoPatrolEnemyById(ctx, plan.targetId);
+  const hostiles = autoPatrolHostiles(ctx);
+  const targetHpReduction = Math.max(0, (plan.startTargetHp || 0) - Math.max(0, target?.hp || 0));
+  const hostileCountReduction = Math.max(0, (plan.startHostiles || 0) - hostiles.length);
+  const hostileHpReduction = Math.max(0, (plan.startHostileHp || 0) - hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0));
+  if (targetHpReduction > 0 || hostileCountReduction > 0 || hostileHpReduction > 0) return;
+  autoPatrolRuntime.bombTrajectoryFailureMemory = [...(autoPatrolRuntime.bombTrajectoryFailureMemory || []), {
+    signature: plan.trajectorySignature, mapType: plan.mapType, depth: plan.depth, targetId: plan.targetId,
+    bombX: plan.bombX, bombY: plan.bombY, escape: structuredClone(plan.escape), reason, turn: ctx.turnCount
+  }].slice(-32);
+}
 function autoPatrolStartBombPlan(ctx, target, reason, approvedEscape = null) {
+  if (playerBombs(ctx).length > 0) return null;
   const bomb = { x: ctx.player.x, y: ctx.player.y, range: ctx.player.bombRange };
   const preferred = autoPatrolPreferredBombEscape(ctx, target);
   const selected = approvedEscape || autoPatrolSafeBombNeighbor(ctx, bomb, preferred);
@@ -7197,7 +7752,12 @@ function autoPatrolStartBombPlan(ctx, target, reason, approvedEscape = null) {
     toX: selected.x,
     toY: selected.y
   };
-  autoPatrolRuntime.pendingBombPlan = { targetId: target.id, bombX: ctx.player.x, bombY: ctx.player.y, escape, reason };
+  const trajectorySignature = autoPatrolBombTrajectorySignature(ctx, target, ctx.player.x, ctx.player.y, escape);
+  if (autoPatrolBombTrajectoryWasUnproductive(ctx, trajectorySignature)) return null;
+  const hostiles = autoPatrolHostiles(ctx);
+  autoPatrolRuntime.pendingBombPlan = { targetId: target.id, bombX: ctx.player.x, bombY: ctx.player.y, escape, reason, trajectorySignature,
+    mapType: ctx.currentMapType, depth: ctx.depth, startTargetHp: Math.max(0, target.hp), startHostiles: hostiles.length,
+    startHostileHp: hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0) };
   return { kind: "DISPATCH", event: "PLACE_BOMB", reason };
 }
 function autoPatrolAdjacentBombTradeoff(ctx, target, duel) {
@@ -7270,7 +7830,7 @@ function autoPatrolCreateMultiStrongWallCandidate(ctx) {
   const adjacent = autoPatrolAdjacentHostiles(ctx);
   const adjacentDamage = adjacent.reduce((sum, enemy) => sum + enemyDamageAgainstPlayer(ctx, enemy), 0);
   const adjacentStrongIds = new Set(adjacent.filter(enemy => autoPatrolIsStrongHostile(ctx, enemy)).map(enemy => enemy.id));
-  const multiPressure = strongDetected.length >= 2
+  const multiPressure = strongDetected.length >= 3
     || (adjacent.length >= 2 && (adjacentStrongIds.size >= 1 || adjacentDamage >= ctx.player.maxHp * 0.12));
   if (!multiPressure) return null;
   const placementDamage = adjacentDamage;
@@ -7502,16 +8062,55 @@ function autoPatrolTownStorageCandidates(ctx) {
   return ctx.equipmentInventory.map((item, index) => ({ item, index }))
     .filter(({ item }) => autoPatrolTownShouldStoreEquipment(item));
 }
+function autoPatrolHasUltraRareEquipmentOption(item) {
+  return (item?.options || []).some(option => (RARITY_RANK[option?.rarity] || 0) >= RARITY_RANK.ultra_rare);
+}
+function autoPatrolTownShouldKeepWithoutHome(item) {
+  return Boolean(item) && (item.rarity === 'ultra_rare' || autoPatrolHasUltraRareEquipmentOption(item));
+}
 function autoPatrolTownDisposableEntries(ctx) {
   return ctx.equipmentInventory.map((item, index) => ({ item, index }))
-    .filter(({ item }) => item?.rarity === 'common' && !autoPatrolHasRareEquipmentOption(item))
+    .filter(({ item }) => ctx.homePurchased
+      ? !autoPatrolTownShouldStoreEquipment(item)
+      : !autoPatrolTownShouldKeepWithoutHome(item))
     .sort(compareEquipmentForInventoryEviction);
 }
 function autoPatrolTownSaleCandidates(ctx) {
   return autoPatrolTownDisposableEntries(ctx);
 }
+function autoPatrolTownDesiredShopPurchase(ctx) {
+  if (ctx.player.returnScrolls < 1) {
+    return { type: 'return_scroll', value: AUTO_PATROL_TOWN_CONFIG.requiredReturnScrollGold, reason: 'return-scroll' };
+  }
+  if (!ctx.homePurchased) return null;
+  if (ctx.player.bombCapacityShopPurchases < 1 && ctx.player.bombCapacity < BOMB_CONFIG.maxCapacity) {
+    return { type: 'bomb_capacity', value: 2200, reason: 'bomb-capacity' };
+  }
+  if (ctx.player.bombRangeShopPurchases < 3 && ctx.player.bombRange < BOMB_CONFIG.maxRange) {
+    return { type: 'bomb_range', value: 650 + ctx.player.bombRangeShopPurchases * 850, reason: 'bomb-range' };
+  }
+  return null;
+}
+function autoPatrolTownAvailablePurchaseGold(ctx) {
+  return ctx.player.gold + (ctx.homePurchased ? (ctx.homeStorage?.gold || 0) : 0);
+}
+function autoPatrolTownNeedsShopPurchase(ctx) {
+  const target = autoPatrolTownDesiredShopPurchase(ctx);
+  return Boolean(target && autoPatrolTownAvailablePurchaseGold(ctx) >= target.value);
+}
 function autoPatrolTownNeedsReturnScroll(ctx) {
-  return ctx.player.returnScrolls < 1 && ctx.player.gold >= AUTO_PATROL_TOWN_CONFIG.requiredReturnScrollGold;
+  const target = autoPatrolTownDesiredShopPurchase(ctx);
+  return Boolean(target?.type === 'return_scroll' && autoPatrolTownAvailablePurchaseGold(ctx) >= target.value);
+}
+function autoPatrolTownShopWithdrawalRequest(ctx) {
+  const target = autoPatrolTownDesiredShopPurchase(ctx);
+  if (!target || !ctx.homePurchased) return null;
+  const shortage = Math.max(0, target.value - ctx.player.gold);
+  if (shortage <= 0 || shortage > (ctx.homeStorage?.gold || 0)) return null;
+  return { amount: shortage, purpose: target.reason, target };
+}
+function autoPatrolTownNeedsShopWithdrawal(ctx) {
+  return Boolean(autoPatrolTownShopWithdrawalRequest(ctx));
 }
 function autoPatrolTownNeedsRest(ctx) {
   return ctx.timePhase >= 3
@@ -7520,6 +8119,15 @@ function autoPatrolTownNeedsRest(ctx) {
 }
 function autoPatrolTownInventoryNeedsCleanup(ctx) {
   return autoPatrolTownDisposableEntries(ctx).length > 0;
+}
+function autoPatrolTownNeedsGoldDeposit(ctx) {
+  return Boolean(ctx.homePurchased && ctx.player.gold > 0);
+}
+function autoPatrolTownNeedsInnWithdrawal(ctx) {
+  return Boolean(autoPatrolTownNeedsRest(ctx)
+    && ctx.player.gold < 20
+    && ctx.homePurchased
+    && (ctx.homeStorage?.gold || 0) > 0);
 }
 function autoPatrolTownBlacksmithTarget(ctx) {
   const commonSales = autoPatrolTownSaleCandidates(ctx);
@@ -7537,21 +8145,46 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
   if (frontendState === "FE_WARP_MENU") return { kind: "DISPATCH", event: "SELECT", reason: "town-resume-select-warp" };
   if (frontendState === "FE_HOME_PURCHASE_MENU") return { kind: "DISPATCH", event: autoPatrolTownNeedsHomePurchase(ctx) ? "SELECT" : "ESCAPE", reason: autoPatrolTownNeedsHomePurchase(ctx) ? "town-home-purchase-confirm" : "town-home-purchase-unaffordable" };
   if (frontendState === "FE_HOME_MENU") {
-    const target = autoPatrolTownStorageCandidates(ctx)[0];
-    if (!target) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-home-storage-finished" };
-    const entryIndex = ctx.homeMenuEntries.findIndex(entry => entry.kind === 'carried' && entry.item?.instanceId === target.item.instanceId);
-    if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-home-storage-entry-missing" };
-    if (ctx.homeSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-home-storage-select" };
-    if (ctx.homeSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-home-storage-select" };
-    return { kind: "DISPATCH", event: "SELECT", reason: "town-home-storage-deposit" };
+    let entryIndex = -1;
+    let reason = "town-home-storage-select";
+    if (autoPatrolTownNeedsInnWithdrawal(ctx)) {
+      autoPatrolRuntime.townGoldWithdrawalRequest = Math.min(20 - ctx.player.gold, ctx.homeStorage?.gold || 0);
+      autoPatrolRuntime.townGoldWithdrawalPurpose = 'inn';
+      entryIndex = ctx.homeMenuEntries.findIndex(entry => entry.kind === 'withdraw_gold');
+      reason = "town-home-withdraw-inn-gold";
+    } else if (autoPatrolTownNeedsShopWithdrawal(ctx)) {
+      const request = autoPatrolTownShopWithdrawalRequest(ctx);
+      autoPatrolRuntime.townGoldWithdrawalRequest = request.amount;
+      autoPatrolRuntime.townGoldWithdrawalPurpose = request.purpose;
+      entryIndex = ctx.homeMenuEntries.findIndex(entry => entry.kind === 'withdraw_gold');
+      reason = "town-home-withdraw-shop-gold";
+    } else if (autoPatrolTownDesiredShopPurchase(ctx) && ctx.player.gold >= autoPatrolTownDesiredShopPurchase(ctx).value) {
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-home-shop-funding-complete" };
+    } else {
+      const target = autoPatrolTownStorageCandidates(ctx)[0];
+      if (target) {
+        entryIndex = ctx.homeMenuEntries.findIndex(entry => entry.kind === 'carried' && entry.item?.instanceId === target.item.instanceId);
+        reason = "town-home-storage-deposit";
+      } else if (autoPatrolTownNeedsGoldDeposit(ctx)) {
+        entryIndex = ctx.homeMenuEntries.findIndex(entry => entry.kind === 'deposit_gold');
+        reason = "town-home-gold-deposit";
+      } else {
+        return { kind: "DISPATCH", event: "ESCAPE", reason: "town-home-service-finished" };
+      }
+    }
+    if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-home-service-entry-missing" };
+    if (ctx.homeSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-home-service-select" };
+    if (ctx.homeSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-home-service-select" };
+    return { kind: "DISPATCH", event: "SELECT", reason };
   }
   if (frontendState === "FE_SHOP_MENU") {
-    if (!autoPatrolTownNeedsReturnScroll(ctx)) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-shop-finished" };
-    const entryIndex = ctx.shopInventory.findIndex(item => item.type === "return_scroll" && item.stock > 0);
-    if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-shop-return-scroll-unavailable" };
-    if (ctx.shopSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-shop-select-return-scroll" };
-    if (ctx.shopSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-shop-select-return-scroll" };
-    return { kind: "DISPATCH", event: "SELECT", reason: "town-shop-buy-return-scroll" };
+    const target = autoPatrolTownDesiredShopPurchase(ctx);
+    if (!target || ctx.player.gold < target.value) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-shop-finished" };
+    const entryIndex = ctx.shopInventory.findIndex(item => item.type === target.type && item.stock > 0);
+    if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: `town-shop-${target.reason}-unavailable` };
+    if (ctx.shopSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: `town-shop-select-${target.reason}` };
+    if (ctx.shopSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: `town-shop-select-${target.reason}` };
+    return { kind: "DISPATCH", event: "SELECT", reason: `town-shop-buy-${target.reason}` };
   }
   if (frontendState === "FE_BLACKSMITH_MENU") {
     if (!autoPatrolTownInventoryNeedsCleanup(ctx)) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-smith-finished" };
@@ -7578,14 +8211,32 @@ function autoPatrolTownDecision(ctx, frontendState) {
     return autoPatrolAttackDecision(ctx, selected.enemy, "town-night-melee");
   }
   const needsRest = autoPatrolTownNeedsRest(ctx);
+  if (autoPatrolTownNeedsInnWithdrawal(ctx)) {
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home") return { kind: "DISPATCH", event: "INTERACT", reason: "town-home-withdraw-inn-open" };
+    const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-home-withdraw-inn-approach");
+    if (move) return { kind: "DISPATCH", ...move };
+  }
   if (needsRest && ctx.player.gold >= 20) {
     if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "inn") return { kind: "DISPATCH", event: "INTERACT", reason: "town-rest-open" };
     const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.innPosition], "town-rest-approach");
     if (move) return { kind: "DISPATCH", ...move };
   }
+  if (autoPatrolTownNeedsShopWithdrawal(ctx)) {
+    const request = autoPatrolTownShopWithdrawalRequest(ctx);
+    autoPatrolRuntime.townGoldWithdrawalRequest = request.amount;
+    autoPatrolRuntime.townGoldWithdrawalPurpose = request.purpose;
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home") return { kind: "DISPATCH", event: "INTERACT", reason: "town-home-withdraw-shop-open" };
+    const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-home-withdraw-shop-approach");
+    if (move) return { kind: "DISPATCH", ...move };
+  }
   if (autoPatrolTownNeedsHomePurchase(ctx)) {
     if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home_for_sale") return { kind: "DISPATCH", event: "INTERACT", reason: "town-home-purchase-open" };
     const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-home-purchase-approach");
+    if (move) return { kind: "DISPATCH", ...move };
+  }
+  if (autoPatrolTownNeedsShopPurchase(ctx)) {
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "shop") return { kind: "DISPATCH", event: "INTERACT", reason: "town-shop-open" };
+    const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.shopPosition], "town-shop-approach");
     if (move) return { kind: "DISPATCH", ...move };
   }
   if (autoPatrolTownNeedsHomeStorage(ctx)) {
@@ -7598,9 +8249,9 @@ function autoPatrolTownDecision(ctx, frontendState) {
     const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.blacksmithPosition], "town-smith-approach");
     if (move) return { kind: "DISPATCH", ...move };
   }
-  if (autoPatrolTownNeedsReturnScroll(ctx)) {
-    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "shop") return { kind: "DISPATCH", event: "INTERACT", reason: "town-shop-open" };
-    const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.shopPosition], "town-shop-approach");
+  if (autoPatrolTownNeedsGoldDeposit(ctx)) {
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home") return { kind: "DISPATCH", event: "INTERACT", reason: "town-home-gold-open" };
+    const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-home-gold-approach");
     if (move) return { kind: "DISPATCH", ...move };
   }
   const detected = autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer).sort((a, b) => autoPatrolDistance(a, ctx.player) - autoPatrolDistance(b, ctx.player));
@@ -7614,6 +8265,7 @@ function autoPatrolTownDecision(ctx, frontendState) {
 }
 
 function autoPatrolSupportedFrontendState(state) {
+  if (state === "FE_DEATH_SUMMARY") return AUTO_PATROL_CONFIG.continueAfterDeath;
   return ["FE_PLAYER_TURN", "FE_INN_MENU", "FE_SAVE_RESULT", "FE_INVENTORY_MENU", "FE_WARP_MENU", "FE_BLACKSMITH_MENU", "FE_SHOP_MENU", "FE_HOME_PURCHASE_MENU", "FE_HOME_MENU"].includes(state);
 }
 
@@ -7903,6 +8555,12 @@ function decideAutoPatrolBaseAction(ctx, frontendState) {
   if (detected.length) {
     const bomb = autoPatrolMaybeStartBombPlan(ctx, detected[0], autoPatrolDuel(ctx, detected[0]));
     if (bomb) return bomb;
+    const nearestDetectedDistance = autoPatrolDistance(detected[0], ctx.player);
+    if (!adjacent.length
+        && nearestDetectedDistance === 2
+        && autoPatrolWalkableExitCount(ctx) === 1) {
+      return { kind: "DISPATCH", event: "PASS", reason: "chokepoint-contact-wait", targetId: detected[0].id };
+    }
   }
   const foodHunt = autoPatrolRuntime.floorHuntAbandonedDepth === ctx.depth ? null : autoPatrolFoodHuntDecision(ctx);
   if (foodHunt) return foodHunt;
@@ -7922,7 +8580,7 @@ function decideAutoPatrolBaseAction(ctx, frontendState) {
   const loot = autoPatrolMoveDecision(ctx, autoPatrolResolvableFloorItems(ctx), "collect-loot");
   if (loot) return { kind: "DISPATCH", ...loot };
   const returnPortals = Object.entries(ctx.tiles).filter(([, type]) => type === "town_warp").map(([key]) => { const [x, y] = key.split(',').map(Number); return { x, y }; });
-  const bossTownServicePending = floorClear && (ctx.pendingBossTownServiceFloors || []).includes(ctx.depth);
+  const bossTownServicePending = floorClear && autoPatrolBossFloorShouldReturnToTown(ctx);
   if (returnPortals.some(tile => tile.x === ctx.player.x && tile.y === ctx.player.y) && bossTownServicePending) return { kind: "DISPATCH", event: "INTERACT", reason: "boss-clear-return-town" };
   if (returnPortals.length && bossTownServicePending) {
     const portalMove = autoPatrolMoveDecision(ctx, returnPortals, "boss-clear-return-town");
@@ -8975,10 +9633,15 @@ async function autoPatrolCreateSafeFloorBombTrapPlan(ctx) {
   return candidates[0] ? { events:candidates[0].events.slice(), targetId:candidates[0].targetId, createdDepth:ctx.depth } : null;
 }
 function decideAutoPatrolAction(ctx, frontendState) { return decideAutoPatrolBaseAction(ctx, frontendState); }
+function autoPatrolBossFloorShouldReturnToTown(ctx) {
+  return Boolean(ctx.currentMapType === "dungeon"
+    && ctx.dungeonMode === "standard"
+    && (ctx.pendingBossTownServiceFloors || []).includes(ctx.depth)
+    && ctx.enemies.length === 0
+    && ctx.equipmentInventory.length >= 3);
+}
 function autoPatrolBossReturnPortals(ctx) {
-  if (ctx.currentMapType !== "dungeon" || ctx.dungeonMode !== "standard") return [];
-  if (!(ctx.pendingBossTownServiceFloors || []).includes(ctx.depth)) return [];
-  if (ctx.enemies.some(isHostileFloorEnemy)) return [];
+  if (!autoPatrolBossFloorShouldReturnToTown(ctx)) return [];
   return Object.entries(ctx.tiles).filter(([, type]) => type === "town_warp").map(([key]) => {
     const [x, y] = key.split(',').map(Number);
     return { x, y };
@@ -9328,7 +9991,18 @@ async function autoPatrolMaybeStartHorizontalFlowPlan(ctx, frontendState) {
 }
 
 async function decideAutoPatrolRuntimeAction(ctx, frontendState, rolloutContext = false) {
+  if (frontendState === "FE_DEATH_SUMMARY") {
+    return AUTO_PATROL_CONFIG.continueAfterDeath
+      ? { kind: "DISPATCH", event: "RETURN_TO_TOWN", reason: "death-summary-auto-return", lifecycleOnly: true }
+      : { kind: "PAUSE", reason: "death-summary-awaiting-manual-return" };
+  }
   if (!rolloutContext) autoPatrolUpdateFloorHuntStall(ctx);
+  // An already placed player bomb owns the runtime until detonation or explicit terminal projection.
+  // Higher-level selectors must not replace its escape/hold trajectory with melee, approach, loot, or floor completion.
+  const activeBombTrajectory = autoPatrolContinueBombPlan(ctx);
+  if (activeBombTrajectory) return activeBombTrajectory;
+  const encirclementBreakStep = autoPatrolContinueEncirclementBreakPlan(ctx, frontendState);
+  if (encirclementBreakStep) return encirclementBreakStep;
   // rolloutContext=true means this decision is being taken INSIDE a rollout simulation:
   // multi-turn planning (initial route, horizontal flow, lure/bomb-lure evaluation)
   // is skipped so rollouts neither start new plan evaluations nor consume plan state.
@@ -9400,7 +10074,7 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, rolloutContext 
     baseline = guardedBaseline;
     runtimeAfterBaseline = autoPatrolClonePlanRuntime();
   }
-  if (autoPatrolMultiStrongTrajectoryDepth === 0 && baseline?.kind === 'DISPATCH' && baseline.event !== 'PLACE_BOMB' && !autoPatrolRuntime.bombPlan && !autoPatrolRuntime.pendingBombPlan) {
+  if (autoPatrolMultiStrongTrajectoryDepth === 0 && baseline?.kind === 'DISPATCH' && baseline.event !== 'PLACE_BOMB' && baseline.reason !== 'collect-loot' && !autoPatrolRuntime.bombPlan && !autoPatrolRuntime.pendingBombPlan) {
     const candidate = autoPatrolCreateMultiStrongWallCandidate(ctx);
     if (candidate && autoPatrolCanEvaluateMultiStrongWall(ctx)) {
       autoPatrolMarkMultiStrongWallEvaluation(ctx, runtimeAfterBaseline);
@@ -9457,7 +10131,12 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, rolloutContext 
   if (!baselineResult.accepted) return baseline;
   await autoPatrolMaybeEvaluateManualBombTrajectoryShadow(ctx, baseline, runtimeAfterBaseline);
   autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
-  if (!rolloutContext && baseline.reason === "collect-loot" && autoPatrolRuntime.bombLureEvaluatedDepth !== ctx.depth && autoPatrolRuntime.floorBombPlacementRejectedDepth !== ctx.depth && autoPatrolAdjacentHostiles(ctx).length === 0 && baselineResult.metrics.detected >= 3) {
+  if (!rolloutContext) {
+    const encirclementBreakStart = await autoPatrolMaybeStartEncirclementBreakPlan(ctx, frontendState, baseline, baselineResult);
+    autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
+    if (encirclementBreakStart) return encirclementBreakStart;
+  }
+  if (!rolloutContext && baseline.reason === "collect-loot" && autoPatrolRuntime.bombLureEvaluatedDepth !== ctx.depth && autoPatrolRuntime.floorBombPlacementRejectedDepth !== ctx.depth && autoPatrolAdjacentHostiles(ctx).length === 0 && autoPatrolHostiles(ctx).every(enemy => !enemy.hasDetectedPlayer) && baselineResult.metrics.detected >= 3) {
     const plan = await autoPatrolCreateSafeFloorBombTrapPlan(ctx);
     autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
     autoPatrolRuntime.bombLureEvaluatedDepth = ctx.depth;
@@ -9498,6 +10177,31 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, rolloutContext 
         return { kind: "DISPATCH", event, reason: "contact-route-plan:start" };
       }
       if (autoPatrolRuntime.contactRouteState === "CONTACT_ROUTE_EVALUATE") { transitionAutoPatrolContactRoute("PLAN_UNAVAILABLE"); transitionAutoPatrolContactRoute("NEXT_TICK"); }
+    }
+  }
+  if (!rolloutContext && baseline.reason === "collect-loot"
+      && autoPatrolHostiles(ctx).every(enemy => !enemy.hasDetectedPlayer)
+      && !baselineResult.metrics.dead
+      && (baselineResult.metrics.hpLoss > 0 || baselineResult.metrics.adjacent > 0)) {
+    let exposureAvoidance = null;
+    for (const candidate of autoPatrolRolloutCandidates(ctx, baseline).filter(item => item.label === "direction")) {
+      const result = await autoPatrolSimulateEvent(candidate.event);
+      autoPatrolRestorePlanRuntime(runtimeAfterBaseline);
+      if (!result.accepted || result.metrics.dead || result.metrics.exits < 1) continue;
+      if (result.metrics.hpLoss >= baselineResult.metrics.hpLoss && result.metrics.adjacent >= baselineResult.metrics.adjacent) continue;
+      const score = result.metrics.adjacent * 100000
+        + result.metrics.hpLoss * 1000
+        + result.metrics.near2 * 500
+        + result.metrics.detected * 100
+        - result.metrics.exits * 10;
+      if (!exposureAvoidance || score < exposureAvoidance.score
+          || (score === exposureAvoidance.score && candidate.event.localeCompare(exposureAvoidance.event) < 0)) {
+        exposureAvoidance = { event: candidate.event, score };
+      }
+    }
+    if (exposureAvoidance) {
+      autoPatrolRestorePlanRuntime(runtimeBefore);
+      return { kind: "DISPATCH", event: exposureAvoidance.event, reason: "loot-approach-exposure-avoidance" };
     }
   }
   const imminent = isCombatActive(ctx) || autoPatrolHostiles(ctx).some(enemy => enemy.hasDetectedPlayer && autoPatrolDistance(enemy, ctx.player) <= 3);
@@ -9561,8 +10265,9 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, rolloutContext 
       if (target && guards.can_place_bomb(ctx) && (autoPatrolRuntime.contactAftermathVisitedCells || []).length >= 3) {
         const bombFallback = autoPatrolStartBombPlan(ctx, target, "contact-aftermath:bomb-disengage");
         if (bombFallback) {
+          const guardedBombFallback = await autoPatrolPreflightBombEscape(ctx, bombFallback, autoPatrolClonePlanRuntime());
           autoPatrolRuntime.contactAftermathBombEscalations = (autoPatrolRuntime.contactAftermathBombEscalations || 0) + 1;
-          return bombFallback;
+          return guardedBombFallback;
         }
       }
       if (target) return { ...baseline, reason: "last-stand:no-survivable-melee-or-retreat" };
@@ -9615,6 +10320,416 @@ function autoPatrolEmergencyOscillationIsIrrecoverable(ctx) {
   if (autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan || autoPatrolRuntime.bombSetupPlan || autoPatrolRuntime.bombEscapeAlternativePlan) return false;
   return true;
 }
+const AUTO_PATROL_ENCIRCLEMENT_SHADOW_EVENTS = Object.freeze(["MOVE_UP", "MOVE_RIGHT", "MOVE_DOWN", "MOVE_LEFT", "PLACE_BOMB", "PASS"]);
+function autoPatrolEncirclementShadowTactic(events) {
+  if (events.includes("PLACE_BOMB")) return "BREAK_ENCIRCLEMENT_WITH_TERRAIN_BOMB_ROUTE";
+  if (events.some(event => event.startsWith("MOVE_"))) return "FULL_DISENGAGEMENT_OR_ENEMY_SEPARATION";
+  return "DEFENSIVE_CHOKEPOINT_CONTACT";
+}
+async function autoPatrolSimulateEncirclementShadowSequence(events) {
+  const contextSnapshot = structuredClone(context);
+  const stateSnapshot = engine.currentState;
+  const runtimeSnapshot = autoPatrolCloneSimulationRuntime();
+  const transaction = beginGameRandomTransaction();
+  const startHp = context.player.hp;
+  const startHostiles = autoPatrolHostiles(context).length;
+  const startHostileHp = autoPatrolHostiles(context).reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0);
+  let maxAdjacent = autoPatrolAdjacentHostiles(context).length;
+  let minExits = autoPatrolWalkableExitCount(context);
+  let peakDetected = autoPatrolHostiles(context).filter(enemy => enemy.hasDetectedPlayer).length;
+  let acceptedTurns = 0;
+  let dead = false;
+  let bombPlaced = false;
+  let bombResolved = false;
+  let cumulativeDamage = 0;
+  let maxImmediateDamage = 0;
+  let previousHp = context.player.hp;
+  const trajectory = [];
+  engine.beginProjectionSuppression();
+  try {
+    const fork = beginGameRandomTransactionFork(transaction);
+    try {
+      for (const event of events) {
+        if (!await engine.transition(event)) break;
+        acceptedTurns += 1;
+        bombPlaced = bombPlaced || event === "PLACE_BOMB";
+        bombResolved = bombResolved || (bombPlaced && context.bombs.length === 0);
+        dead = autoPatrolPlayerIsCurrentlyDead(context) || engine.currentState === "FE_DEATH_SUMMARY";
+        const immediateDamage = Math.max(0, previousHp - context.player.hp);
+        cumulativeDamage += immediateDamage;
+        maxImmediateDamage = Math.max(maxImmediateDamage, immediateDamage);
+        previousHp = context.player.hp;
+        const turnHostiles = autoPatrolHostiles(context);
+        const turnAdjacent = autoPatrolAdjacentHostiles(context).length;
+        const turnExits = autoPatrolWalkableExitCount(context);
+        const turnDetected = turnHostiles.filter(enemy => enemy.hasDetectedPlayer).length;
+        const turnHostileHp = turnHostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0);
+        maxAdjacent = Math.max(maxAdjacent, turnAdjacent);
+        minExits = Math.min(minExits, turnExits);
+        peakDetected = Math.max(peakDetected, turnDetected);
+        trajectory.push({ turn: acceptedTurns, event, hp: context.player.hp, immediateDamage, cumulativeDamage, hostiles: turnHostiles.length, hostileHp: turnHostileHp, detected: turnDetected, adjacent: turnAdjacent, exits: turnExits, bombs: context.bombs.length });
+        if (dead) break;
+      }
+    } finally { endGameRandomSimulationFork(fork); }
+    const hostiles = autoPatrolHostiles(context);
+    const hostileHp = hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0);
+    const detected = hostiles.filter(enemy => enemy.hasDetectedPlayer).length;
+    const adjacent = autoPatrolAdjacentHostiles(context).length;
+    const exits = autoPatrolWalkableExitCount(context);
+    const hpLoss = Math.max(0, startHp - context.player.hp);
+    const kills = Math.max(0, startHostiles - hostiles.length);
+    const hostileHpReduction = Math.max(0, startHostileHp - hostileHp);
+    const levelUp = context.player.hp > startHp && context.player.level > contextSnapshot.player.level;
+    const pressureImproved = kills > 0 || hostileHpReduction > 0 || adjacent < autoPatrolAdjacentHostiles(contextSnapshot).length || detected < contextSnapshot.enemies.filter(enemy => !enemy.isFood && enemy.hasDetectedPlayer).length;
+    const score = (dead ? 100000000 : 0) + cumulativeDamage * 1000 + maxAdjacent * 120000 + peakDetected * 8000 + Math.max(0, 1 - minExits) * 200000 + adjacent * 30000 + detected * 4000 - kills * 500000 - hostileHpReduction * 1200 - exits * 5000 - (levelUp ? 250000 : 0) - (bombResolved ? 30000 : 0);
+    return { events: events.slice(0, acceptedTurns), tactic: autoPatrolEncirclementShadowTactic(events), dead, acceptedTurns, hpLoss, cumulativeDamage, maxImmediateDamage, maxAdjacent, minExits, peakDetected, trajectory, final: { hp: context.player.hp, level: context.player.level, hostiles: hostiles.length, hostileHp, detected, adjacent, exits }, kills, hostileHpReduction, bombPlaced, bombResolved, levelUp, pressureImproved, score };
+  } catch (error) {
+    return { events: events.slice(), tactic: autoPatrolEncirclementShadowTactic(events), dead: true, acceptedTurns, hpLoss: startHp, cumulativeDamage: Math.max(cumulativeDamage, startHp), maxImmediateDamage: Math.max(maxImmediateDamage, startHp), maxAdjacent: 99, minExits: 0, peakDetected: 99, trajectory, final: null, kills: 0, hostileHpReduction: 0, bombPlaced, bombResolved: false, levelUp: false, pressureImproved: false, score: 1000000000, error: String(error?.message || error) };
+  } finally {
+    if (gameRandomRuntime.transactionStack[gameRandomRuntime.transactionStack.length - 1] === transaction) rollbackGameRandomTransaction(transaction);
+    autoPatrolRestoreContext(context, contextSnapshot);
+    engine.currentState = stateSnapshot;
+    autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
+    engine.endProjectionSuppression();
+  }
+}
+function autoPatrolEncirclementBreakTriggerSignature(ctx) {
+  const hostiles = autoPatrolHostiles(ctx);
+  return [ctx.currentMapType, ctx.depth, ctx.player.x, ctx.player.y, Math.round(ctx.player.hp), hostiles.length,
+    hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0),
+    hostiles.filter(enemy => enemy.hasDetectedPlayer).length, autoPatrolAdjacentHostiles(ctx).length,
+    autoPatrolWalkableExitCount(ctx), ctx.items.length].join("|");
+}
+function autoPatrolClearEncirclementBreakPlan(completed, reason) {
+  if (!autoPatrolRuntime.encirclementBreakPlan) return;
+  autoPatrolRuntime.encirclementBreakPlan = null;
+  autoPatrolRuntime.encirclementBreakState = completed ? "ENCIRCLEMENT_BREAK_COMPLETED" : "ENCIRCLEMENT_BREAK_REJECTED";
+  if (completed) autoPatrolRuntime.encirclementBreakPlansCompleted += 1;
+  else autoPatrolRuntime.encirclementBreakPlansInvalidated += 1;
+  autoPatrolRuntime.encirclementBreakLastEndReason = reason;
+}
+function autoPatrolContinueEncirclementBreakPlan(ctx, frontendState) {
+  const plan = autoPatrolRuntime.encirclementBreakPlan;
+  if (!plan) return null;
+  if (frontendState !== "FE_PLAYER_TURN") return { kind: "PAUSE", reason: `encirclement-break-waiting:${frontendState}` };
+  if (ctx.currentMapType !== plan.mapType || ctx.depth !== plan.depth || autoPatrolPlayerIsCurrentlyDead(ctx)) {
+    autoPatrolClearEncirclementBreakPlan(false, "lifecycle-changed");
+    return null;
+  }
+  const hostiles = autoPatrolHostiles(ctx);
+  const hostileHp = hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0);
+  const adjacent = autoPatrolAdjacentHostiles(ctx).length;
+  const exits = autoPatrolWalkableExitCount(ctx);
+  const expected = plan.trajectory[Math.max(0, plan.index - 1)] || null;
+  const nextEvent = plan.events[plan.index] || null;
+  if (ctx.bombs.length && exits < 1) { autoPatrolClearEncirclementBreakPlan(false, "blast-escape-lost"); return null; }
+  if (nextEvent && autoPatrolIsMovementEvent(nextEvent) && !autoPatrolPlannedMovementIsApplicable(ctx, nextEvent)) {
+    autoPatrolClearEncirclementBreakPlan(false, "route-step-blocked");
+    return null;
+  }
+  if (expected && hostiles.filter(enemy => enemy.hasDetectedPlayer).length > expected.detected + 1) {
+    autoPatrolClearEncirclementBreakPlan(false, "unexpected-detection-pressure");
+    return null;
+  }
+  if (expected && ctx.player.hp <= Math.max(1, expected.immediateDamage || 0)) {
+    autoPatrolClearEncirclementBreakPlan(false, "predicted-cumulative-damage-lethal");
+    return null;
+  }
+  if (expected && hostiles.length > expected.hostiles) { autoPatrolClearEncirclementBreakPlan(false, "hostile-count-worse-than-route"); return null; }
+  if (expected && adjacent > expected.adjacent + 1) { autoPatrolClearEncirclementBreakPlan(false, "unexpected-adjacent-pressure"); return null; }
+  if (expected && hostileHp > expected.hostileHp && plan.index >= 3) { autoPatrolClearEncirclementBreakPlan(false, "expected-hostile-damage-missing"); return null; }
+  if (plan.index >= plan.events.length) {
+    const completed = ctx.bombs.length === 0 && hostiles.length < plan.startHostiles && adjacent <= plan.finalAdjacent;
+    autoPatrolClearEncirclementBreakPlan(completed, completed ? "route-completed" : "route-finished-without-pressure-reduction");
+    return null;
+  }
+  const event = plan.events[plan.index];
+  if (event === "PLACE_BOMB" && ctx.bombs.some(bomb => bomb.owner === "player")) {
+    autoPatrolClearEncirclementBreakPlan(false, "single-active-bomb-policy");
+    return autoPatrolSingleActiveBombSafetyDecision(ctx, { kind: "DISPATCH", event: "PASS", reason: "encirclement-break-bomb-blocked" });
+  }
+  plan.index += 1;
+  autoPatrolRuntime.encirclementBreakState = event === "PLACE_BOMB"
+    ? "ENCIRCLEMENT_BREAK_BOMB_PLACEMENT"
+    : (ctx.bombs.length ? "ENCIRCLEMENT_BREAK_DETONATION_RESOLVE" : "ENCIRCLEMENT_BREAK_TERRAIN_TRANSIT");
+  return { kind: "DISPATCH", event, reason: `encirclement-break-route:${autoPatrolRuntime.encirclementBreakState.toLowerCase()}` };
+}
+function autoPatrolEncirclementBreakEligibility(ctx, frontendState, baseline, baselineResult) {
+  if (frontendState !== "FE_PLAYER_TURN" || ctx.currentMapType !== "dungeon") return { eligible: false, reason: "lifecycle" };
+  if (autoPatrolRuntime.encirclementBreakPlan || autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan) return { eligible: false, reason: "runtime-busy" };
+  if (baseline?.kind !== "DISPATCH" || baseline.reason !== "collect-loot") return { eligible: false, reason: "baseline-not-floor-approach" };
+  const hostiles = autoPatrolHostiles(ctx);
+  if (hostiles.length < 2 || hostiles.some(enemy => enemy.hasDetectedPlayer) || autoPatrolAdjacentHostiles(ctx).length) return { eligible: false, reason: "contact-already-active" };
+  const currentAdjacent = autoPatrolAdjacentHostiles(ctx).length;
+  const currentExits = autoPatrolWalkableExitCount(ctx);
+  const hostilePressureSaturatesLocalExits = hostiles.length >= Math.max(1, currentExits) * 2;
+  const projectedMultiSourceContact = baselineResult
+    && hostilePressureSaturatesLocalExits
+    && baselineResult.metrics.detected * 2 >= hostiles.length
+    && baselineResult.metrics.adjacent > currentAdjacent
+    && baselineResult.metrics.exits < currentExits;
+  if (!baselineResult || baselineResult.metrics.dead || !projectedMultiSourceContact) return { eligible: false, reason: "pressure-structure-not-matched" };
+  return { eligible: true, reason: "projected-encirclement", hostiles: hostiles.length, currentAdjacent, currentExits };
+}
+async function autoPatrolMaybeStartEncirclementBreakPlan(ctx, frontendState, baseline, baselineResult) {
+  const eligibility = autoPatrolEncirclementBreakEligibility(ctx, frontendState, baseline, baselineResult);
+  if (!eligibility.eligible) return null;
+  const hostiles = autoPatrolHostiles(ctx);
+  if (autoPatrolRuntime.encirclementBreakBudgetDepth !== ctx.depth) {
+    autoPatrolRuntime.encirclementBreakBudgetDepth = ctx.depth;
+    autoPatrolRuntime.encirclementBreakBudgetUsed = 0;
+    autoPatrolRuntime.encirclementBreakLastTriggerSignature = "";
+  }
+  const signature = autoPatrolEncirclementBreakTriggerSignature(ctx);
+  if (autoPatrolRuntime.encirclementBreakBudgetUsed >= 1 || autoPatrolRuntime.encirclementBreakLastTriggerSignature === signature) return null;
+  autoPatrolRuntime.encirclementBreakBudgetUsed += 1;
+  autoPatrolRuntime.encirclementBreakLastTriggerSignature = signature;
+  autoPatrolRuntime.encirclementBreakState = "ENCIRCLEMENT_BREAK_EVALUATE";
+  const evaluation = await autoPatrolEvaluateEncirclementBreakShadow(ctx, { horizon: 8, beamWidth: 20, maxSimulations: 32 });
+  const selected = evaluation.selected;
+  const playerBombs = selected?.events?.filter(event => event === "PLACE_BOMB").length || 0;
+  if (!selected || evaluation.budgetExhausted || selected.dead || selected.tactic !== "BREAK_ENCIRCLEMENT_WITH_TERRAIN_BOMB_ROUTE"
+      || playerBombs !== 1 || !selected.bombResolved || !selected.pressureImproved || selected.final?.exits < 1) {
+    autoPatrolRuntime.encirclementBreakState = "ENCIRCLEMENT_BREAK_REJECTED";
+    autoPatrolRuntime.encirclementBreakLastEvaluationReason = evaluation.budgetExhausted ? "evaluation-budget-exhausted" : "no-complete-safe-route";
+    if (evaluation.budgetExhausted) autoPatrolRuntime.encirclementBreakEvaluationBudgetExhausted += 1;
+    return null;
+  }
+  autoPatrolRuntime.encirclementBreakPlan = {
+    mapType: ctx.currentMapType, depth: ctx.depth, createdTurn: ctx.turnCount, rootSignature: evaluation.rootSignature,
+    events: selected.events.slice(), trajectory: structuredClone(selected.trajectory), index: 0,
+    startHostiles: hostiles.length, startHostileHp: hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0),
+    finalAdjacent: selected.final.adjacent
+  };
+  autoPatrolRuntime.encirclementBreakPlansStarted += 1;
+  autoPatrolRuntime.encirclementBreakState = "ENCIRCLEMENT_BREAK_ROUTE_COMMITTED";
+  return autoPatrolContinueEncirclementBreakPlan(ctx, frontendState);
+}
+
+async function autoPatrolEvaluateEncirclementBreakShadow(ctx, options = {}) {
+  const horizon = Math.max(1, Math.min(10, Number(options.horizon) || 8));
+  const beamWidth = Math.max(2, Math.min(24, Number(options.beamWidth) || 12));
+  const maxSimulations = Math.max(1, Math.floor(Number(options.maxSimulations) || 1000000));
+  const rootSignature = [ctx.currentMapType, ctx.depth, ctx.turnCount, ctx.player.x, ctx.player.y, Math.round(ctx.player.hp), autoPatrolHostiles(ctx).length].join("|");
+  let frontier = [[]];
+  const completed = [];
+  const observed = [];
+  let simulations = 0;
+  let budgetExhausted = false;
+  outer: for (let depth = 0; depth < horizon; depth += 1) {
+    const expanded = [];
+    for (const prefix of frontier) {
+      for (const event of AUTO_PATROL_ENCIRCLEMENT_SHADOW_EVENTS) {
+        if (simulations >= maxSimulations) { budgetExhausted = true; break outer; }
+        simulations += 1;
+        const result = await autoPatrolSimulateEncirclementShadowSequence([...prefix, event]);
+        if (!result.acceptedTurns) continue;
+        expanded.push(result);
+        observed.push(result);
+        if (result.dead || result.kills > 0 || result.bombResolved || result.final?.detected === 0) completed.push(result);
+      }
+    }
+    expanded.sort((a, b) => a.score - b.score || a.events.join("|").localeCompare(b.events.join("|")));
+    frontier = expanded.slice(0, beamWidth).map(result => result.events);
+    if (!frontier.length) break;
+  }
+  const terminal = [];
+  if (!budgetExhausted) {
+    for (const events of frontier) {
+      if (simulations >= maxSimulations) { budgetExhausted = true; break; }
+      simulations += 1;
+      terminal.push(await autoPatrolSimulateEncirclementShadowSequence(events));
+    }
+  }
+  const bestByTactic = new Map();
+  for (const candidate of observed) {
+    const current = bestByTactic.get(candidate.tactic);
+    if (!current || candidate.score < current.score) bestByTactic.set(candidate.tactic, candidate);
+  }
+  const candidates = [...completed, ...terminal];
+  const unique = new Map();
+  for (const candidate of candidates) {
+    const key = candidate.events.join("|");
+    if (!unique.has(key) || candidate.score < unique.get(key).score) unique.set(key, candidate);
+  }
+  const ranked = [...unique.values()].sort((a, b) => a.score - b.score || a.events.join("|").localeCompare(b.events.join("|")));
+  const requiredTactics = [...bestByTactic.values()].map(candidate => ({ ...candidate, diagnosticOnly: !candidate.dead && candidate.kills === 0 && !candidate.bombResolved && candidate.final?.detected !== 0 && candidate.acceptedTurns < horizon }));
+  const alternativeMap = new Map(ranked.slice(0, 8).map(candidate => [candidate.events.join("|"), candidate]));
+  for (const candidate of requiredTactics) alternativeMap.set(candidate.events.join("|"), candidate);
+  const alternatives = [...alternativeMap.values()].sort((a, b) => a.score - b.score || a.events.join("|").localeCompare(b.events.join("|")));
+  const result = { state: budgetExhausted ? "ENCIRCLEMENT_BREAK_EVALUATION_BUDGET_EXHAUSTED" : "ENCIRCLEMENT_BREAK_CANDIDATES_BUILT", rootSignature, horizon, beamWidth, maxSimulations, simulations, budgetExhausted, candidateCount: ranked.length, selected: ranked[0] || null, alternatives };
+  autoPatrolRuntime.encirclementShadowEvaluations = (autoPatrolRuntime.encirclementShadowEvaluations || 0) + 1;
+  autoPatrolRuntime.encirclementBreakLastEvaluationSimulations = simulations;
+  autoPatrolRuntime.encirclementShadowLastResult = structuredClone(result);
+  return result;
+}
+
+
+const AUTO_PATROL_TARGET_FINISH_SHADOW_EVENTS = Object.freeze(["MOVE_UP", "MOVE_RIGHT", "MOVE_DOWN", "MOVE_LEFT", "PASS", "PLACE_BOMB"]);
+function autoPatrolTargetFinishTactic(events) {
+  return events.includes("PLACE_BOMB") ? "SAFE_BOMB_INTERCEPT" : "COMMIT_SAFE_MELEE_CONTACT_ROUTE";
+}
+async function autoPatrolSimulateTargetFinishSequence(targetId, events) {
+  const contextSnapshot = structuredClone(context);
+  const stateSnapshot = engine.currentState;
+  const runtimeSnapshot = autoPatrolCloneSimulationRuntime();
+  const transaction = beginGameRandomTransaction();
+  const startHp = context.player.hp;
+  const startTarget = autoPatrolEnemyById(context, targetId);
+  const startTargetHp = startTarget ? Math.max(0, startTarget.hp) : 0;
+  let cumulativeDamage = 0;
+  let maxImmediateDamage = 0;
+  let maxAdjacent = autoPatrolAdjacentHostiles(context).length;
+  let minExits = autoPatrolWalkableExitCount(context);
+  let acceptedTurns = 0;
+  let previousHp = context.player.hp;
+  let dead = false;
+  let bombPlaced = false;
+  let bombResolved = false;
+  const trajectory = [];
+  engine.beginProjectionSuppression();
+  try {
+    const fork = beginGameRandomTransactionFork(transaction);
+    try {
+      for (const event of events) {
+        if (!await engine.transition(event)) break;
+        acceptedTurns += 1;
+        bombPlaced = bombPlaced || event === "PLACE_BOMB";
+        bombResolved = bombResolved || (bombPlaced && context.bombs.length === 0);
+        dead = autoPatrolPlayerIsCurrentlyDead(context) || engine.currentState === "FE_DEATH_SUMMARY";
+        const immediateDamage = Math.max(0, previousHp - context.player.hp);
+        cumulativeDamage += immediateDamage;
+        maxImmediateDamage = Math.max(maxImmediateDamage, immediateDamage);
+        previousHp = context.player.hp;
+        const target = autoPatrolEnemyById(context, targetId);
+        const targetHp = target ? Math.max(0, target.hp) : 0;
+        const targetDistance = target ? autoPatrolDistance(context.player, target) : 0;
+        const adjacent = autoPatrolAdjacentHostiles(context).length;
+        const exits = autoPatrolWalkableExitCount(context);
+        maxAdjacent = Math.max(maxAdjacent, adjacent);
+        minExits = Math.min(minExits, exits);
+        trajectory.push({ turn: acceptedTurns, event, hp: context.player.hp, immediateDamage, cumulativeDamage, targetHp, targetDistance, targetAlive: !!target, adjacent, exits, bombs: context.bombs.length });
+        if (dead || !target) break;
+      }
+    } finally { endGameRandomSimulationFork(fork); }
+    const target = autoPatrolEnemyById(context, targetId);
+    const targetHp = target ? Math.max(0, target.hp) : 0;
+    const targetKilled = !target;
+    const targetHpReduction = Math.max(0, startTargetHp - targetHp);
+    const targetDistance = target ? autoPatrolDistance(context.player, target) : 0;
+    const exits = autoPatrolWalkableExitCount(context);
+    const adjacent = autoPatrolAdjacentHostiles(context).length;
+    const safe = !dead && minExits > 0 && maxAdjacent <= 1;
+    const score = (dead ? 1000000000 : 0)
+      - (targetKilled ? 500000000 : 0)
+      - targetHpReduction * 1000000
+      + targetDistance * 25000
+      + cumulativeDamage * 10000
+      + maxAdjacent * 100000
+      + Math.max(0, 1 - minExits) * 1000000
+      + (bombPlaced ? 25000 : 0)
+      - exits * 1000;
+    return { events: events.slice(0, acceptedTurns), tactic: autoPatrolTargetFinishTactic(events), dead, safe, acceptedTurns, cumulativeDamage, maxImmediateDamage, maxAdjacent, minExits, targetId, startTargetHp, targetHp, targetHpReduction, targetKilled, targetDistance, bombPlaced, bombResolved, final: { hp: context.player.hp, adjacent, exits }, trajectory, score };
+  } catch (error) {
+    return { events: events.slice(), tactic: autoPatrolTargetFinishTactic(events), dead: true, safe: false, acceptedTurns, cumulativeDamage: Math.max(cumulativeDamage, startHp), maxImmediateDamage: Math.max(maxImmediateDamage, startHp), maxAdjacent: 99, minExits: 0, targetId, startTargetHp, targetHp: startTargetHp, targetHpReduction: 0, targetKilled: false, targetDistance: 99, bombPlaced, bombResolved: false, final: null, trajectory, score: 1000000000, error: String(error?.message || error) };
+  } finally {
+    if (gameRandomRuntime.transactionStack[gameRandomRuntime.transactionStack.length - 1] === transaction) rollbackGameRandomTransaction(transaction);
+    autoPatrolRestoreContext(context, contextSnapshot);
+    engine.currentState = stateSnapshot;
+    autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
+    engine.endProjectionSuppression();
+  }
+}
+
+async function autoPatrolSimulateCommittedMeleeContactRoute(targetId, horizon = 24) {
+  const contextSnapshot = structuredClone(context);
+  const stateSnapshot = engine.currentState;
+  const runtimeSnapshot = autoPatrolCloneSimulationRuntime();
+  const transaction = beginGameRandomTransaction();
+  const startTarget = autoPatrolEnemyById(context, targetId);
+  const startTargetHp = startTarget ? Math.max(0, startTarget.hp) : 0;
+  let previousHp = context.player.hp;
+  let cumulativeDamage = 0;
+  let maxImmediateDamage = 0;
+  let maxAdjacent = autoPatrolAdjacentHostiles(context).length;
+  let minExits = autoPatrolWalkableExitCount(context);
+  let dead = false;
+  const trajectory = [];
+  engine.beginProjectionSuppression();
+  try {
+    const fork = beginGameRandomTransactionFork(transaction);
+    try {
+      for (let turn = 0; turn < horizon; turn += 1) {
+        const target = autoPatrolEnemyById(context, targetId);
+        if (!target) break;
+        const decision = autoPatrolMoveDecision(context, [{ x: target.x, y: target.y }], "shadow-committed-melee-contact", true);
+        if (!decision?.event || !await engine.transition(decision.event)) break;
+        const immediateDamage = Math.max(0, previousHp - context.player.hp);
+        cumulativeDamage += immediateDamage;
+        maxImmediateDamage = Math.max(maxImmediateDamage, immediateDamage);
+        previousHp = context.player.hp;
+        dead = autoPatrolPlayerIsCurrentlyDead(context) || engine.currentState === "FE_DEATH_SUMMARY";
+        const currentTarget = autoPatrolEnemyById(context, targetId);
+        const adjacent = autoPatrolAdjacentHostiles(context).length;
+        const exits = autoPatrolWalkableExitCount(context);
+        maxAdjacent = Math.max(maxAdjacent, adjacent);
+        minExits = Math.min(minExits, exits);
+        trajectory.push({ turn: turn + 1, event: decision.event, hp: context.player.hp, immediateDamage, cumulativeDamage, targetHp: currentTarget ? Math.max(0, currentTarget.hp) : 0, targetDistance: currentTarget ? autoPatrolDistance(context.player, currentTarget) : 0, targetAlive: !!currentTarget, adjacent, exits });
+        if (dead || !currentTarget) break;
+      }
+    } finally { endGameRandomSimulationFork(fork); }
+    const target = autoPatrolEnemyById(context, targetId);
+    return { tactic: "COMMIT_SAFE_MELEE_CONTACT_ROUTE", targetId, startTargetHp, targetHp: target ? Math.max(0, target.hp) : 0, targetHpReduction: Math.max(0, startTargetHp - (target ? Math.max(0, target.hp) : 0)), targetKilled: !target, dead, safe: !dead && minExits > 0 && maxAdjacent <= 1, acceptedTurns: trajectory.length, cumulativeDamage, maxImmediateDamage, maxAdjacent, minExits, final: { hp: context.player.hp, adjacent: autoPatrolAdjacentHostiles(context).length, exits: autoPatrolWalkableExitCount(context) }, trajectory, bombPlaced: false, bombResolved: false };
+  } finally {
+    if (gameRandomRuntime.transactionStack[gameRandomRuntime.transactionStack.length - 1] === transaction) rollbackGameRandomTransaction(transaction);
+    autoPatrolRestoreContext(context, contextSnapshot);
+    engine.currentState = stateSnapshot;
+    autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
+    engine.endProjectionSuppression();
+  }
+}
+async function autoPatrolEvaluateTargetFinishShadow(ctx, targetId, options = {}) {
+  const target = autoPatrolEnemyById(ctx, targetId);
+  if (!target) return { state: "TARGET_FINISH_REJECTED", reason: "target-missing", targetId, selected: null, alternatives: [] };
+  const horizon = Math.max(1, Math.min(12, Number(options.horizon) || 10));
+  const beamWidth = Math.max(4, Math.min(48, Number(options.beamWidth) || 32));
+  const committedMelee = await autoPatrolSimulateCommittedMeleeContactRoute(targetId, horizon);
+  let frontier = [[]];
+  const observed = [];
+  for (let depth = 0; depth < horizon; depth += 1) {
+    const expanded = [];
+    for (const prefix of frontier) {
+      for (const event of AUTO_PATROL_TARGET_FINISH_SHADOW_EVENTS) {
+        const result = await autoPatrolSimulateTargetFinishSequence(targetId, [...prefix, event]);
+        if (!result.acceptedTurns) continue;
+        observed.push(result);
+        expanded.push(result);
+      }
+    }
+    expanded.sort((a, b) => a.score - b.score || a.events.join("|").localeCompare(b.events.join("|")));
+    const unique = new Map();
+    for (const candidate of expanded) {
+      const terminal = candidate.trajectory.at(-1);
+      const key = [terminal?.targetAlive, terminal?.targetHp, terminal?.targetDistance, terminal?.hp, terminal?.adjacent, terminal?.exits, terminal?.bombs, candidate.events.at(-1)].join("|");
+      if (!unique.has(key)) unique.set(key, candidate);
+    }
+    frontier = [...unique.values()].slice(0, beamWidth).filter(candidate => !candidate.dead && !candidate.targetKilled).map(candidate => candidate.events);
+    if (observed.some(candidate => candidate.targetKilled && candidate.safe) && depth >= 3) break;
+    if (!frontier.length) break;
+  }
+  const completed = observed.filter(candidate => candidate.targetKilled && candidate.safe);
+  const bestProgress = observed.slice().sort((a, b) => b.targetHpReduction - a.targetHpReduction || a.targetDistance - b.targetDistance || a.cumulativeDamage - b.cumulativeDamage || a.score - b.score)[0] || null;
+  const fixedMelee = completed.filter(candidate => !candidate.bombPlaced).sort((a, b) => a.cumulativeDamage - b.cumulativeDamage || a.acceptedTurns - b.acceptedTurns || a.score - b.score)[0] || null;
+  const melee = [committedMelee.targetKilled && committedMelee.safe ? committedMelee : null, fixedMelee].filter(Boolean).sort((a, b) => a.cumulativeDamage - b.cumulativeDamage || a.acceptedTurns - b.acceptedTurns)[0] || null;
+  const bomb = completed.filter(candidate => candidate.bombPlaced && candidate.bombResolved).sort((a, b) => a.cumulativeDamage - b.cumulativeDamage || a.acceptedTurns - b.acceptedTurns || a.score - b.score)[0] || null;
+  const selected = [melee, bomb].filter(Boolean).sort((a, b) => a.cumulativeDamage - b.cumulativeDamage || Number(a.bombPlaced) - Number(b.bombPlaced) || a.acceptedTurns - b.acceptedTurns)[0] || null;
+  const alternatives = [melee, bomb].filter(Boolean);
+  const result = { state: selected ? "TARGET_FINISH_CANDIDATES_BUILT" : "TARGET_FINISH_REJECTED", targetId, horizon, beamWidth, candidateCount: observed.length, selected, alternatives, bestProgress, rejectionReason: selected ? null : "no-safe-complete-route" };
+  autoPatrolRuntime.targetFinishShadowEvaluations = (autoPatrolRuntime.targetFinishShadowEvaluations || 0) + 1;
+  autoPatrolRuntime.targetFinishShadowLastResult = structuredClone(result);
+  return result;
+}
+
 function autoPatrolLastStandDecision(ctx) {
   if (!autoPatrolEmergencyOscillationIsIrrecoverable(ctx)) return null;
   const target = autoPatrolAdjacentHostiles(ctx).slice().sort((left, right) => {
@@ -9784,6 +10899,20 @@ async function autoPatrolBreakTwoCellOscillation(ctx, decision) {
       autoPatrolRuntime.objectiveAlternativeCommits += 1;
       return lastStand;
     }
+    const targetId = decision.targetId || first.targetId || second.targetId || null;
+    const target = targetId != null ? autoPatrolEnemyById(ctx, targetId) : null;
+    if (target) {
+      const finish = await autoPatrolEvaluateTargetFinishShadow(ctx, target.id, { horizon: 12, beamWidth: 48 });
+      if (finish.selected?.tactic === "COMMIT_SAFE_MELEE_CONTACT_ROUTE" && finish.selected.targetKilled && finish.selected.safe && !finish.selected.bombPlaced) {
+        autoPatrolStartMeleePlan(target, "oscillation-safe-melee-contact-route", "COMMIT_SAFE_MELEE_CONTACT_ROUTE");
+        const committed = autoPatrolContinueMeleePlan(ctx);
+        if (committed) {
+          autoPatrolRuntime.oscillationBreaks += 1;
+          autoPatrolRuntime.objectiveAlternativeCommits += 1;
+          return { ...committed, reason: "oscillation-safe-melee-contact-route", targetId: target.id };
+        }
+      }
+    }
     const stairsFallback = autoPatrolOscillationStairsFallback(ctx);
     if (stairsFallback) {
       autoPatrolRuntime.oscillationBreaks += 1;
@@ -9795,10 +10924,61 @@ async function autoPatrolBreakTwoCellOscillation(ctx, decision) {
   return decision;
 }
 
+function autoPatrolSingleActiveBombSafetyDecision(ctx, decision) {
+  if (decision?.kind !== "DISPATCH" || decision.event !== "PLACE_BOMB" || playerBombs(ctx).length === 0) return decision;
+  const activeBombs = playerBombs(ctx);
+  const activeThreatKeys = bombThreatCellKeys(ctx, activeBombs);
+  const isThreatened = cell => activeThreatKeys.has(coordinateKey(cell.x, cell.y));
+  if (!isThreatened(ctx.player)) return { kind: "DISPATCH", event: "PASS", reason: "single-active-bomb-policy-wait" };
+  const candidates = autoPatrolNeighbors(ctx.player.x, ctx.player.y)
+    .filter(([x, y]) => autoPatrolWalkable(ctx, x, y))
+    .filter(([x, y]) => !ctx.enemies.some(enemy => enemy.x === x && enemy.y === y))
+    .map(([x, y]) => ({ x, y, event: autoPatrolDirectionEvent(x - ctx.player.x, y - ctx.player.y) }))
+    .sort((a, b) => {
+      const aThreats = activeBombs.filter(bomb => bombThreatensCell(ctx, bomb, a)).length;
+      const bThreats = activeBombs.filter(bomb => bombThreatensCell(ctx, bomb, b)).length;
+      if (aThreats !== bThreats) return aThreats - bThreats;
+      const aDistance = activeBombs.reduce((sum, bomb) => sum + autoPatrolDistance(a, bomb), 0);
+      const bDistance = activeBombs.reduce((sum, bomb) => sum + autoPatrolDistance(b, bomb), 0);
+      return bDistance - aDistance || a.event.localeCompare(b.event);
+    });
+  if (candidates.length) return { kind: "DISPATCH", event: candidates[0].event, reason: "single-active-bomb-policy-escape" };
+  return { kind: "DISPATCH", event: "PASS", reason: "single-active-bomb-policy-trapped" };
+}
+
+
+function autoPatrolResetTransientPlansAfterDeathReturn() {
+  resetAutoPatrolProductionShadow("death-return");
+  autoPatrolRuntime.bombPlan = null;
+  autoPatrolRuntime.pendingBombPlan = null;
+  autoPatrolRuntime.bombSetupPlan = null;
+  autoPatrolRuntime.bombLurePlan = null;
+  autoPatrolRuntime.meleePlan = null;
+  autoPatrolRuntime.lurePlan = null;
+  autoPatrolRuntime.contactRoutePlan = null;
+  autoPatrolRuntime.initialRoutePlan = null;
+  autoPatrolRuntime.foodHuntPlan = null;
+  autoPatrolRuntime.engagementPlan = null;
+  autoPatrolRuntime.horizontalFlowPlan = null;
+  autoPatrolRuntime.encirclementBreakPlan = null;
+  autoPatrolRuntime.lurePlanState = "LURE_PLAN_NONE";
+  autoPatrolRuntime.contactRouteState = "CONTACT_ROUTE_EVALUATE";
+  autoPatrolRuntime.initialRouteState = "INITIAL_ROUTE_EVALUATE";
+  autoPatrolRuntime.foodHuntState = "FOOD_HUNT_EVALUATE";
+  autoPatrolRuntime.encirclementBreakState = "ENCIRCLEMENT_BREAK_EVALUATE";
+  autoPatrolRuntime.objectiveState = "OBJECTIVE_NONE";
+  autoPatrolRuntime.activeObjective = null;
+  autoPatrolRuntime.activeCombatTactic = null;
+  autoPatrolRuntime.combatTacticState = "TACTIC_NONE";
+  autoPatrolRuntime.repeatedSignature = "";
+  autoPatrolRuntime.repeatCount = 0;
+  autoPatrolRuntime.stopReason = "";
+}
+
 function autoPatrolSignature(ctx, decision) { return [ctx.currentMapType, ctx.depth, ctx.player.x, ctx.player.y, ctx.player.hp, ctx.player.hunger, ctx.enemies.length, ctx.items.length, decision?.event, decision?.reason].join('|'); }
 function clearAutoPatrolTimer() { if (autoPatrolRuntime.timerId !== null) clearTimeout(autoPatrolRuntime.timerId); autoPatrolRuntime.timerId = null; }
 function stopAutoPatrol(reason = "user-toggle", failed = false) {
-  clearAutoPatrolTimer(); autoPatrolRuntime.generation += 1; autoPatrolRuntime.stopReason = reason;
+  clearAutoPatrolTimer(); resetAutoPatrolProductionShadow(`stop:${reason}`); autoPatrolRuntime.generation += 1; autoPatrolRuntime.stopReason = reason;
   if (failed) transitionAutoPatrol("FAIL");
   else { if (autoPatrolRuntime.state !== "AUTO_PATROL_STOPPING") transitionAutoPatrol("TOGGLE_OFF"); transitionAutoPatrol("STOPPED"); }
 }
@@ -9810,16 +10990,36 @@ async function runAutoPatrolTick(generation) {
   if (generation !== autoPatrolRuntime.generation || !autoPatrolIsActive()) return;
   if (document.hidden) { transitionAutoPatrol("PAUSE"); autoPatrolRuntime.stopReason = "tab-hidden"; return; }
   if (autoPatrolRuntime.state === "AUTO_PATROL_READY") transitionAutoPatrol("DECIDE");
-  let decision = await decideAutoPatrolRuntimeAction(context, engine.currentState);
-  decision = await autoPatrolBreakTwoCellOscillation(context, decision);
-  if (decision?.kind === "DISPATCH") {
+  let decision = null;
+  let shadowAdvancedAtTickStart = false;
+  if (autoPatrolProductionShadowRuntime.session || autoPatrolProductionShadowRuntime.committedRoute.length > 0) {
+    decision = await autoPatrolMaybeAdvanceProductionShadow(context);
+    shadowAdvancedAtTickStart = Boolean(decision);
+  }
+  if (!decision) {
+    decision = await decideAutoPatrolRuntimeAction(context, engine.currentState);
+    decision = await autoPatrolBreakTwoCellOscillation(context, decision);
+    decision = autoPatrolSingleActiveBombSafetyDecision(context, decision);
+  }
+  if (decision?.kind === "DISPATCH" && !decision.lifecycleOnly) {
     const objective = autoPatrolEnsureObjectiveForDecision(context, decision);
     if (!objective && autoPatrolObjectiveTypeFromDecision(decision) === "ESCAPE_LETHAL_TARGET") {
       decision = autoPatrolLastStandDecision(context) || { kind: "PAUSE", reason: "escape-failure-memory-blocked" };
       if (decision.kind === "DISPATCH") autoPatrolEnsureObjectiveForDecision(context, decision);
     }
+    if (!shadowAdvancedAtTickStart) {
+      const shadowDecision = await autoPatrolMaybeAdvanceProductionShadow(context);
+      if (shadowDecision) decision = shadowDecision;
+    }
+    if (decision.kind === "DISPATCH" && !decision.shadowRouteCommit) decision = await autoPatrolResolveDetectedCombatTrajectory(context, decision);
   }
   autoPatrolRuntime.decision = decision;
+  if (decision.kind === "SEARCH_PENDING") {
+    transitionAutoPatrol("SEARCH_PENDING");
+    renderAutoPatrolStatus();
+    scheduleAutoPatrolTick(0);
+    return;
+  }
   if (decision.kind === "STOP") { stopAutoPatrol(decision.reason); return; }
   if (decision.kind === "PAUSE") { transitionAutoPatrol("PAUSE"); autoPatrolRuntime.stopReason = decision.reason; return; }
   const signature = autoPatrolSignature(context, decision);
@@ -9833,6 +11033,21 @@ async function runAutoPatrolTick(generation) {
     const beforeBombIds = new Set(context.bombs.map(bomb => bomb.id));
     const accepted = await transitionWithAnalysisTrace(decision.event, "AUTO_PATROL", { reason: decision.reason || null, targetId: decision.targetId || null });
     if (!accepted) throw new Error(`dispatch-rejected:${decision.event}`);
+    if (decision.shadowRouteCommit) {
+      if (autoPatrolProductionShadowRuntime.state === "SHADOW_SEARCH_COMPLETED") transitionAutoPatrolProductionShadow("COMMIT");
+      if (autoPatrolProductionShadowRuntime.committedRouteClass === "SINGLE_BOMB_CONTACT_OWNERSHIP" && decision.event === "PLACE_BOMB") {
+        const ownedBomb = context.bombs.find(bomb => !beforeBombIds.has(bomb.id));
+        autoPatrolProductionShadowRuntime.ownedBombId = ownedBomb?.id ?? null;
+      }
+      if (autoPatrolProductionShadowRuntime.ownedBombId != null && !context.bombs.some(bomb => bomb.id === autoPatrolProductionShadowRuntime.ownedBombId)) {
+        autoPatrolProductionShadowRuntime.ownedBombId = null;
+      }
+      autoPatrolProductionShadowRuntime.committedRoute.shift();
+      if (autoPatrolProductionShadowRuntime.committedRoute.length === 0) {
+        if (autoPatrolProductionShadowRuntime.state === "SHADOW_ROUTE_ACTIVE") transitionAutoPatrolProductionShadow("FINISH");
+        resetAutoPatrolProductionShadow("completed-route-committed");
+      } else if (autoPatrolProductionShadowRuntime.state === "SHADOW_ROUTE_ACTIVE") transitionAutoPatrolProductionShadow("NEXT");
+    }
     autoPatrolRecordMovement(movementBefore, decision, accepted);
     autoPatrolRecordObjectiveProjection(movementBefore, decision, accepted);
     if (decision.reason?.startsWith("objective-conflict-") && autoPatrolRuntime.oscillationState === "OBJECTIVE_ALTERNATIVE_COMMIT") transitionAutoPatrolOscillation("DISPATCHED");
@@ -9846,6 +11061,7 @@ async function runAutoPatrolTick(generation) {
       } else autoPatrolRuntime.pendingBombPlan = null;
     }
     autoPatrolProjectBombPlanTerminal(context, bombPlanBeforeDispatch);
+    if (decision.lifecycleOnly && decision.event === "RETURN_TO_TOWN") autoPatrolResetTransientPlansAfterDeathReturn();
     autoPatrolRuntime.elapsedTurns += Math.max(0, context.turnCount - beforeTurn);
     autoPatrolRuntime.deepestDepth = Math.max(autoPatrolRuntime.deepestDepth, context.depth || 0);
     transitionAutoPatrol("DISPATCHED");
@@ -9854,21 +11070,26 @@ async function runAutoPatrolTick(generation) {
   } catch (error) { stopAutoPatrol(error?.message || String(error), true); }
 }
 function startAutoPatrol() {
+  resetAutoPatrolProductionShadow("start");
   if (autoPatrolRuntime.state === "AUTO_PATROL_FAILED") transitionAutoPatrol("RESET");
   if (autoPatrolRuntime.state !== "AUTO_PATROL_OFF") return false;
   if (engine.currentState !== "FE_PLAYER_TURN" || !["dungeon", "town"].includes(context.currentMapType) || context.player.hp <= 0) { autoPatrolRuntime.stopReason = "start-condition-rejected"; renderAutoPatrolStatus(); return false; }
   autoPatrolRuntime.generation += 1; autoPatrolRuntime.stopReason = ""; autoPatrolRuntime.decision = null; autoPatrolRuntime.repeatCount = 0; autoPatrolRuntime.repeatedSignature = "";
   autoPatrolRuntime.bombPlan = null; autoPatrolRuntime.pendingBombPlan = null; autoPatrolRuntime.bombSetupPlan = null; autoPatrolRuntime.bombLurePlan = null; autoPatrolRuntime.bombLureEvaluatedDepth = 0; autoPatrolRuntime.meleePlan = null; autoPatrolRuntime.contactRoutePlan = null; autoPatrolRuntime.contactRouteState = "CONTACT_ROUTE_EVALUATE"; autoPatrolRuntime.initialRoutePlan = null; autoPatrolRuntime.initialRouteState = "INITIAL_ROUTE_EVALUATE"; autoPatrolRuntime.foodHuntPlan = null; autoPatrolRuntime.foodHuntState = "FOOD_HUNT_EVALUATE";
   autoPatrolRuntime.plansStarted = 0; autoPatrolRuntime.plannedBombKills = 0; autoPatrolRuntime.meleePlansCompleted = 0; autoPatrolRuntime.contactRoutePlansStarted = 0; autoPatrolRuntime.contactRoutePlansCompleted = 0; autoPatrolRuntime.initialRoutePlansStarted = 0; autoPatrolRuntime.initialRoutePlansCompleted = 0; autoPatrolRuntime.foodHuntPlansStarted = 0; autoPatrolRuntime.foodHuntTargetsDefeated = 0; autoPatrolRuntime.levelCommitAttacks = 0; autoPatrolRuntime.emergencyPositions = 0; autoPatrolRuntime.multiStrongWallLastEvaluationTurn = -999; autoPatrolRuntime.multiStrongWallLastEvaluationDepth = 0; autoPatrolRuntime.multiStrongWallLastEvaluationSignature = ""; autoPatrolRuntime.multiStrongWallEvaluations = 0; autoPatrolRuntime.multiStrongWallPlansStarted = 0; autoPatrolRuntime.bombEscapePreflightEvaluations = 0; autoPatrolRuntime.bombEscapePreflightRejected = 0; autoPatrolRuntime.bombEscapeSuppressUntilTurn = -1; autoPatrolRuntime.bombEscapeSuppressTargetId = null; autoPatrolRuntime.floorBombPlacementRejectedDepth = 0; autoPatrolRuntime.bombEscapeAlternativePlan = null; autoPatrolRuntime.bombEscapeAlternativePlansStarted = 0; autoPatrolRuntime.bombEscapeAlternativePlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlan = null; autoPatrolRuntime.horizontalFlowDirection = null; autoPatrolRuntime.horizontalFlowDisabled = false; autoPatrolRuntime.horizontalFlowBeamWidth = 0; autoPatrolRuntime.horizontalFlowEvaluations = 0; autoPatrolRuntime.horizontalFlowBudgetDepth = 0; autoPatrolRuntime.horizontalFlowBudgetUsed = 0; autoPatrolRuntime.horizontalFlowPlansStarted = 0; autoPatrolRuntime.horizontalFlowPlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlansInvalidated = 0; autoPatrolRuntime.horizontalFlowLastResult = null; autoPatrolRuntime.horizontalFlowLastSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionTurn = -999; autoPatrolRuntime.horizontalFlowLastRejectionHpRatio = 0; autoPatrolRuntime.movementHistory = []; autoPatrolRuntime.oscillationState = "OBJECTIVE_CONFLICT_EVALUATE"; autoPatrolRuntime.oscillationBreaks = 0; autoPatrolRuntime.oscillationFallbacks = 0; autoPatrolRuntime.objectiveSuppressions = {}; autoPatrolRuntime.objectiveConflictDetections = 0; autoPatrolRuntime.objectiveDemotions = 0; autoPatrolRuntime.objectiveAlternativeCommits = 0; autoPatrolRuntime.objectiveState = "OBJECTIVE_NONE"; autoPatrolRuntime.activeObjective = null; autoPatrolRuntime.objectiveSequence = 0; autoPatrolRuntime.objectiveHistory = []; autoPatrolRuntime.objectiveCreatedCount = 0; autoPatrolRuntime.objectiveCompletedCount = 0; autoPatrolRuntime.objectiveFailedCount = 0; autoPatrolRuntime.objectiveDeathCount = 0; autoPatrolRuntime.lastBombPlanTerminal = null; autoPatrolRuntime.escapeFailureMemory = []; autoPatrolRuntime.huntStallSignature = ""; autoPatrolRuntime.huntStallStartTurn = -1; autoPatrolRuntime.floorHuntAbandonedDepth = 0; autoPatrolRuntime.floorHuntAbandonReason = ""; autoPatrolRuntime.engagementPlan = null; autoPatrolRuntime.engagementPlansStarted = 0; autoPatrolRuntime.engagementPlansEnded = 0; autoPatrolRuntime.engagementLastEndReason = ""; autoPatrolRuntime.huntStallLastHp = null;
+  autoPatrolRuntime.encirclementBreakPlan = null; autoPatrolRuntime.encirclementBreakState = "ENCIRCLEMENT_BREAK_EVALUATE"; autoPatrolRuntime.encirclementBreakBudgetDepth = 0; autoPatrolRuntime.encirclementBreakBudgetUsed = 0; autoPatrolRuntime.encirclementBreakLastTriggerSignature = ""; autoPatrolRuntime.encirclementBreakPlansStarted = 0; autoPatrolRuntime.encirclementBreakPlansCompleted = 0; autoPatrolRuntime.encirclementBreakPlansInvalidated = 0; autoPatrolRuntime.encirclementBreakEvaluationBudgetExhausted = 0; autoPatrolRuntime.encirclementBreakLastEvaluationSimulations = 0; autoPatrolRuntime.encirclementBreakLastEvaluationReason = "";
   transitionAutoPatrol("TOGGLE_ON"); scheduleAutoPatrolTick(0); return true;
 }
 function toggleAutoPatrol() { return autoPatrolIsActive() ? (stopAutoPatrol("user-toggle"), false) : startAutoPatrol(); }
 function renderAutoPatrolStatus() {
   const element = document.getElementById("auto-patrol-status"); if (!element) return;
   const active = autoPatrolIsActive(); const decision = autoPatrolRuntime.decision?.reason || "-";
+  const shadow = autoPatrolProductionShadowRuntime.state === "SHADOW_SEARCH_RUNNING"
+    ? ` | shadow ${autoPatrolProductionShadowRuntime.targetId ?? "-"} ${autoPatrolProductionShadowRuntime.budgetUsed}/${AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.maxBudget}`
+    : "";
   element.className = autoPatrolRuntime.state === "AUTO_PATROL_FAILED" ? "failed" : (autoPatrolRuntime.state === "AUTO_PATROL_PAUSED" ? "paused" : (active ? "active" : ""));
   element.textContent = active || autoPatrolRuntime.state === "AUTO_PATROL_FAILED"
-    ? `AUTO PATROL: ${autoPatrolRuntime.state.replace("AUTO_PATROL_", "")} | ${autoPatrolRuntime.speed} | ${decision} | turns ${autoPatrolRuntime.elapsedTurns} | deepest B${autoPatrolRuntime.deepestDepth}${autoPatrolRuntime.stopReason ? ` | ${autoPatrolRuntime.stopReason}` : ""}`
+    ? `AUTO PATROL: ${autoPatrolRuntime.state.replace("AUTO_PATROL_", "")} | ${autoPatrolRuntime.speed} | ${decision} | turns ${autoPatrolRuntime.elapsedTurns} | deepest B${autoPatrolRuntime.deepestDepth}${shadow}${autoPatrolRuntime.stopReason ? ` | ${autoPatrolRuntime.stopReason}` : ""}`
     : `AUTO PATROL: OFF [P]${autoPatrolRuntime.stopReason ? ` | ${autoPatrolRuntime.stopReason}` : ""}`;
 }
 
@@ -10004,12 +11225,15 @@ resetAnalysisTrace("runtime-initialized", context);
 const DEBUG_SNAPSHOT_FORMAT = "sfa-rogue-debug-snapshot";
 const DEBUG_SNAPSHOT_SCHEMA_VERSION = 2;
 const DEBUG_SNAPSHOT_MAX_CHARS = 16 * 1024 * 1024;
-const DEBUG_SNAPSHOT_KEYS = Object.freeze({ export: "F8", import: "F9", resume: "F10" });
+const DEBUG_SNAPSHOT_KEYS = Object.freeze({ export: "F8", importFloorStart: "F9", importCapturedPoint: "F10" });
 const debugSnapshotRuntime = {
   importInput: null,
+  importMode: "floor-start",
   loaded: false,
   capturedAutoPatrolState: "AUTO_PATROL_OFF",
   floorStartSnapshot: null,
+  currentMapStartSnapshot: null,
+  lastDungeonFloorStartSnapshot: null,
   retryIndex: 0,
   sourceCapturedAt: null
 };
@@ -10034,6 +11258,7 @@ function createDebugRestorePoint(ctx = context, engineState = engine.currentStat
   return {
     engineState,
     floorKey: analysisTraceFloorKey(ctx),
+    timeline: createTimelineSnapshot(ctx),
     context: structuredClone(ctx),
     random: cloneDebugRandomRuntime(),
     autoPatrol: cloneDebugAutoPatrolRuntime()
@@ -10041,13 +11266,28 @@ function createDebugRestorePoint(ctx = context, engineState = engine.currentStat
 }
 function captureDebugFloorStartSnapshot(ctx = context) {
   if (gameRandomRuntime.simulationStack.length || gameRandomRuntime.transactionStack.length) throw new Error("Cannot capture floor start during a random simulation or transaction.");
-  debugSnapshotRuntime.floorStartSnapshot = createDebugRestorePoint(ctx, "FE_PLAYER_TURN");
+  const restorePoint = createDebugRestorePoint(ctx, "FE_PLAYER_TURN");
+  debugSnapshotRuntime.currentMapStartSnapshot = structuredClone(restorePoint);
+  if (ctx.currentMapType === "dungeon") {
+    debugSnapshotRuntime.lastDungeonFloorStartSnapshot = structuredClone(restorePoint);
+    debugSnapshotRuntime.floorStartSnapshot = structuredClone(restorePoint);
+  } else {
+    debugSnapshotRuntime.floorStartSnapshot = debugSnapshotRuntime.lastDungeonFloorStartSnapshot
+      ? structuredClone(debugSnapshotRuntime.lastDungeonFloorStartSnapshot)
+      : structuredClone(restorePoint);
+  }
   debugSnapshotRuntime.retryIndex = 0;
   debugSnapshotRuntime.sourceCapturedAt = null;
   return debugSnapshotRuntime.floorStartSnapshot;
 }
 function cloneDebugFloorStartSnapshotForExport() {
   return debugSnapshotRuntime.floorStartSnapshot ? structuredClone(debugSnapshotRuntime.floorStartSnapshot) : null;
+}
+function cloneDebugCurrentMapStartSnapshotForExport() {
+  return debugSnapshotRuntime.currentMapStartSnapshot ? structuredClone(debugSnapshotRuntime.currentMapStartSnapshot) : null;
+}
+function cloneDebugLastDungeonFloorStartSnapshotForExport() {
+  return debugSnapshotRuntime.lastDungeonFloorStartSnapshot ? structuredClone(debugSnapshotRuntime.lastDungeonFloorStartSnapshot) : null;
 }
 function restoreDebugRandomRuntime(snapshot) {
   deterministicRandomRuntime.seed = normalizeRandomSeed(snapshot.seed);
@@ -10061,6 +11301,9 @@ function restoreDebugRandomRuntime(snapshot) {
 function validateDebugRestorePoint(point, path, errors) {
   if (!point || typeof point !== "object") { errors.push(path); return; }
   if (!point.context || typeof point.context !== "object") errors.push(`${path}.context`);
+  const timeline = point.timeline || (point.context ? createTimelineSnapshot(point.context) : null);
+  validateTimelineSnapshot(timeline, `${path}.timeline`, errors);
+  if (point.timeline && point.context && (point.timeline.turnCount !== point.context.turnCount || point.timeline.timePhase !== point.context.timePhase || point.timeline.timePhaseElapsedTurns !== point.context.timePhaseElapsedTurns)) errors.push(`${path}.timeline.contextMismatch`);
   if (typeof point.engineState !== "string" || !SFA_DEFINITIONS[point.engineState]) errors.push(`${path}.engineState`);
   if (typeof point.floorKey !== "string" || !point.floorKey) errors.push(`${path}.floorKey`);
   if (!point.random || !Number.isSafeInteger(point.random.seed) || !Number.isSafeInteger(point.random.state) || !Number.isSafeInteger(point.random.calls) || point.random.calls < 0) errors.push(`${path}.random`);
@@ -10076,8 +11319,8 @@ function restoreDebugAutoPatrolRuntime(snapshot) {
   autoPatrolRuntime.timerId = null;
   autoPatrolRuntime.generation = Number.isSafeInteger(snapshot.generation) ? snapshot.generation + 1 : autoPatrolRuntime.generation + 1;
   debugSnapshotRuntime.capturedAutoPatrolState = snapshot.state || "AUTO_PATROL_OFF";
-  autoPatrolRuntime.state = snapshot.state === "AUTO_PATROL_OFF" || snapshot.state === "AUTO_PATROL_FAILED" ? snapshot.state : "AUTO_PATROL_PAUSED";
-  autoPatrolRuntime.stopReason = "debug-snapshot-loaded";
+  autoPatrolRuntime.state = "AUTO_PATROL_OFF";
+  autoPatrolRuntime.stopReason = "debug-snapshot-loaded-manual";
 }
 function debugSnapshotHash(text) {
   let hash = 2166136261;
@@ -10092,6 +11335,8 @@ function buildDebugSnapshot() {
     random: cloneDebugRandomRuntime(),
     autoPatrol: cloneDebugAutoPatrolRuntime(),
     floorStartSnapshot: cloneDebugFloorStartSnapshotForExport(),
+    currentMapStartSnapshot: cloneDebugCurrentMapStartSnapshotForExport(),
+    lastDungeonFloorStartSnapshot: cloneDebugLastDungeonFloorStartSnapshotForExport(),
     analysisTrace: cloneAnalysisTraceForExport()
   };
   const payloadText = JSON.stringify(payload);
@@ -10120,6 +11365,11 @@ function validateDebugSnapshot(snapshot) {
   if (!payload?.autoPatrol || typeof payload.autoPatrol !== "object" || Object.prototype.hasOwnProperty.call(payload.autoPatrol, "timerId")) errors.push("payload.autoPatrol");
   if (!payload?.floorStartSnapshot) errors.push("payload.floorStartSnapshot");
   else validateDebugRestorePoint(payload.floorStartSnapshot, "payload.floorStartSnapshot", errors);
+  if (payload?.currentMapStartSnapshot !== undefined && payload.currentMapStartSnapshot !== null) validateDebugRestorePoint(payload.currentMapStartSnapshot, "payload.currentMapStartSnapshot", errors);
+  if (payload?.lastDungeonFloorStartSnapshot !== undefined && payload.lastDungeonFloorStartSnapshot !== null) {
+    validateDebugRestorePoint(payload.lastDungeonFloorStartSnapshot, "payload.lastDungeonFloorStartSnapshot", errors);
+    if (payload.lastDungeonFloorStartSnapshot?.context?.currentMapType !== "dungeon") errors.push("payload.lastDungeonFloorStartSnapshot.context.currentMapType");
+  }
   if (payload?.analysisTrace !== undefined) {
     if (!payload.analysisTrace || payload.analysisTrace.format !== ANALYSIS_TRACE_FORMAT || !Array.isArray(payload.analysisTrace.turnRecords) || payload.analysisTrace.turnRecords.length > ANALYSIS_TRACE_MAX_TURNS || !Array.isArray(payload.analysisTrace.keyframes) || payload.analysisTrace.keyframes.length > ANALYSIS_TRACE_MAX_KEYFRAMES) errors.push("payload.analysisTrace");
   }
@@ -10138,25 +11388,45 @@ function downloadDebugSnapshot() {
   link.href = URL.createObjectURL(blob);
   link.download = `sfa_rogue_debug_${depth}_turn_${context.turnCount}_${snapshot.capturedAt.replace(/[:.]/g, "-")}.json`;
   document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(link.href);
-  addLog(context, `Debug snapshot downloaded (${DEBUG_SNAPSHOT_KEYS.import} to load).`); render(engine.currentState, context);
+  addLog(context, `Debug snapshot downloaded (${DEBUG_SNAPSHOT_KEYS.importFloorStart} floor start / ${DEBUG_SNAPSHOT_KEYS.importCapturedPoint} captured point).`); render(engine.currentState, context);
 }
-function applyDebugSnapshot(snapshot) {
+function createCapturedPointRestorePoint(payload) {
+  return {
+    engineState: payload.engineState,
+    floorKey: analysisTraceFloorKey(payload.context),
+    timeline: createTimelineSnapshot(payload.context),
+    context: structuredClone(payload.context),
+    random: structuredClone(payload.random),
+    autoPatrol: structuredClone(payload.autoPatrol)
+  };
+}
+function applyDebugSnapshot(snapshot, restoreMode = "floor-start") {
   const validation = validateDebugSnapshot(snapshot);
   if (!validation.ok) throw new Error(`Invalid debug snapshot: ${validation.errors.join(", ")}`);
-  const restorePoint = snapshot.payload.floorStartSnapshot;
+  resetAutoPatrolProductionShadow(`debug-restore:${restoreMode}`);
+  const restorePoint = restoreMode === "captured-point"
+    ? createCapturedPointRestorePoint(snapshot.payload)
+    : snapshot.payload.floorStartSnapshot;
   const stagedContext = structuredClone(restorePoint.context);
   const stagedRandom = structuredClone(restorePoint.random);
   const stagedAutoPatrol = structuredClone(restorePoint.autoPatrol);
   stopAutoPatrol("debug-snapshot-load");
   autoPatrolRestoreContext(context, stagedContext);
+  applyTimelineSnapshot(context, restorePoint.timeline || createTimelineSnapshot(stagedContext));
   engine.currentState = restorePoint.engineState;
   restoreDebugRandomRuntime(stagedRandom);
   restoreDebugAutoPatrolRuntime(stagedAutoPatrol);
-  debugSnapshotRuntime.floorStartSnapshot = structuredClone(restorePoint);
+  debugSnapshotRuntime.floorStartSnapshot = structuredClone(snapshot.payload.floorStartSnapshot);
+  debugSnapshotRuntime.currentMapStartSnapshot = snapshot.payload.currentMapStartSnapshot
+    ? structuredClone(snapshot.payload.currentMapStartSnapshot)
+    : structuredClone(snapshot.payload.floorStartSnapshot);
+  debugSnapshotRuntime.lastDungeonFloorStartSnapshot = snapshot.payload.lastDungeonFloorStartSnapshot
+    ? structuredClone(snapshot.payload.lastDungeonFloorStartSnapshot)
+    : (snapshot.payload.floorStartSnapshot.context.currentMapType === "dungeon" ? structuredClone(snapshot.payload.floorStartSnapshot) : null);
   debugSnapshotRuntime.retryIndex = Number(debugSnapshotRuntime.retryIndex || 0) + 1;
   debugSnapshotRuntime.sourceCapturedAt = snapshot.capturedAt || null;
-  resetAnalysisTrace("debug-floor-retry-started", context);
-  analysisTraceRuntime.traceOrigin = "DEBUG_FLOOR_RETRY";
+  resetAnalysisTrace(restoreMode === "captured-point" ? "debug-captured-point-resumed" : "debug-floor-retry-started", context);
+  analysisTraceRuntime.traceOrigin = restoreMode === "captured-point" ? "DEBUG_CAPTURED_POINT" : "DEBUG_FLOOR_RETRY";
   analysisTraceRuntime.sourceDebugCapturedAt = debugSnapshotRuntime.sourceCapturedAt;
   analysisTraceRuntime.retryIndex = debugSnapshotRuntime.retryIndex;
   debugSnapshotRuntime.loaded = true;
@@ -10168,22 +11438,23 @@ function ensureDebugSnapshotInput() {
   input.type = "file"; input.accept = ".json,application/json"; input.style.display = "none";
   input.addEventListener("change", async () => {
     const file = input.files?.[0]; input.value = ""; if (!file) return;
+    const restoreMode = debugSnapshotRuntime.importMode === "captured-point" ? "captured-point" : "floor-start";
     try {
       if (file.size > DEBUG_SNAPSHOT_MAX_CHARS) throw new Error("Debug snapshot is too large.");
       const raw = await file.text();
       if (raw.length > DEBUG_SNAPSHOT_MAX_CHARS) throw new Error("Debug snapshot is too large.");
-      applyDebugSnapshot(JSON.parse(raw));
-      addLog(context, `Debug floor start loaded. Auto patrol paused; press ${DEBUG_SNAPSHOT_KEYS.resume} to resume.`);
+      applyDebugSnapshot(JSON.parse(raw), restoreMode);
+      addLog(context, restoreMode === "captured-point"
+        ? "Debug captured point loaded. Manual control is active; press P to enable auto patrol."
+        : "Debug floor start loaded. Manual control is active; press P to enable auto patrol.");
       render(engine.currentState, context);
     } catch (error) { addLog(context, `Debug snapshot load failed: ${error?.message || String(error)}`); render(engine.currentState, context); }
   });
   document.body.appendChild(input); debugSnapshotRuntime.importInput = input; return input;
 }
-function resumeDebugSnapshotAutoPatrol() {
-  if (!debugSnapshotRuntime.loaded || autoPatrolRuntime.state !== "AUTO_PATROL_PAUSED" || engine.currentState !== "FE_PLAYER_TURN") return false;
-  autoPatrolRuntime.state = ["AUTO_PATROL_READY", "AUTO_PATROL_DECIDING", "AUTO_PATROL_DECISION_READY", "AUTO_PATROL_DISPATCHING"].includes(debugSnapshotRuntime.capturedAutoPatrolState) ? "AUTO_PATROL_READY" : debugSnapshotRuntime.capturedAutoPatrolState;
-  if (!autoPatrolIsActive()) autoPatrolRuntime.state = "AUTO_PATROL_READY";
-  autoPatrolRuntime.stopReason = ""; debugSnapshotRuntime.loaded = false; scheduleAutoPatrolTick(0); renderAutoPatrolStatus(); return true;
+function openDebugSnapshotImport(restoreMode) {
+  debugSnapshotRuntime.importMode = restoreMode === "captured-point" ? "captured-point" : "floor-start";
+  ensureDebugSnapshotInput().click();
 }
 
 // ==========================================
@@ -10622,11 +11893,11 @@ function render(state, ctxGame) {
       let label = '';
       if (entry.kind === 'carried') label = `Store: ${coloredEquipmentName(entry.item)} / ${equipmentOptionSummary(entry.item)}`;
       else if (entry.kind === 'stored') label = `Take: ${coloredEquipmentName(entry.item)} / ${equipmentOptionSummary(entry.item)}`;
-      else if (entry.kind === 'deposit_gold') label = `Deposit 10g (carried ${ctxGame.player.gold}g)`;
-      else label = `Withdraw 10g (stored ${ctxGame.homeStorage.gold}g)`;
+      else if (entry.kind === 'deposit_gold') label = `Deposit all gold (carried ${ctxGame.player.gold}g)`;
+      else label = `Withdraw ${entry.amount || 10}g (stored ${ctxGame.homeStorage.gold}g)`;
       return `<div class="menu-item ${idx === ctxGame.homeSelectedIndex ? 'selected' : ''}">${label}</div>`;
     }).join('');
-    overlay.innerHTML = `<div class="menu-title">MY HOME</div><p style="font-size:11px;color:#aabbee;">Stored gold: ${ctxGame.homeStorage.gold}g / Stored equipment: ${ctxGame.homeStorage.equipment.length}</p><div style="width:100%;max-height:250px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">[↑/↓]: Cursor | [Enter]: Store / Take | Gold moves in 10g units | [Esc]: Exit</p>`;
+    overlay.innerHTML = `<div class="menu-title">MY HOME</div><p style="font-size:11px;color:#aabbee;">Stored gold: ${ctxGame.homeStorage.gold}g / Stored equipment: ${ctxGame.homeStorage.equipment.length}</p><div style="width:100%;max-height:250px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">[↑/↓]: Cursor | [Enter]: Store / Take | Automatic purchases withdraw only the required amount | [Esc]: Exit</p>`;
   } else if (overlayMode === "dark-smith") {
     overlay.style.display = "flex";
     const rows = ctxGame.darkSmithMenuEntries.length ? ctxGame.darkSmithMenuEntries.map((entry, idx) => {
@@ -10689,7 +11960,7 @@ function render(state, ctxGame) {
     overlay.style.display = "flex";
     const summary = ctxGame.deathSummary || { deathFloor: 0, goldLost: 0, divineGoldGranted: 0, goldAfterRescue: ctxGame.player.gold, expLost: 0, level: ctxGame.player.level, weaponName: ctxGame.player.weapon.name, armorName: ctxGame.player.armor.name, bombRange: ctxGame.player.bombRange, bombCapacity: ctxGame.player.bombCapacity, warpCount: ctxGame.discoveredWarpFloors.length };
     const divineGiftHtml = summary.divineGoldGranted > 0 ? `<div style='color:#ffe066;'>Divine aid: The gods granted ${summary.divineGoldGranted} gold. You now carry ${summary.goldAfterRescue} gold for the Inn.</div>` : "";
-    overlay.innerHTML = `<h1 style='color:#ff9933; font-size:28px; margin-bottom:8px;'>YOU WERE RESCUED</h1><p style='font-size:12px; color:#aaa; margin:0 0 12px;'>The town rescue party recovered you from B${summary.deathFloor}.</p><div style='font-size:11px; line-height:1.6; text-align:left; width:88%;'><div style='color:#ff7777;'>Lost: ${summary.goldLost} gold / ${summary.expLost} current EXP / current floor progress</div>${divineGiftHtml}<div style='color:#77ff99;'>Preserved: LV ${summary.level}, ${escapeHtml(summary.weaponName)}, ${escapeHtml(summary.armorName)}</div><div style='color:#77ff99;'>Bomb RNG ${summary.bombRange}, capacity ${summary.bombCapacity}, discovered warps ${summary.warpCount}</div><div style='color:#aabbee;'>Recovery: HP 50% / Hunger 50 / Morning</div></div><p style='font-size:14px; color:#00ffcc; margin-top:24px;'>Press [ENTER] to Return to Town</p>`;
+    overlay.innerHTML = `<h1 style='color:#ff9933; font-size:28px; margin-bottom:8px;'>YOU WERE RESCUED</h1><p style='font-size:12px; color:#aaa; margin:0 0 12px;'>The town rescue party recovered you from B${summary.deathFloor}.</p><div style='font-size:11px; line-height:1.6; text-align:left; width:88%;'><div style='color:#ff7777;'>Lost: ${summary.goldLost} gold / ${summary.expLost} current EXP / current floor progress</div>${divineGiftHtml}<div style='color:#77ff99;'>Preserved: LV ${summary.level}, ${escapeHtml(summary.weaponName)}, ${escapeHtml(summary.armorName)}</div><div style='color:#77ff99;'>Bomb RNG ${summary.bombRange}, capacity ${summary.bombCapacity}, discovered warps ${summary.warpCount}</div><div style='color:#aabbee;'>Recovery: HP 50% / Hunger 50 / Morning</div></div><p style='font-size:14px; color:#00ffcc; margin-top:24px;'>${AUTO_PATROL_CONFIG.continueAfterDeath && autoPatrolIsActive() ? 'Auto Patrol will return to Town automatically.' : 'Press [ENTER] to Return to Town'}</p>`;
   } else if (overlayMode === "victory") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<h1 style='color:#ffff00; font-size:32px; text-shadow:0 0 10px #ffff00;'>VICTORY CONCLUDED</h1><p style='font-size:13px; color:#33ff33;'>You successfully slayed the Overlord<br>and returned alive to the Town!</p><p style='font-size:14px; color:#00ffcc; margin-top:30px;'>Press [ESC] to Return to Main Title</p>`;
@@ -10706,8 +11977,8 @@ engine.transition("BOOT");
 
 document.addEventListener("keydown", (e) => {
   if (e.key === DEBUG_SNAPSHOT_KEYS.export) { if (!e.repeat) { e.preventDefault(); try { downloadDebugSnapshot(); } catch (error) { addLog(context, `Debug snapshot capture failed: ${error?.message || String(error)}`); render(engine.currentState, context); } } return; }
-  if (e.key === DEBUG_SNAPSHOT_KEYS.import) { if (!e.repeat) { e.preventDefault(); ensureDebugSnapshotInput().click(); } return; }
-  if (e.key === DEBUG_SNAPSHOT_KEYS.resume) { if (!e.repeat && resumeDebugSnapshotAutoPatrol()) e.preventDefault(); return; }
+  if (e.key === DEBUG_SNAPSHOT_KEYS.importFloorStart) { if (!e.repeat) { e.preventDefault(); openDebugSnapshotImport("floor-start"); } return; }
+  if (e.key === DEBUG_SNAPSHOT_KEYS.importCapturedPoint) { if (!e.repeat) { e.preventDefault(); openDebugSnapshotImport("captured-point"); } return; }
   if (String(e.key).toLowerCase() === AUTO_PATROL_CONFIG.toggleKey) {
     if (e.repeat) { e.preventDefault(); return; }
     e.preventDefault(); toggleAutoPatrol(); return;

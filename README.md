@@ -2,85 +2,185 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **"Resolve all control, asynchronous complexity, and user interactions solely through 'State Transition Rules'."**  
-> A software design philosophy that completely eliminates implicit state-control flags and if/else spaghetti from your application logic.
+> **Represent system flow control as explicit State, Event, Context, and Transition definitions, and do not hide control logic outside the state transition model.**
 
-👉 [日本語のREADMEはこちら (Japanese README)](./README.ja.md)  
-🎮 [**Live Demo: Play SFA Games in Your Browser!**](https://naisy.github.io/state-first-architecture/demo/)
-
----
-
-## 💡 What is State-First Architecture (SFA)?
-
-SFA is a software design philosophy that deterministically controls all system behaviors, asynchronous processes, and synchronization between components/roles using **only the logical model of "States" and "Transitions."**
-
-It completely eliminates "hidden variables" that reside outside the state transition diagram—such as timestamp-based event ordering or manual flag management (`isSubmitting = true`)—which are notorious for introducing bugs in traditional development.
-
-### The 3 Core Principles of SFA
-1. **Strict State-Driven**: The system's behavior is determined solely by the intersection of the *Current State* and the *Triggered Event*. No implicit control flags or ad-hoc if-statements for state-control exist within the application layer.
-2. **Explicit Roles**: Every state explicitly declares its owner/manager (e.g., `frontend`, `backend`, `worker`) in its schema.
-3. **Forward-Only Autonomy**: Each state is oblivious to *how* it reached its current state. It only knows *where* it can transition next based on incoming events and guard conditions.
+👉 [日本語版READMEはこちら (Japanese README)](./README.ja.md)  
+🎮 [**Play now in your browser: SFA Game Demo Portal**](https://naisy.github.io/state-first-architecture/demo/)
 
 ---
 
-## 🎮 Proof of Concept (PoC): SFA Tetris
+## What Is State-First Architecture (SFA)?
 
-To prove the robustness of SFA, this repository includes a **proof-of-concept (PoC) Tetris game** written in pure, vanilla JavaScript.
+State-First Architecture is a design approach that explicitly models system control decisions using the following elements:
 
-Game development is one of the most challenging fields for state and async management, involving real-time key inputs, collision detection, and animation interruptions. In this demo, **all conditional branching related to gameplay progression is elegantly resolved solely through state transition definitions (JSON)**.
+- **State**: the current control position of the system
+- **Event**: a normalized input used to evaluate state transitions
+- **Context**: explicit data read or updated by Guards and Actions
+- **Transition**: a rule connecting a State and Event to the next State
+- **Guard**: a pure condition that determines whether a Transition may be selected
+- **Action**: a change or side effect associated with a Transition
+- **Role**: the actor that owns a State or process, such as a Frontend, Backend, or Worker
 
-### 3 Key SFA Concept Proofs in This Demo
+SFA does not attempt to eliminate conditional logic itself. It attempts to eliminate implicit flags, ordering dependencies, hidden ownership, and ad hoc state changes used for flow control outside the state transition model.
 
-1. **Input Discarding During Animations (Structural Elimination of Spam Bugs)**
-   During the line-clearing animation (`FE_CLEARING` state), keys like move (`MOVE_LEFT`) or rotate (`ROTATE`) are simply not registered in the transition definition. As a result, even if a user spams keys at lightning speed, the engine automatically and silently discards these events. There is not a single line of defensive state-control branching (such as `if (isAnimating) return;`) in the application logic.
-
-2. **Declarative "Wall-Kick / Floor-Kick" Priority Control**
-   The complex "kick" behavior (pushing a tetromino away from walls or the floor when rotating) is defined as a prioritized list of fallback transitions. The rule *"If normal rotation fails, try kick-left; if that fails, try kick-right..."* is represented as a declarative JSON array sequence rather than a chaotic, nested if/else jungle for state control.
-
-3. **Total Separation of View and Logic**
-   When fixing a rendering bug where font widths (full-width vs. half-width) mismatched, we replaced the rendering function (`render`) without touching a single line of state definitions, engine logic, or collision guards. This proves SFA's loose coupling and safe maintainability.
+```text
+Raw Input / Timer / Network / AI Decision
+                  |
+                  v
+             Projection
+                  |
+                  v
+          Canonical Event
+                  |
+                  v
+State + Context --Transition/Guard--> Action --> Next State
+```
 
 ---
 
-## 🚀 How to Run the Demo
+## Core Principles of SFA
 
-### 🌐 Play Online (No Installation Required)
-👉 [**naisy.github.io/state-first-architecture/demo/**](https://naisy.github.io/state-first-architecture/demo/)
-*Opening this link will take you to the Game Selection Portal.*
+### 1. Explicit State
 
-### 💻 Run Locally
+State that affects control decisions is made explicit as observable and verifiable State or Context. Information required for flow control is not hidden outside the state transition model.
+
+### 2. Canonical Event
+
+Different input sources, such as keyboard input, API responses, timers, and AI decisions, are normalized into Canonical Events through Projection. Subsequent Transitions do not depend on the original input source.
+
+### 3. Declared Transition
+
+State changes occur through declared Transitions. A Frontend, Backend, Worker, AI, or other actor does not arbitrarily mutate Context or State to bypass the defined flow.
+
+### 4. Pure Guard / Controlled Action
+
+A Guard performs evaluation only and does not modify Context. An Action performs only the changes and side effects authorized by the selected Transition.
+
+### 5. Explicit Role and Ownership
+
+The Role that owns each State, and the runtime ownership of processes spanning multiple steps, are made explicit. The design defines whether another decision may preempt a long-running process and when that ownership completes, becomes invalid, or is released.
+
+### 6. Observable Outcome
+
+The result of Event handling is observable. At minimum, the implementation should distinguish successful application, intentional discard, contract-based rejection, an unhandled Event, and Action failure.
+
+---
+
+## What SFA Defines
+
+SFA does not prescribe a specific UI, game, persistence format, communication protocol, or database. It treats the following as common architectural specifications:
+
+- the meaning of State / Event / Context / Transition / Guard / Action
+- the evaluation order of Transition candidates
+- the execution order of a Transition
+- termination conditions for AUTO transitions
+- normalization of input through Projection
+- Role boundaries and runtime ownership
+- Event outcomes and observable failures
+- lifecycle boundaries for creating, retaining, discarding, and restoring State machine instances
+- the scope of static validation and runtime contracts
+
+The following belong to the specification of each application that uses SFA:
+
+- where a game returns the player after death
+- key bindings such as F8 or F9
+- a save-data schema
+- domain rules for payments, orders, equipment, bombs, and similar concepts
+- concrete timeout values, retry counts, or search budgets
+
+General principles may be extracted from application-specific examples, but the examples themselves do not become normative SFA requirements.
+
+---
+
+## Main Benefits of SFA
+
+### Manual and automated control can converge on the same Transition
+
+When a user action and an automated controller emit the same Canonical Event, the downstream behavior does not need to be duplicated.
+
+```text
+Manual Input ----\
+                  > Projection --> RETURN_TO_TOWN --> shared transition
+Auto Controller -/
+```
+
+### Unauthorized operations can be prevented by State structure
+
+If a processing State has no `SUBMIT` Transition, an additional submission is not accepted. Instead of relying on an implicit flag such as `isSubmitting`, the current State expresses which Events are acceptable.
+
+### The relationship between specification and implementation is easier to trace
+
+By recording State, Event, Guard, Action, Role, and Outcome, the implementation can expose a Transition trace that explains why a particular operation was selected.
+
+### The impact of changes is easier to constrain
+
+Existing Transitions and Actions can remain unchanged while the design changes which Event is projected, which Guard becomes valid, or which Policy is selected.
+
+---
+
+## What SFA Does Not Guarantee Automatically
+
+SFA is not a mechanism that prevents every kind of bug through state transitions alone. The following still require invariants, contract tests, and runtime validation:
+
+- uniqueness of entity identity
+- correctness of numeric or physical calculations
+- transactional consistency inside Actions
+- corruption of persisted data
+- failures of external APIs or devices
+- performance, memory, and search-time limits
+- implementation defects inside Guards or Actions
+
+SFA provides a control structure that makes such failures observable instead of hiding them, including the State, Event, and Action in which they occurred.
+
+---
+
+## Proofs of Concept (PoC)
+
+This repository contains several game demos that apply SFA. Their game-specific rules are not part of the SFA specification, but they serve as examples for examining State, Event, Guard, Action, Projection, and Role boundaries.
+
+### SFA Tetris
+
+- expresses input that must not be accepted during animation through State definitions
+- evaluates wall-kick and floor-kick candidates as ordered Transitions
+- separates rendering from game flow control
+
+### SFA Freeway
+
+- makes the relationship between input and driving State explicit
+- models escaping to the title screen as an Event and Transition
+
+### SFA Rogue
+
+- projects manual input and auto-patrol decisions into Canonical Events
+- makes runtime ownership of multi-step tactics explicit
+- validates Transitions through debug snapshots and deterministic replay
+
+These are application examples of SFA. Their game-specific specifications are not included in the normative sections of the technical specification.
+
+---
+
+## Running the Demos
+
+### Play online
+
+[naisy.github.io/state-first-architecture/demo/](https://naisy.github.io/state-first-architecture/demo/)
+
+### Run locally
+
 1. Clone or download this repository.
-2. Open `demo/index.html` directly in any web browser to open the Game Selection Portal.
+2. Open `demo/index.html` in a browser.
 
 ---
 
-### 🎮 Game Controls
+## Documentation
 
-#### 🕹️ SFA Tetris
-* `Enter`: Start / Restart Game
-* `←` / `→`: Move Tetromino Left / Right
-* `↑`: Rotate Clockwise
-* `↓`: Rotate Counter-Clockwise
-* `Space`: Soft Drop (Increase fall speed)
+- [Technical Specification (English)](./specification.md)
+- [技術仕様書（日本語版）](./specification.ja.md)
 
-#### 🏎️ SFA Freeway
-* `Enter`: Start / Restart Game
-* `Esc`: Return to Title Screen at any time (State Escape)
-* `←` / `→`: Steer Left / Right
-* `↑`: Shift Up (High Gear)
-* `↓`: Shift Down (Low Gear)
+The technical specification separates normative requirements from reference implementations and defines the execution semantics of the SFA engine, Projection, Event outcomes, Roles, Ownership, Lifecycle, and the boundaries of verifiability.
 
 ---
 
-## 📄 Documentation
+## License
 
-For a deep dive into the SFA theory, common schema specification, and handling of asynchronous networks, please refer to the technical specifications:
-
-* [Technical Specification (English version)](./specification.md)
-* [技術仕様書 (Japanese version)](./specification.ja.md)
-
----
-
-## ⚖️ License
-
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+This project is released under the MIT License. See [LICENSE](./LICENSE) for details.
