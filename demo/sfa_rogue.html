@@ -152,6 +152,34 @@
         .inventory-comparison { color: #aabbee; margin-top: 8px; min-height: 32px; }
         .inventory-positive { color: #66e3a4; }
         .inventory-negative { color: #ff7777; }
+        #overlay.home-overlay {
+            left: 50%; right: auto; width: min(640px, calc(100vw - 24px));
+            transform: translateX(-50%); padding: 14px 16px; justify-content: flex-start;
+            text-align: left; overflow: hidden;
+        }
+        .home-shell { width: 100%; height: 100%; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 8px; }
+        .home-shell .menu-title { text-align: center; margin: 0; }
+        .home-summary { display:flex; justify-content:space-between; gap:16px; font-size:11px; color:#aabbee; border-bottom:1px solid #3b3b4f; padding-bottom:7px; }
+        .home-main { min-height:0; display:grid; grid-template-columns:minmax(0, 1.05fr) minmax(0, .95fr); gap:12px; }
+        .home-list-panel, .home-detail-panel { min-width:0; min-height:0; border:1px solid #3b3b4f; background:rgba(8,8,12,.72); }
+        .home-panel-title { padding:6px 8px; color:#66e3ff; font-size:10px; letter-spacing:.08em; border-bottom:1px solid #3b3b4f; }
+        .home-list { height:100%; overflow-y:auto; overflow-x:hidden; scrollbar-gutter:stable; padding:4px 6px 8px; box-sizing:border-box; }
+        .home-section-label { color:#777; font-size:9px; padding:5px 5px 2px; text-transform:uppercase; letter-spacing:.08em; }
+        .home-row { font-size:11px; line-height:1.35; padding:4px 6px; margin:1px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .home-row.selected { background:rgba(255,255,0,.08); }
+        .home-detail { padding:9px 10px; font-size:11px; line-height:1.45; overflow-y:auto; height:calc(100% - 27px); box-sizing:border-box; }
+        .home-detail-heading { color:#fff; font-size:12px; margin-bottom:7px; }
+        .home-equipment-card { border:1px solid #343445; padding:7px; margin-bottom:7px; }
+        .home-card-label { color:#888; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; }
+        .home-stat-line { display:flex; justify-content:space-between; gap:8px; margin-top:4px; }
+        .home-difference { border-top:1px solid #343445; padding-top:7px; margin-top:7px; font-weight:bold; }
+        .home-help { border-top:1px solid #3b3b4f; padding-top:7px; font-size:10px; color:#888; text-align:center; white-space:nowrap; }
+        @media (max-width: 560px) {
+            #overlay.home-overlay { width: calc(100vw - 12px); padding:10px; }
+            .home-main { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,.85fr); }
+            .home-summary { font-size:9px; }
+            .home-help { white-space:normal; }
+        }
         #auto-patrol-status { width:360px; min-height:14px; margin-top:4px; font-size:10px; color:#777; text-align:left; }
         #game-controls { max-width: 760px; }
         #auto-patrol-status.active { color:#66e3a4; }
@@ -196,7 +224,7 @@
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage152bx-debug-captured-point-resume-20260722";
+const SFA_ROGUE_BUILD_ID = "stage153u-dark-smith-reroll-and-vital-recovery-20260723";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -326,7 +354,7 @@ const SFA_DEFINITIONS = {
 
       // 環境要素へのインタラクション遷移（特定のタイルの上でのみ発火可能）
       { event: "INTERACT", guard: "has_discovered_warps_at_town_stairs", action: "prepare_warp_menu", target_state: "FE_WARP_MENU" },
-      { event: "INTERACT", guard: "can_use_stairs",   action: "trigger_stairs",    target_state: "FE_GENERATE_MAP" },
+      { event: "INTERACT", guard: "can_use_stairs",   action: "prepare_stairs_transition", target_state: "FE_RESOLVE_PLAYER" },
       { event: "INTERACT", guard: "is_on_town_warp", action: "trigger_town_warp", target_state: "FE_GENERATE_MAP" },
       { event: "INTERACT", guard: "is_on_shop_tile", action: "generate_shop_stock", target_state: "FE_SHOP_MENU" },
       { event: "INTERACT", guard: "is_on_inn_tile",  target_state: "FE_INN_MENU" },
@@ -371,6 +399,7 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "AUTO", guard: "is_player_dead", target_state: "FE_DEATH_RESOLVE" },
       { event: "AUTO", guard: "is_player_won", target_state: "FE_VICTORY" },
+      { event: "AUTO", guard: "has_pending_map_transition", action: "commit_pending_map_transition", target_state: "FE_GENERATE_MAP" },
       { event: "AUTO", guard: "is_player_alive", target_state: "FE_PLAYER_TURN" }
     ]
   },
@@ -442,6 +471,8 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "home_cursor_up", target_state: "FE_HOME_MENU" },
       { event: "MENU_DOWN", action: "home_cursor_down", target_state: "FE_HOME_MENU" },
+      { event: "MOVE_LEFT", action: "home_page_previous", target_state: "FE_HOME_MENU" },
+      { event: "MOVE_RIGHT", action: "home_page_next", target_state: "FE_HOME_MENU" },
       { event: "SELECT", guard: "home_selected_carried_equipment", action: "deposit_home_equipment", target_state: "FE_HOME_MENU" },
       { event: "SELECT", guard: "home_selected_stored_equipment", action: "withdraw_home_equipment", target_state: "FE_HOME_MENU" },
       { event: "SELECT", guard: "home_selected_deposit_gold", action: "deposit_home_gold", target_state: "FE_HOME_MENU" },
@@ -454,10 +485,38 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "dark_smith_cursor_up", target_state: "FE_DARK_SMITH_MENU" },
       { event: "MENU_DOWN", action: "dark_smith_cursor_down", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "MOVE_LEFT", action: "dark_smith_option_left", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "MOVE_RIGHT", action: "dark_smith_option_right", target_state: "FE_DARK_SMITH_MENU" },
       { event: "SELECT", guard: "can_attempt_dark_smith_upgrade", action: "attempt_dark_smith_upgrade", target_state: "FE_DARK_SMITH_MENU" },
-      { event: "OPEN_OPTION_REROLL", guard: "has_dark_smith_change_candidates", action: "prepare_dark_smith_change_target", target_state: "FE_DARK_SMITH_CHANGE_TARGET" },
+      { event: "OPEN_OPTION_REROLL", guard: "has_dark_smith_reroll_candidates", action: "prepare_dark_smith_reroll_target", target_state: "FE_DARK_SMITH_REROLL_TARGET" },
+      { event: "OPEN_OPTION_CHANGE", guard: "has_dark_smith_change_candidates", action: "prepare_dark_smith_change_target", target_state: "FE_DARK_SMITH_CHANGE_TARGET" },
       { event: "OPEN_DISMANTLE", action: "prepare_dark_smith_dismantle_menu", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
       { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
+    ]
+  },
+  FE_DARK_SMITH_REROLL_TARGET: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP", action: "dark_smith_reroll_target_up", target_state: "FE_DARK_SMITH_REROLL_TARGET" },
+      { event: "MENU_DOWN", action: "dark_smith_reroll_target_down", target_state: "FE_DARK_SMITH_REROLL_TARGET" },
+      { event: "SELECT", guard: "has_selected_dark_smith_reroll_target", action: "prepare_dark_smith_reroll_option", target_state: "FE_DARK_SMITH_REROLL_OPTION" },
+      { event: "ESCAPE", action: "clear_dark_smith_reroll", target_state: "FE_DARK_SMITH_MENU" }
+    ]
+  },
+  FE_DARK_SMITH_REROLL_OPTION: {
+    role: "frontend",
+    next_transitions: [
+      { event: "MENU_UP", action: "dark_smith_reroll_option_up", target_state: "FE_DARK_SMITH_REROLL_OPTION" },
+      { event: "MENU_DOWN", action: "dark_smith_reroll_option_down", target_state: "FE_DARK_SMITH_REROLL_OPTION" },
+      { event: "SELECT", guard: "can_confirm_dark_smith_reroll", target_state: "FE_DARK_SMITH_REROLL_CONFIRM" },
+      { event: "ESCAPE", action: "back_to_dark_smith_reroll_target", target_state: "FE_DARK_SMITH_REROLL_TARGET" }
+    ]
+  },
+  FE_DARK_SMITH_REROLL_CONFIRM: {
+    role: "frontend",
+    next_transitions: [
+      { event: "SELECT", guard: "can_confirm_dark_smith_reroll", action: "commit_dark_smith_reroll", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "ESCAPE", target_state: "FE_DARK_SMITH_REROLL_OPTION" }
     ]
   },
   FE_DARK_SMITH_CHANGE_TARGET: {
@@ -593,8 +652,11 @@ const PROJECTION_POLICY = {
   FE_BAR_MENU:               { overlay: "bar",           inputMode: "confirm-menu" },
   FE_HOME_PURCHASE_MENU:     { overlay: "home-purchase", inputMode: "confirm-menu" },
   FE_BLACKSMITH_LOCKED_MENU:      { overlay: "smith-locked",  inputMode: "confirm-menu" },
-  FE_HOME_MENU:              { overlay: "home",          inputMode: "list-menu" },
+  FE_HOME_MENU:              { overlay: "home",          inputMode: "home-menu" },
   FE_DARK_SMITH_MENU:             { overlay: "dark-smith", inputMode: "dark-smith-menu" },
+  FE_DARK_SMITH_REROLL_TARGET:    { overlay: "dark-smith-reroll-target", inputMode: "list-menu" },
+  FE_DARK_SMITH_REROLL_OPTION:    { overlay: "dark-smith-reroll-option", inputMode: "list-menu" },
+  FE_DARK_SMITH_REROLL_CONFIRM:   { overlay: "dark-smith-reroll-confirm", inputMode: "confirm-menu" },
   FE_DARK_SMITH_CHANGE_TARGET:    { overlay: "dark-smith-change-target", inputMode: "list-menu" },
   FE_DARK_SMITH_CHANGE_PARTNER:   { overlay: "dark-smith-change-partner", inputMode: "list-menu" },
   FE_DARK_SMITH_CHANGE_OPTIONS:   { overlay: "dark-smith-change-options", inputMode: "dark-smith-change-options" },
@@ -618,8 +680,9 @@ const INPUT_EVENT_BY_MODE = {
   },
   "inventory-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
   "list-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
+  "home-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", Escape: "ESCAPE" },
   "blacksmith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", s: "SELL", S: "SELL", d: "DISMANTLE", D: "DISMANTLE", Escape: "ESCAPE" },
-  "dark-smith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", r: "OPEN_OPTION_REROLL", R: "OPEN_OPTION_REROLL", d: "OPEN_DISMANTLE", D: "OPEN_DISMANTLE", Escape: "ESCAPE" },
+  "dark-smith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", r: "OPEN_OPTION_REROLL", R: "OPEN_OPTION_REROLL", c: "OPEN_OPTION_CHANGE", C: "OPEN_OPTION_CHANGE", d: "OPEN_DISMANTLE", D: "OPEN_DISMANTLE", Escape: "ESCAPE" },
   "dark-smith-change-options": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", Escape: "ESCAPE" },
   "confirm-menu": { Enter: "SELECT", Escape: "ESCAPE" },
   "death-summary": { Enter: "RETURN_TO_TOWN", Escape: "ESCAPE" },
@@ -657,6 +720,7 @@ const context = {
   items: [],
   bombs: [],
   explosionCells: [],
+  pendingMapTransition: null,
   shopInventory: [],
   shopSelectedIndex: 0,
   equipmentInventory: [],
@@ -672,10 +736,14 @@ const context = {
   homeStorage: { equipment: [], gold: 0 },
   homeMenuEntries: [],
   homeSelectedIndex: 0,
+  homeStoredPage: 0,
+  homeGoldTransferPresetIndex: 4,
   darkSmithMenuEntries: [],
   darkSmithSelectedIndex: 0,
+  darkSmithOptionIndex: 0,
   darkSmithDismantleEntries: [],
   darkSmithDismantleSelectedIndex: 0,
+  darkSmithReroll: { targetEntries: [], targetIndex: 0, target: null, optionIndex: 0 },
   darkSmithChange: { targetEntries: [], targetIndex: 0, target: null, partnerEntries: [], partnerIndex: 0, partner: null, focus: 'A', optionIndexA: 0, optionIndexB: 0 },
   forgeShards: 0,
   logs: [],
@@ -716,10 +784,10 @@ const AUTO_PATROL_CONFIG = Object.freeze({
 const autoPatrolRuntime = {
   state: "AUTO_PATROL_OFF", generation: 0, timerId: null, speed: AUTO_PATROL_CONFIG.defaultSpeed,
   decision: null, stopReason: "", elapsedTurns: 0, deepestDepth: 0, repeatedSignature: "", repeatCount: 0,
-  bombPlan: null, pendingBombPlan: null, bombSetupPlan: null, bombLurePlan: null, bombLureEvaluatedDepth: 0, meleePlan: null, lurePlan: null, contactRoutePlan: null, initialRoutePlan: null, foodHuntPlan: null,
+  bombPlan: null, pendingBombPlan: null, bombSetupPlan: null, wallBreachPlan: null, bombLurePlan: null, bombLureEvaluatedDepth: 0, meleePlan: null, lurePlan: null, contactRoutePlan: null, initialRoutePlan: null, foodHuntPlan: null,
   lurePlanState: "LURE_PLAN_NONE", contactRouteState: "CONTACT_ROUTE_EVALUATE", initialRouteState: "INITIAL_ROUTE_EVALUATE", foodHuntState: "FOOD_HUNT_EVALUATE",
   plansStarted: 0, plannedBombKills: 0, meleePlansCompleted: 0, lurePlansStarted: 0, lurePlansCompleted: 0, lurePlansInvalidated: 0, contactRoutePlansStarted: 0, contactRoutePlansCompleted: 0, initialRoutePlansStarted: 0, initialRoutePlansCompleted: 0, foodHuntPlansStarted: 0, foodHuntTargetsDefeated: 0,
-  levelCommitAttacks: 0, emergencyPositions: 0, multiStrongWallLastEvaluationTurn: -999, multiStrongWallLastEvaluationDepth: 0, multiStrongWallLastEvaluationSignature: "", multiStrongWallEvaluations: 0, multiStrongWallPlansStarted: 0, bombEscapePreflightEvaluations: 0, bombEscapePreflightRejected: 0, bombEscapeSuppressUntilTurn: -1, bombEscapeSuppressTargetId: null, floorBombPlacementRejectedDepth: 0, bombEscapeAlternativePlan: null, bombEscapeAlternativePlansStarted: 0, bombEscapeAlternativePlansCompleted: 0,
+  levelCommitAttacks: 0, emergencyPositions: 0, wallBreachPlansStarted: 0, wallBreachPlansCompleted: 0, wallBreachPlansInvalidated: 0, multiStrongWallLastEvaluationTurn: -999, multiStrongWallLastEvaluationDepth: 0, multiStrongWallLastEvaluationSignature: "", multiStrongWallEvaluations: 0, multiStrongWallPlansStarted: 0, bombEscapePreflightEvaluations: 0, bombEscapePreflightRejected: 0, bombEscapeSuppressUntilTurn: -1, bombEscapeSuppressTargetId: null, floorBombPlacementRejectedDepth: 0, bombEscapeAlternativePlan: null, bombEscapeAlternativePlansStarted: 0, bombEscapeAlternativePlansCompleted: 0,
   movementHistory: [], oscillationState: "OBJECTIVE_CONFLICT_EVALUATE", oscillationBreaks: 0, oscillationFallbacks: 0,
   objectiveSuppressions: {}, objectiveConflictDetections: 0, objectiveDemotions: 0, objectiveAlternativeCommits: 0,
   objectiveState: "OBJECTIVE_NONE", activeObjective: null, objectiveSequence: 0, objectiveHistory: [],
@@ -741,15 +809,22 @@ const autoPatrolRuntime = {
 
 const AUTO_PATROL_PRODUCTION_SHADOW_CONFIG = Object.freeze({
   enabled: true,
-  sliceBudget: 120,
+  sliceBudget: 16,
   maxBudget: 1600,
   maxDepth: 12,
   beamWidth: 250,
-  contactSliceBudget: 120,
+  contactSliceBudget: 12,
   contactMaxBudget: 1800,
   contactMaxRouteDepth: 5,
   contactMaxRouteCells: 40,
-  contactMaxResolveDepth: 12
+  contactMaxResolveDepth: 12,
+  rootPlacementSliceBudget: 12,
+  rootPlacementMaxBudget: 900,
+  rootPlacementMaxDepth: 6,
+  rootPlacementBeamWidth: 120,
+  meleeSliceBudget: 8,
+  meleeMaxBudget: 480,
+  meleeMaxDepth: 9
 });
 
 const AUTO_PATROL_PRODUCTION_SHADOW_SFA = Object.freeze({
@@ -775,6 +850,7 @@ const autoPatrolProductionShadowRuntime = {
   committedRouteClass: null,
   ownedBombId: null,
   lastInvalidationReason: "",
+  lastRejectedRootSignature: "",
   lastDiagnostic: null
 };
 
@@ -796,6 +872,7 @@ function resetAutoPatrolProductionShadow(reason = "reset") {
   autoPatrolProductionShadowRuntime.committedRouteClass = null;
   autoPatrolProductionShadowRuntime.ownedBombId = null;
   autoPatrolProductionShadowRuntime.lastInvalidationReason = reason;
+  if (reason !== "search-rejected") autoPatrolProductionShadowRuntime.lastRejectedRootSignature = "";
   autoPatrolProductionShadowRuntime.lastDiagnostic = null;
 }
 
@@ -803,12 +880,7 @@ const AUTO_PATROL_PRODUCTION_SHADOW_ACTIONS = Object.freeze(["MOVE_UP", "MOVE_RI
 
 function autoPatrolProductionShadowConflictEvidence(objective) {
   if (!objective || objective.status !== "ACTIVE") return false;
-  const attempts = objective.tacticalAttempts || [];
-  const reasons = new Set(attempts.slice(-12).map(entry => entry.reason));
-  const approachAndLure = reasons.has("melee-plan-approach")
-    && [...reasons].some(reason => String(reason).includes("lure-plan"));
-  return approachAndLure
-    || (objective.rejectedTrajectorySignatures?.length || 0) > 0
+  return (objective.rejectedTrajectorySignatures?.length || 0) > 0
     || (objective.combatNoProgressCount || 0) > 0;
 }
 
@@ -816,6 +888,29 @@ function autoPatrolProductionShadowTargetId(objective) {
   if (Number.isFinite(objective?.primaryTargetId)) return objective.primaryTargetId;
   return Array.isArray(objective?.targetEnemyIds) && Number.isFinite(objective.targetEnemyIds[0])
     ? objective.targetEnemyIds[0] : null;
+}
+
+function autoPatrolEnsureImminentStrongContactObjective(ctx) {
+  if (!AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.enabled || engine.currentState !== "FE_PLAYER_TURN") return null;
+  if (ctx.currentMapType !== "dungeon" || ctx.player.hp <= 0 || playerBombs(ctx).length !== 0) return null;
+  const hasConflictingPlan = autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan || autoPatrolRuntime.bombSetupPlan
+    || autoPatrolRuntime.bombLurePlan || autoPatrolRuntime.contactRoutePlan || autoPatrolRuntime.initialRoutePlan;
+  if (hasConflictingPlan) return null;
+  const target = autoPatrolDetectedStrongHostiles(ctx)
+    .filter(enemy => autoPatrolArrivalTurns(ctx, enemy) <= 2)
+    .sort((left, right) => autoPatrolArrivalTurns(ctx, left) - autoPatrolArrivalTurns(ctx, right)
+      || left.hp - right.hp || left.id - right.id)[0] || null;
+  if (!target) return null;
+  const active = autoPatrolRuntime.activeObjective;
+  if (active?.type === "DEFEAT_DETECTED_ENEMIES") {
+    autoPatrolUpdateDetectedCombatTargets(ctx, active);
+    if (!autoPatrolEnemyById(ctx, active.primaryTargetId)) active.primaryTargetId = target.id;
+    return active;
+  }
+  if (active) autoPatrolFailObjective(ctx, "imminent-strong-contact-preempted-objective");
+  return autoPatrolCreateObjective(ctx, {
+    kind: "DISPATCH", event: "PASS", reason: "detected-combat-imminent-strong-contact", targetId: target.id
+  });
 }
 
 function autoPatrolProductionShadowEligible(ctx) {
@@ -827,15 +922,26 @@ function autoPatrolProductionShadowEligible(ctx) {
   const objectiveTarget = targetId == null ? null : autoPatrolEnemyById(ctx, targetId);
   const hasConflictingPlan = autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan || autoPatrolRuntime.bombSetupPlan
     || autoPatrolRuntime.bombLurePlan || autoPatrolRuntime.contactRoutePlan || autoPatrolRuntime.initialRoutePlan;
-  if (objectiveTarget && autoPatrolProductionShadowConflictEvidence(objective) && !hasConflictingPlan) {
+  if (objectiveTarget && autoPatrolHostiles(ctx).length <= 2
+      && autoPatrolProductionShadowConflictEvidence(objective) && !hasConflictingPlan
+      && autoPatrolTargetReacquisitionIsBounded(ctx, objectiveTarget)) {
     return { objective, targetId, target: objectiveTarget, candidateClass: "TARGET_REACQUISITION_OWNERSHIP" };
   }
+  const hostiles = autoPatrolHostiles(ctx);
+  if (hostiles.length > 2) return null;
   const imminentStrong = autoPatrolDetectedStrongHostiles(ctx).filter(enemy => autoPatrolArrivalTurns(ctx, enemy) <= 2);
   const contactTarget = imminentStrong.sort((left, right) => autoPatrolArrivalTurns(ctx, left) - autoPatrolArrivalTurns(ctx, right)
     || left.hp - right.hp || left.id - right.id)[0] || null;
-  return contactTarget
-    ? { objective, targetId: contactTarget.id, target: contactTarget, candidateClass: "SINGLE_BOMB_CONTACT_OWNERSHIP" }
+  const bombDamage = contactTarget ? autoPatrolBombDamageAgainstEnemy(ctx, contactTarget) : 0;
+  return contactTarget && (contactTarget.maxHp || contactTarget.hp) <= bombDamage
+    ? { objective, targetId: contactTarget.id, target: contactTarget, candidateClass: "CONTACT_CROSS_LANE_ARBITRATION" }
     : null;
+}
+
+function autoPatrolTargetReacquisitionIsBounded(ctx, target) {
+  if (!target) return false;
+  const requiredAttacks = Math.max(1, Math.ceil(target.hp / autoPatrolPlayerAttack(ctx)));
+  return requiredAttacks <= 3;
 }
 
 function autoPatrolProductionShadowRootSignature(ctx, targetId, candidateClass = "TARGET_REACQUISITION_OWNERSHIP") {
@@ -1051,6 +1157,201 @@ async function autoPatrolAdvanceSingleBombContactProductionShadowSession(session
   return { best, internal, complete: session.complete, budgetUsed: session.budgetUsed };
 }
 
+
+function autoPatrolProductionCompletedTuple(candidate) {
+  const end = candidate.end;
+  const pressure = end.hostiles < candidate.root.hostiles || end.strongHostiles < candidate.root.strongHostiles
+    || end.hostileHp < candidate.root.hostileHp - 0.5;
+  return [end.death ? 1 : 0, end.bombCount === 0 ? 0 : 1, end.nextDamage === 0 ? 0 : 1,
+    end.adjacentStrong, end.strongArrival2, pressure ? 0 : 1, -candidate.minHp, -end.hp,
+    end.strongHostiles, end.hostiles, end.hostileHp, candidate.events.length, candidate.budgetUsed,
+    candidate.candidateClass, candidate.events.join(",")];
+}
+function autoPatrolCompareProductionCompleted(left, right) {
+  const a = autoPatrolProductionCompletedTuple(left), b = autoPatrolProductionCompletedTuple(right);
+  for (let index = 0; index < a.length; index += 1) {
+    const comparison = typeof a[index] === "string" || typeof b[index] === "string"
+      ? String(a[index]).localeCompare(String(b[index])) : a[index] - b[index];
+    if (comparison !== 0) return comparison;
+  }
+  return 0;
+}
+function autoPatrolProductionRootPlacementStateKey(node, targetId) {
+  const ctx = node.captured.context, target = ctx.enemies.find(enemy => enemy.id === targetId && enemy.hp > 0);
+  const bombs = ctx.bombs.map(bomb => `${bomb.id}:${bomb.x},${bomb.y},${bomb.fuse ?? bomb.turns ?? ""}`).sort().join(";");
+  const enemies = ctx.enemies.filter(enemy => enemy.hp > 0 && !enemy.isFoodEnemy)
+    .map(enemy => `${enemy.id}:${enemy.x},${enemy.y},${Math.round(enemy.hp)},${enemy.hasDetectedPlayer ? 1 : 0}`).sort().join(";");
+  return `${ctx.player.x},${ctx.player.y},${Math.round(ctx.player.hp * 10)}|${target ? `${target.x},${target.y},${Math.round(target.hp)}` : "DEAD"}|${bombs}|${enemies}|${node.bombPlaced ? 1 : 0}`;
+}
+function autoPatrolProductionRootPlacementRank(node, session) {
+  const target = node.captured.context.enemies.find(enemy => enemy.id === session.targetId && enemy.hp > 0);
+  return [node.end.death ? 1 : 0, target ? 1 : 0, node.end.bombCount > 0 ? 1 : 0, node.end.nextDamage > 0 ? 1 : 0,
+    node.end.adjacentStrong, node.end.strongArrival2, -node.minHp, -node.end.hp, target?.hp ?? 0, node.events.length, node.events.join(",")];
+}
+function autoPatrolCompareProductionRootPlacement(left, right, session) {
+  const a = autoPatrolProductionRootPlacementRank(left, session), b = autoPatrolProductionRootPlacementRank(right, session);
+  for (let i = 0; i < a.length - 1; i += 1) if (a[i] !== b[i]) return a[i] - b[i];
+  return a.at(-1).localeCompare(b.at(-1));
+}
+function autoPatrolCreateRootPlacementProductionShadowSession(targetId) {
+  const captured = autoPatrolCaptureProductionShadowState(), root = autoPatrolProductionShadowMetrics(targetId);
+  return { kind: "ROOT_PLACEMENT_PRODUCTION_SESSION", targetId, root, depth: 1, nodeIndex: 0, actionIndex: 0,
+    frontier: [{ events: [], captured, end: root, minHp: root.hp, bombPlaced: false }], next: [], completed: [], seen: new Map(),
+    budgetUsed: 0, complete: false };
+}
+function autoPatrolFinishProductionRootPlacementDepth(session) {
+  session.next.sort((a, b) => autoPatrolCompareProductionRootPlacement(a, b, session));
+  const groups = new Map();
+  for (const node of session.next) {
+    const target = node.captured.context.enemies.find(enemy => enemy.id === session.targetId && enemy.hp > 0);
+    const phase = !node.bombPlaced ? "PRE" : node.end.bombCount > 0 ? "ACTIVE" : "POST";
+    const key = `${phase}|${node.end.x},${node.end.y}|${target?.x},${target?.y}|${node.end.nextDamage > 0 ? 1 : 0}`;
+    if (!groups.has(key)) groups.set(key, []);
+    if (groups.get(key).length < 1) groups.get(key).push(node);
+  }
+  session.frontier = [...groups.values()].flat().sort((a, b) => autoPatrolCompareProductionRootPlacement(a, b, session))
+    .slice(0, AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.rootPlacementBeamWidth);
+  session.next = []; session.depth += 1; session.nodeIndex = 0; session.actionIndex = 0;
+  if (session.completed.length || session.depth > AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.rootPlacementMaxDepth || session.frontier.length === 0
+    || session.budgetUsed >= AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.rootPlacementMaxBudget) session.complete = true;
+}
+async function autoPatrolAdvanceRootPlacementProductionShadowSession(session, additionalBudget) {
+  const live = autoPatrolCaptureProductionShadowState(false); let remaining = Math.max(0, Math.floor(additionalBudget));
+  engine.beginProjectionSuppression();
+  try {
+    while (remaining > 0 && !session.complete && session.budgetUsed < AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.rootPlacementMaxBudget) {
+      if (session.nodeIndex >= session.frontier.length) { autoPatrolFinishProductionRootPlacementDepth(session); continue; }
+      const node = session.frontier[session.nodeIndex];
+      const actions = node.bombPlaced ? AUTO_PATROL_PRODUCTION_SHADOW_ACTIONS : ["MOVE_UP", "MOVE_RIGHT", "MOVE_DOWN", "MOVE_LEFT", "PLACE_BOMB"];
+      if (session.actionIndex >= actions.length) { session.nodeIndex += 1; session.actionIndex = 0; continue; }
+      const action = actions[session.actionIndex++]; session.budgetUsed += 1; remaining -= 1;
+      autoPatrolRestoreProductionShadowState(node.captured); const accepted = Boolean(await engine.transition(action));
+      if (!accepted || autoPatrolPlayerIsCurrentlyDead(context) || context.currentMapType !== "dungeon") continue;
+      const end = autoPatrolProductionShadowMetrics(session.targetId);
+      const child = { events: [...node.events, action], captured: autoPatrolCaptureProductionShadowState(), end,
+        minHp: Math.min(node.minHp, end.hp), bombPlaced: node.bombPlaced || action === "PLACE_BOMB" };
+      const targetAlive = Boolean(autoPatrolEnemyById(context, session.targetId));
+      if (!targetAlive && !end.death && end.bombCount === 0 && end.adjacentStrong === 0 && end.strongArrival2 === 0 && end.nextDamage === 0) { session.completed.push(child); continue; }
+      if (!child.bombPlaced && child.events.length >= 5) continue;
+      if (child.bombPlaced && end.bombCount === 0 && targetAlive) continue;
+      const key = autoPatrolProductionRootPlacementStateKey(child, session.targetId), old = session.seen.get(key);
+      if (old && old.minHp >= child.minHp && old.hp >= end.hp && old.length <= child.events.length) continue;
+      session.seen.set(key, { minHp: child.minHp, hp: end.hp, length: child.events.length }); session.next.push(child);
+    }
+    if (!session.complete && session.nodeIndex >= session.frontier.length) autoPatrolFinishProductionRootPlacementDepth(session);
+    if (!session.complete && session.budgetUsed >= AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.rootPlacementMaxBudget) session.complete = true;
+  } finally { autoPatrolRestoreProductionShadowState(live); engine.endProjectionSuppression(); }
+  const best = session.complete ? session.completed.slice().sort((a, b) => autoPatrolCompareProductionRootPlacement(a, b, session))[0] || null : null;
+  return { best, complete: session.complete, budgetUsed: session.budgetUsed };
+}
+function autoPatrolCreateMeleeContactProductionShadowSession(targetId) {
+  const captured = autoPatrolCaptureProductionShadowState(), root = autoPatrolProductionShadowMetrics(targetId), target = autoPatrolEnemyById(context, targetId);
+  return { kind: "MELEE_CONTACT_PRODUCTION_SESSION", targetId, targetStartHp: target?.hp || 0, root, depth: 1, nodeIndex: 0, actionIndex: 0,
+    frontier: [{ events: [], captured, end: root, minHp: root.hp }], next: [], completed: [], partials: [], budgetUsed: 0, complete: false };
+}
+function autoPatrolMeleeActions(node, targetId) {
+  const ctx = node.captured.context, target = ctx.enemies.find(enemy => enemy.id === targetId && enemy.hp > 0);
+  if (!target) return [];
+  const dirs = AUTO_PATROL_PRODUCTION_CONTACT_DIRECTIONS.map(direction => ({ ...direction, distance: Math.abs(ctx.player.x + direction.dx - target.x) + Math.abs(ctx.player.y + direction.dy - target.y) }))
+    .sort((a, b) => a.distance - b.distance || a.event.localeCompare(b.event));
+  const actions = [];
+  if (Math.abs(ctx.player.x - target.x) + Math.abs(ctx.player.y - target.y) === 1) {
+    const attack = AUTO_PATROL_PRODUCTION_CONTACT_DIRECTIONS.find(direction => ctx.player.x + direction.dx === target.x && ctx.player.y + direction.dy === target.y);
+    if (attack) actions.push(attack.event);
+  }
+  for (const row of dirs.slice(0, 2)) if (!actions.includes(row.event)) actions.push(row.event);
+  actions.push(ctx.bombs.length === 0 ? "PLACE_BOMB" : "PASS");
+  return actions;
+}
+function autoPatrolProductionMeleeRank(node, session) {
+  const target = node.captured.context.enemies.find(enemy => enemy.id === session.targetId && enemy.hp > 0), targetHp = target?.hp || 0;
+  return [node.end.death ? 1 : 0, node.end.bombCount > 0 ? 1 : 0, node.end.nextDamage > 0 ? 1 : 0, node.end.adjacentStrong, node.end.strongArrival2,
+    targetHp < session.targetStartHp - 0.5 ? 0 : 1, -node.minHp, -node.end.hp, target ? 1 : 0, targetHp, node.events.length, node.events.join(",")];
+}
+function autoPatrolCompareProductionMelee(left, right, session) {
+  const a = autoPatrolProductionMeleeRank(left, session), b = autoPatrolProductionMeleeRank(right, session);
+  for (let i = 0; i < a.length - 1; i += 1) if (a[i] !== b[i]) return a[i] - b[i];
+  return a.at(-1).localeCompare(b.at(-1));
+}
+function autoPatrolFinishProductionMeleeDepth(session) {
+  session.next.sort((a, b) => autoPatrolCompareProductionMelee(a, b, session));
+  const lanes = new Map();
+  for (const node of session.next) {
+    const target = node.captured.context.enemies.find(enemy => enemy.id === session.targetId && enemy.hp > 0);
+    const kind = node.events.includes("PLACE_BOMB") ? "BOMB" : target && target.hp < session.targetStartHp - 0.5 ? "PRESSURE" : "APPROACH";
+    const key = `${kind}|${node.end.bombCount > 0 ? "OWNED" : "CLEAR"}|${node.end.adjacentStrong > 0 ? "CONTACT" : "OPEN"}`;
+    if (!lanes.has(key)) lanes.set(key, []); if (lanes.get(key).length < 2) lanes.get(key).push(node);
+  }
+  session.frontier = [...lanes.values()].flat().slice(0, 10); session.next = []; session.depth += 1; session.nodeIndex = 0; session.actionIndex = 0;
+  if (session.depth > AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.meleeMaxDepth || session.frontier.length === 0
+    || session.budgetUsed >= AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.meleeMaxBudget) session.complete = true;
+}
+async function autoPatrolAdvanceMeleeContactProductionShadowSession(session, additionalBudget) {
+  const live = autoPatrolCaptureProductionShadowState(false); let remaining = Math.max(0, Math.floor(additionalBudget));
+  engine.beginProjectionSuppression();
+  try {
+    while (remaining > 0 && !session.complete && session.budgetUsed < AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.meleeMaxBudget) {
+      if (session.nodeIndex >= session.frontier.length) { autoPatrolFinishProductionMeleeDepth(session); continue; }
+      const node = session.frontier[session.nodeIndex], actions = autoPatrolMeleeActions(node, session.targetId);
+      if (session.actionIndex >= actions.length) { session.nodeIndex += 1; session.actionIndex = 0; continue; }
+      const action = actions[session.actionIndex++]; session.budgetUsed += 1; remaining -= 1;
+      autoPatrolRestoreProductionShadowState(node.captured); const accepted = Boolean(await engine.transition(action));
+      if (!accepted || autoPatrolPlayerIsCurrentlyDead(context) || context.currentMapType !== "dungeon") continue;
+      const end = autoPatrolProductionShadowMetrics(session.targetId), target = autoPatrolEnemyById(context, session.targetId);
+      const child = { events: [...node.events, action], captured: autoPatrolCaptureProductionShadowState(), end, minHp: Math.min(node.minHp, end.hp) };
+      const reduced = !target || target.hp < session.targetStartHp - 0.5;
+      const safe = end.bombCount === 0 && end.adjacentStrong === 0 && end.strongArrival2 === 0 && end.nextDamage === 0;
+      if (safe && reduced) session.completed.push(child);
+      if (reduced) session.partials.push(child);
+      session.next.push(child);
+    }
+    if (!session.complete && session.nodeIndex >= session.frontier.length) autoPatrolFinishProductionMeleeDepth(session);
+    if (!session.complete && session.budgetUsed >= AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.meleeMaxBudget) session.complete = true;
+  } finally { autoPatrolRestoreProductionShadowState(live); engine.endProjectionSuppression(); }
+  const best = session.complete ? session.completed.slice().sort((a, b) => autoPatrolCompareProductionMelee(a, b, session))[0] || null : null;
+  const partial = session.partials.slice().sort((a, b) => autoPatrolCompareProductionMelee(a, b, session))[0] || null;
+  return { best, partial, complete: session.complete, budgetUsed: session.budgetUsed };
+}
+function autoPatrolCreateContactArbitrationProductionShadowSession(ctx, targetId, rootSignature) {
+  return { kind: "CONTACT_ARBITRATION_PRODUCTION_SESSION", targetId, rootSignature,
+    rootPlacement: autoPatrolCreateRootPlacementProductionShadowSession(targetId),
+    melee: autoPatrolCreateMeleeContactProductionShadowSession(targetId),
+    contact: autoPatrolCreateSingleBombContactProductionShadowSession(ctx, targetId, rootSignature),
+    laneCursor: 0, laneResults: { root: null, melee: null, contact: null }, complete: false };
+}
+async function autoPatrolAdvanceContactArbitrationProductionShadowSession(session) {
+  const lanes = [
+    { key: "root", state: session.rootPlacement, budget: AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.rootPlacementSliceBudget,
+      advance: autoPatrolAdvanceRootPlacementProductionShadowSession },
+    { key: "melee", state: session.melee, budget: AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.meleeSliceBudget,
+      advance: autoPatrolAdvanceMeleeContactProductionShadowSession },
+    { key: "contact", state: session.contact, budget: AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.contactSliceBudget,
+      advance: autoPatrolAdvanceSingleBombContactProductionShadowSession }
+  ];
+  for (let offset = 0; offset < lanes.length; offset += 1) {
+    const index = (session.laneCursor + offset) % lanes.length, lane = lanes[index];
+    if (session.laneResults[lane.key]?.complete) continue;
+    session.laneResults[lane.key] = await lane.advance(lane.state, lane.budget);
+    session.laneCursor = (index + 1) % lanes.length;
+    break;
+  }
+  const root = session.laneResults.root || { best: null, complete: false, budgetUsed: session.rootPlacement.budgetUsed };
+  const melee = session.laneResults.melee || { best: null, partial: null, complete: false, budgetUsed: session.melee.budgetUsed };
+  const contact = session.laneResults.contact || { best: null, complete: false, budgetUsed: session.contact.budgetUsed };
+  session.complete = root.complete && melee.complete && contact.complete;
+  const candidates = [];
+  if (root.best) candidates.push({ ...root.best, root: session.rootPlacement.root, candidateClass: "SINGLE_BOMB_ROOT_PLACEMENT", budgetUsed: root.budgetUsed });
+  if (melee.best) candidates.push({ ...melee.best, root: session.melee.root, candidateClass: "MELEE_CONTACT_OWNERSHIP", budgetUsed: melee.budgetUsed });
+  if (contact.best) candidates.push({ ...contact.best, root: session.contact.root, candidateClass: "SINGLE_BOMB_CONTACT_OWNERSHIP", budgetUsed: contact.budgetUsed });
+  candidates.sort(autoPatrolCompareProductionCompleted);
+  return { best: session.complete ? candidates[0] || null : null, complete: session.complete,
+    budgetUsed: root.budgetUsed + melee.budgetUsed + contact.budgetUsed,
+    diagnostics: { activeLane: lanes[(session.laneCursor + lanes.length - 1) % lanes.length].key,
+      root: { complete: root.complete, budgetUsed: root.budgetUsed, completed: Boolean(root.best) },
+      melee: { complete: melee.complete, budgetUsed: melee.budgetUsed, completed: Boolean(melee.best), partial: Boolean(melee.partial) },
+      contact: { complete: contact.complete, budgetUsed: contact.budgetUsed, completed: Boolean(contact.best) } } };
+}
+
 function autoPatrolFinishProductionShadowDepth(session) {
   if (session.completed.length > 0) { session.complete = true; return; }
   session.frontier = [...session.nextByState.values()].sort(autoPatrolCompareProductionShadowNodes).slice(0, AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.beamWidth);
@@ -1082,6 +1383,7 @@ async function autoPatrolAdvanceProductionShadowSession(session, additionalBudge
       if (!previous || autoPatrolCompareProductionShadowNodes(candidate, previous) < 0) session.nextByState.set(key, candidate);
     }
     if (!session.complete && session.nodeIndex >= session.frontier.length) autoPatrolFinishProductionShadowDepth(session);
+    if (!session.complete && session.budgetUsed >= AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.maxBudget) session.complete = true;
   } finally { autoPatrolRestoreProductionShadowState(live); engine.endProjectionSuppression(); }
   const best = session.complete ? session.completed.slice().sort(autoPatrolCompareProductionShadowNodes)[0] || null : null;
   return { best, internal: best ? null : session.bestPartial, complete: session.complete, budgetUsed: session.budgetUsed };
@@ -1092,34 +1394,40 @@ async function autoPatrolMaybeAdvanceProductionShadow(ctx) {
     const target = autoPatrolProductionShadowRuntime.targetId == null ? null : autoPatrolEnemyById(ctx, autoPatrolProductionShadowRuntime.targetId);
     const routeBombs = playerBombs(ctx), bombCount = routeBombs.length;
     const ownedBombActive = bombCount === 1 && routeBombs[0].id === autoPatrolProductionShadowRuntime.ownedBombId;
-    const allowsOwnedBomb = autoPatrolProductionShadowRuntime.committedRouteClass === "SINGLE_BOMB_CONTACT_OWNERSHIP"
+    const allowsOwnedBomb = ["SINGLE_BOMB_CONTACT_OWNERSHIP", "SINGLE_BOMB_ROOT_PLACEMENT"].includes(autoPatrolProductionShadowRuntime.committedRouteClass)
       && (bombCount === 0 || ownedBombActive);
     if (!target || ctx.currentMapType !== "dungeon" || ctx.player.hp <= 0 || (!allowsOwnedBomb && bombCount > 0) || bombCount > 1) {
       if (autoPatrolProductionShadowRuntime.state === "SHADOW_ROUTE_ACTIVE") transitionAutoPatrolProductionShadow("INVALIDATE");
       resetAutoPatrolProductionShadow("committed-route-invalidated"); return null;
     }
+    const routeReason = autoPatrolProductionShadowRuntime.committedRouteClass === "SINGLE_BOMB_CONTACT_OWNERSHIP"
+      ? "single-bomb-contact" : autoPatrolProductionShadowRuntime.committedRouteClass === "SINGLE_BOMB_ROOT_PLACEMENT"
+        ? "single-bomb-root-placement" : "target-reacquisition";
     return { kind: "DISPATCH", event: autoPatrolProductionShadowRuntime.committedRoute[0], route: autoPatrolProductionShadowRuntime.committedRoute.slice(),
-      reason: `production-shadow-${autoPatrolProductionShadowRuntime.committedRouteClass === "SINGLE_BOMB_CONTACT_OWNERSHIP" ? "single-bomb-contact" : "target-reacquisition"}-route`,
-      targetId: autoPatrolProductionShadowRuntime.targetId, shadowRouteCommit: true };
+      reason: `production-shadow-${routeReason}-route`, targetId: autoPatrolProductionShadowRuntime.targetId, shadowRouteCommit: true };
   }
   const eligible = autoPatrolProductionShadowEligible(ctx);
   if (!eligible) { if (autoPatrolProductionShadowRuntime.session) resetAutoPatrolProductionShadow("ineligible"); return null; }
   const rootSignature = autoPatrolProductionShadowRootSignature(ctx, eligible.targetId, eligible.candidateClass);
+  if (autoPatrolProductionShadowRuntime.lastRejectedRootSignature === rootSignature) return null;
+  if (autoPatrolProductionShadowRuntime.lastRejectedRootSignature && autoPatrolProductionShadowRuntime.lastRejectedRootSignature !== rootSignature) {
+    autoPatrolProductionShadowRuntime.lastRejectedRootSignature = "";
+  }
   if (autoPatrolProductionShadowRuntime.session && (autoPatrolProductionShadowRuntime.rootSignature !== rootSignature
-      || autoPatrolProductionShadowRuntime.session.kind !== (eligible.candidateClass === "SINGLE_BOMB_CONTACT_OWNERSHIP" ? "SINGLE_BOMB_CONTACT_PRODUCTION_SESSION" : "TARGET_REACQUISITION_PRODUCTION_SESSION"))) {
+      || autoPatrolProductionShadowRuntime.session.kind !== (eligible.candidateClass === "CONTACT_CROSS_LANE_ARBITRATION" ? "CONTACT_ARBITRATION_PRODUCTION_SESSION" : "TARGET_REACQUISITION_PRODUCTION_SESSION"))) {
     resetAutoPatrolProductionShadow("root-changed");
   }
   if (!autoPatrolProductionShadowRuntime.session) {
     transitionAutoPatrolProductionShadow("ELIGIBLE");
-    autoPatrolProductionShadowRuntime.session = eligible.candidateClass === "SINGLE_BOMB_CONTACT_OWNERSHIP"
-      ? autoPatrolCreateSingleBombContactProductionShadowSession(ctx, eligible.targetId, rootSignature)
+    autoPatrolProductionShadowRuntime.session = eligible.candidateClass === "CONTACT_CROSS_LANE_ARBITRATION"
+      ? autoPatrolCreateContactArbitrationProductionShadowSession(ctx, eligible.targetId, rootSignature)
       : autoPatrolCreateTargetReacquisitionProductionShadowSession(ctx, eligible.targetId, rootSignature);
     autoPatrolProductionShadowRuntime.targetId = eligible.targetId; autoPatrolProductionShadowRuntime.rootSignature = rootSignature;
     transitionAutoPatrolProductionShadow("START");
   }
-  const isContact = eligible.candidateClass === "SINGLE_BOMB_CONTACT_OWNERSHIP";
+  const isContact = eligible.candidateClass === "CONTACT_CROSS_LANE_ARBITRATION";
   const result = isContact
-    ? await autoPatrolAdvanceSingleBombContactProductionShadowSession(autoPatrolProductionShadowRuntime.session, AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.contactSliceBudget)
+    ? await autoPatrolAdvanceContactArbitrationProductionShadowSession(autoPatrolProductionShadowRuntime.session)
     : await autoPatrolAdvanceProductionShadowSession(autoPatrolProductionShadowRuntime.session, AUTO_PATROL_PRODUCTION_SHADOW_CONFIG.sliceBudget);
   autoPatrolProductionShadowRuntime.budgetUsed = result.budgetUsed;
   autoPatrolProductionShadowRuntime.lastDiagnostic = { candidateClass: eligible.candidateClass, targetId: eligible.targetId,
@@ -1127,17 +1435,23 @@ async function autoPatrolMaybeAdvanceProductionShadow(ctx) {
   if (result.best) {
     transitionAutoPatrolProductionShadow("COMPLETE"); const event = result.best.events[0];
     autoPatrolProductionShadowRuntime.committedRoute = result.best.events.slice();
-    autoPatrolProductionShadowRuntime.committedRouteClass = eligible.candidateClass;
+    autoPatrolProductionShadowRuntime.committedRouteClass = result.best.candidateClass || eligible.candidateClass;
     autoPatrolProductionShadowRuntime.session = null; autoPatrolRuntime.meleePlan = null; autoPatrolRuntime.lurePlan = null;
     autoPatrolRuntime.lurePlanState = "LURE_PLAN_NONE";
     autoPatrolProductionShadowRuntime.lastDiagnostic = { ...autoPatrolProductionShadowRuntime.lastDiagnostic, completedEvents: result.best.events.slice() };
     return { kind: "DISPATCH", event, route: result.best.events.slice(),
-      reason: isContact ? "production-shadow-single-bomb-contact" : "production-shadow-target-reacquisition",
+      reason: isContact ? `production-shadow-${String(result.best.candidateClass || "contact").toLowerCase()}` : "production-shadow-target-reacquisition",
       targetId: eligible.targetId, shadowCompleted: true, shadowRouteCommit: true };
   }
-  if (result.complete) { transitionAutoPatrolProductionShadow("REJECT"); resetAutoPatrolProductionShadow("search-rejected"); return null; }
+  if (result.complete) {
+    autoPatrolProductionShadowRuntime.lastRejectedRootSignature = rootSignature;
+    transitionAutoPatrolProductionShadow("REJECT");
+    resetAutoPatrolProductionShadow("search-rejected");
+    autoPatrolProductionShadowRuntime.lastRejectedRootSignature = rootSignature;
+    return null;
+  }
   transitionAutoPatrolProductionShadow("SLICE");
-  return { kind: "SEARCH_PENDING", reason: isContact ? "production-shadow-single-bomb-contact-search" : "production-shadow-target-reacquisition-search", targetId: eligible.targetId };
+  return { kind: "SEARCH_PENDING", reason: isContact ? "production-shadow-contact-cross-lane-search" : "production-shadow-target-reacquisition-search", targetId: eligible.targetId };
 }
 
 const AUTO_PATROL_SCHEDULER_RUNTIME_KEYS = Object.freeze([
@@ -1404,16 +1718,54 @@ const RARITY_RANK = Object.fromEntries(RARITY_ORDER.map((rarity, index) => [rari
 
 const EQUIPMENT_OPTION_DEFINITIONS = {
   weapon: [
-    { id: 'edge', name: 'Keen Edge' },
-    { id: 'slayer', name: 'Slayer Mark' },
-    { id: 'ruin', name: 'Ruin Engraving' }
+    { id: 'edge', name: 'Keen Edge', effect: 'primary_stat' },
+    { id: 'slayer', name: 'Slayer Mark', effect: 'primary_stat' },
+    { id: 'ruin', name: 'Ruin Engraving', effect: 'primary_stat' },
+    { id: 'vital_recovery_weapon', name: 'Vital Recovery', effect: 'hp_recovery_bonus' }
   ],
   armor: [
-    { id: 'ward', name: 'Warding' },
-    { id: 'fortitude', name: 'Fortitude' },
-    { id: 'bastion', name: 'Bastion Seal' }
+    { id: 'ward', name: 'Warding', effect: 'primary_stat' },
+    { id: 'fortitude', name: 'Fortitude', effect: 'primary_stat' },
+    { id: 'bastion', name: 'Bastion Seal', effect: 'primary_stat' },
+    { id: 'vital_recovery_armor', name: 'Vital Recovery', effect: 'hp_recovery_bonus' }
   ]
 };
+
+const HP_RECOVERY_OPTION_RANGE_TENTHS = Object.freeze({
+  common: Object.freeze([10, 12]),
+  rare: Object.freeze([11, 14]),
+  very_rare: Object.freeze([13, 17]),
+  ultra_rare: Object.freeze([16, 20])
+});
+
+function equipmentOptionEffect(option) {
+  return option?.effect || 'primary_stat';
+}
+
+function equipmentOptionPrimaryPower(option) {
+  return equipmentOptionEffect(option) === 'primary_stat' ? Math.max(0, Number(option?.value) || 0) : 0;
+}
+
+function rollHpRecoveryBonusTenths(rarity = 'common', roll = gameRandom()) {
+  const [minimum, maximum] = HP_RECOVERY_OPTION_RANGE_TENTHS[rarity] || HP_RECOVERY_OPTION_RANGE_TENTHS.common;
+  return minimum + Math.floor(Math.min(0.999999999, Math.max(0, roll)) * (maximum - minimum + 1));
+}
+
+function createEquipmentOptionFromDefinition(definition, totalPower, itemRarity, rolls = {}) {
+  const rarity = rollEquipmentOptionRarity(itemRarity, rolls.rarity ?? gameRandom());
+  if (definition.effect === 'hp_recovery_bonus') {
+    return { id: definition.id, name: definition.name, rarity, effect: definition.effect, value: rollHpRecoveryBonusTenths(rarity, rolls.value ?? gameRandom()), enhancementSuccesses: 0 };
+  }
+  const rarityMultiplier = { common: 0.08, rare: 0.12, very_rare: 0.17, ultra_rare: 0.23 }[rarity];
+  const value = Math.max(1, Math.min(Math.max(1, totalPower - 1), Math.round(totalPower * rarityMultiplier)));
+  return { id: definition.id, name: definition.name, rarity, effect: definition.effect || 'primary_stat', value, enhancementSuccesses: 0 };
+}
+
+function formatEquipmentOptionValue(option) {
+  return equipmentOptionEffect(option) === 'hp_recovery_bonus'
+    ? `HP recovery +${((Number(option?.value) || 0) / 10).toFixed(1)}x`
+    : `+${Number(option?.value) || 0}`;
+}
 
 function optionRarityProbabilities(itemRarity = 'common') {
   const itemRank = RARITY_RANK[itemRarity] || 0;
@@ -1433,6 +1785,23 @@ function rollEquipmentOptionRarity(itemRarity = 'common', roll = gameRandom()) {
   return 'common';
 }
 
+const EQUIPMENT_OPTION_COUNT_DISTRIBUTIONS = Object.freeze({
+  common: Object.freeze([0.90, 0.10, 0.00, 0.00]),
+  rare: Object.freeze([0.50, 0.50, 0.00, 0.00]),
+  very_rare: Object.freeze([0.00, 0.40, 0.60, 0.00]),
+  ultra_rare: Object.freeze([0.00, 0.00, 0.70, 0.30])
+});
+
+function rollEquipmentOptionCount(itemRarity = 'common', roll = gameRandom()) {
+  const distribution = EQUIPMENT_OPTION_COUNT_DISTRIBUTIONS[itemRarity] || EQUIPMENT_OPTION_COUNT_DISTRIBUTIONS.common;
+  let cumulative = 0;
+  for (let count = 0; count < distribution.length; count++) {
+    cumulative += distribution[count];
+    if (roll < cumulative) return count;
+  }
+  return distribution.length - 1;
+}
+
 function deterministicEquipmentOptionRolls(depth, type, quality, itemRarity) {
   const source = `${depth}|${type}|${quality.toFixed(8)}|${itemRarity}`;
   let hash = 2166136261;
@@ -1444,20 +1813,38 @@ function deterministicEquipmentOptionRolls(depth, type, quality, itemRarity) {
     hash = (Math.imul(hash, 1664525) + 1013904223) >>> 0;
     return hash / 0x100000000;
   };
-  return { chance: next(), rarity: next(), kind: next() };
+  return {
+    count: next(),
+    options: Array.from({ length: 3 }, () => ({ rarity: next(), kind: next(), value: next() }))
+  };
 }
 
 function createEquipmentOption(type, totalPower, itemRarity = 'common', rolls = {}) {
-  const chanceRoll = rolls.chance ?? gameRandom();
-  const optionChance = 0.48 + (RARITY_RANK[itemRarity] || 0) * 0.10;
-  if (chanceRoll >= optionChance) return null;
   const definitions = EQUIPMENT_OPTION_DEFINITIONS[type] || [];
   if (definitions.length === 0) return null;
-  const rarity = rollEquipmentOptionRarity(itemRarity, rolls.rarity ?? gameRandom());
-  const rarityMultiplier = { common: 0.08, rare: 0.12, very_rare: 0.17, ultra_rare: 0.23 }[rarity];
-  const value = Math.max(1, Math.min(Math.max(1, totalPower - 1), Math.round(totalPower * rarityMultiplier)));
+  if (rolls.chance != null) {
+    const optionChance = 0.48 + (RARITY_RANK[itemRarity] || 0) * 0.10;
+    if (rolls.chance >= optionChance) return null;
+  }
   const definition = definitions[Math.floor((rolls.kind ?? gameRandom()) * definitions.length) % definitions.length];
-  return { id: definition.id, name: definition.name, rarity, effect: 'primary_stat', value, enhancementSuccesses: 0 };
+  return createEquipmentOptionFromDefinition(definition, totalPower, itemRarity, rolls);
+}
+
+function createEquipmentOptions(type, totalPower, itemRarity = 'common', rolls = {}) {
+  const definitions = EQUIPMENT_OPTION_DEFINITIONS[type] || [];
+  if (definitions.length === 0) return [];
+  const requestedCount = rollEquipmentOptionCount(itemRarity, rolls.count ?? gameRandom());
+  const count = Math.min(requestedCount, definitions.length, 3);
+  const available = definitions.slice();
+  const options = [];
+  for (let index = 0; index < count; index++) {
+    const optionRolls = rolls.options?.[index] || {};
+    const kindRoll = optionRolls.kind ?? gameRandom();
+    const definitionIndex = Math.floor(kindRoll * available.length) % available.length;
+    const [definition] = available.splice(definitionIndex, 1);
+    options.push(createEquipmentOptionFromDefinition(definition, totalPower, itemRarity, optionRolls));
+  }
+  return options;
 }
 
 function equipmentOptionSummary(item) {
@@ -1465,11 +1852,12 @@ function equipmentOptionSummary(item) {
   if (options.length === 0) return 'No option';
   return options.map(option => {
     const enhanced = option.enhancementSuccesses || 0;
-    return `${escapeHtml(rarityLabel(option.rarity))} ${escapeHtml(option.name)} +${option.value}${enhanced > 0 ? ` (Forge +${enhanced})` : ''}`;
+    return `${escapeHtml(rarityLabel(option.rarity))} ${escapeHtml(option.name)} ${escapeHtml(formatEquipmentOptionValue(option))}${enhanced > 0 ? ` (Forge +${enhanced})` : ''}`;
   }).join(', ');
 }
 
-const HOME_CONFIG = { purchasePrice: 10000 };
+const HOME_CONFIG = { purchasePrice: 10000, storagePageSize: 10, goldTransferPresets: [100, 1000, 10000, 100000, Infinity] };
+const EQUIPMENT_RANKS = Object.freeze(["E", "D", "C", "B", "A", "S", "SS", "SSS", "EX"]);
 const BLACKSMITH_CONFIG = { rerollCost: 1000, rarityWeights: [0.45, 0.30, 0.18, 0.07] };
 const EQUIPMENT_GROWTH_CONFIG = {
   levelUpgradeCost: 1000,
@@ -1593,9 +1981,19 @@ function strengthenEquipmentOption(item, option) {
   if (!item || !option) return;
   option.value += 1;
   option.enhancementSuccesses = (option.enhancementSuccesses || 0) + 1;
-  if (item.type === 'weapon') item.atk += 1;
-  else if (item.type === 'armor') item.def += 1;
+  if (equipmentOptionEffect(option) === 'primary_stat') synchronizeEquipmentPower(item);
   item.value = (item.value || 0) + 2;
+}
+
+function equippedHpRecoveryBonus(ctx) {
+  return [ctx?.player?.weapon, ctx?.player?.armor]
+    .flatMap(item => item?.options || [])
+    .filter(option => equipmentOptionEffect(option) === 'hp_recovery_bonus')
+    .reduce((sum, option) => sum + Math.max(0, Number(option.value) || 0) / 10, 0);
+}
+
+function naturalHpRecoveryMultiplier(ctx) {
+  return 1 + equippedHpRecoveryBonus(ctx);
 }
 
 function darkSmithCandidateEntries(ctx) {
@@ -1641,7 +2039,7 @@ function darkSmithEquipmentCard(entry, title, selectedOptionIndex = -1, focused 
   if (!entry?.item) return `<div class="smith-compare-card"><b>${title}</b><p style="color:#777;">Not selected</p></div>`;
   const item = entry.item;
   const stat = item.type === 'weapon' ? `ATK ${item.atk}` : `DEF ${item.def}`;
-  const options = (item.options || []).map((option, index) => `<div class="smith-option-row ${index === selectedOptionIndex ? 'selected' : ''}">${index + 1}. ${escapeHtml(rarityLabel(option.rarity))} ${escapeHtml(option.name)} +${option.value}</div>`).join('') || `<div class="smith-option-row" style="color:#777;">No option</div>`;
+  const options = (item.options || []).map((option, index) => `<div class="smith-option-row ${index === selectedOptionIndex ? 'selected' : ''}">${index + 1}. ${escapeHtml(rarityLabel(option.rarity))} ${escapeHtml(option.name)} ${escapeHtml(formatEquipmentOptionValue(option))}</div>`).join('') || `<div class="smith-option-row" style="color:#777;">No option</div>`;
   return `<div class="smith-compare-card ${focused ? 'focused' : ''}"><div style="font-size:12px;color:#ffcc66;"><b>${title}</b></div><div>${coloredEquipmentName(item)}</div><div style="font-size:9px;color:#aaa;">${rarityLabel(item.rarity)} / Equipment Lv.${item.equipmentLevel || 1} / Quality ${(item.qualityRate || 1).toFixed(4)} / ${stat}</div><div class="smith-option-list">${options}</div></div>`;
 }
 
@@ -1693,7 +2091,7 @@ function rollBlacksmithRarity(roll = gameRandom()) {
 function equipmentBasePower(item) {
   if (Number.isFinite(item?.basePower)) return item.basePower;
   const statKey = item?.type === 'weapon' ? 'atk' : 'def';
-  const optionPower = (item?.options || []).reduce((sum, option) => sum + (option.value || 0), 0);
+  const optionPower = (item?.options || []).reduce((sum, option) => sum + equipmentOptionPrimaryPower(option), 0);
   return Math.max(1, (item?.[statKey] || 1) - optionPower);
 }
 
@@ -1705,7 +2103,7 @@ function equipmentMasteryPowerBonus(item) {
 function synchronizeEquipmentPower(item) {
   if (!item) return item;
   const statKey = item.type === 'weapon' ? 'atk' : 'def';
-  const optionPower = (item.options || []).reduce((sum, option) => sum + (option.value || 0), 0);
+  const optionPower = (item.options || []).reduce((sum, option) => sum + equipmentOptionPrimaryPower(option), 0);
   item[statKey] = Math.max(1, equipmentBasePower(item) + equipmentMasteryPowerBonus(item) + optionPower);
   return item;
 }
@@ -1718,18 +2116,8 @@ function createBlacksmithProposal(entry, kind) {
   if (kind === 'level') {
     normalizeEquipmentGrowth(candidate);
     increaseEquipmentLevel(candidate);
-  } else if (kind === 'rarity') {
-    const nextRarity = rollBlacksmithRarity();
-    const oldQuality = RARITY_DEFINITIONS[original.rarity || 'common'].dropQuality;
-    const nextQuality = RARITY_DEFINITIONS[nextRarity].dropQuality;
-    candidate.rarity = nextRarity;
-    candidate.basePower = Math.max(1, Math.round(candidate.basePower * nextQuality / oldQuality));
-    candidate.value = Math.max(1, Math.round((original.value || 1) * nextQuality / oldQuality));
-    synchronizeEquipmentPower(candidate);
   } else {
-    const totalPower = original.type === 'weapon' ? original.atk : original.def;
-    candidate.options = [createEquipmentOption(original.type, Math.max(2, totalPower), original.rarity || 'common', { chance: 0, rarity: gameRandom(), kind: gameRandom() })];
-    synchronizeEquipmentPower(candidate);
+    return null;
   }
   return { source: entry.source, index: entry.index, targetInstanceId: original.instanceId, kind, original: structuredClone(original), candidate };
 }
@@ -1775,7 +2163,7 @@ function commitBlacksmithProposalStagingContext(ctx, staged) {
 
 function cloneDarkSmithExchangeItem(item) {
   if (!item) return item;
-  return { ...item, options: Array.isArray(item.options) ? item.options.slice() : [] };
+  return { ...item, options: Array.isArray(item.options) ? item.options.map(option => ({ ...option })) : [] };
 }
 
 function createDarkSmithExchangeStagingContext(ctx) {
@@ -1788,6 +2176,7 @@ function createDarkSmithExchangeStagingContext(ctx) {
     equipmentInventory: stagedInventory,
     logs: ctx.logs.slice(),
     darkSmithMenuEntries: [],
+    darkSmithReroll: { ...ctx.darkSmithReroll, targetEntries: [] },
     darkSmithChange: { ...ctx.darkSmithChange, targetEntries: [], partnerEntries: [] }
   };
   const entryFor = (entry) => {
@@ -1797,6 +2186,8 @@ function createDarkSmithExchangeStagingContext(ctx) {
     if (entry.source === 'inventory') return { ...entry, item: stagedInventory[entry.index] };
     return null;
   };
+  staged.darkSmithReroll.targetEntries = (ctx.darkSmithReroll?.targetEntries || []).map(entryFor).filter(Boolean);
+  staged.darkSmithReroll.target = entryFor(ctx.darkSmithReroll?.target);
   staged.darkSmithChange.targetEntries = (ctx.darkSmithChange?.targetEntries || []).map(entryFor).filter(Boolean);
   staged.darkSmithChange.partnerEntries = (ctx.darkSmithChange?.partnerEntries || []).map(entryFor).filter(Boolean);
   staged.darkSmithChange.target = entryFor(ctx.darkSmithChange?.target);
@@ -1830,9 +2221,13 @@ function commitDarkSmithExchangeStagingContext(ctx, staged) {
   ctx.player.armor = armor;
   ctx.equipmentInventory = currentInventory;
   ctx.logs = staged.logs;
+  ctx.forgeShards = staged.forgeShards;
+  ctx.darkSmithReroll = staged.darkSmithReroll;
   ctx.darkSmithChange = staged.darkSmithChange;
   ctx.darkSmithMenuEntries = darkSmithCandidateEntries(ctx);
   ctx.darkSmithSelectedIndex = Math.min(staged.darkSmithSelectedIndex, Math.max(0, ctx.darkSmithMenuEntries.length - 1));
+  const selectedOptionCount = ctx.darkSmithMenuEntries[ctx.darkSmithSelectedIndex]?.item?.options?.length || 1;
+  ctx.darkSmithOptionIndex = Math.min(staged.darkSmithOptionIndex || 0, selectedOptionCount - 1);
 }
 
 function createDarkSmithActionStagingContext(ctx) {
@@ -1845,6 +2240,7 @@ function createDarkSmithActionStagingContext(ctx) {
     darkSmithMenuEntries: [],
     darkSmithDismantleEntries: [],
     darkSmithSelectedIndex: ctx.darkSmithSelectedIndex,
+    darkSmithOptionIndex: ctx.darkSmithOptionIndex,
     darkSmithDismantleSelectedIndex: ctx.darkSmithDismantleSelectedIndex
   };
 }
@@ -1879,12 +2275,32 @@ function commitDarkSmithActionStagingContext(ctx, staged) {
   ctx.darkSmithSelectedIndex = Math.min(staged.darkSmithSelectedIndex, Math.max(0, ctx.darkSmithMenuEntries.length - 1));
 }
 
+function homeGoldTransferAmount(ctx, available) {
+  const requested = Math.max(0, Math.floor(autoPatrolRuntime.townGoldWithdrawalRequest || 0));
+  if (requested > 0) return Math.min(requested, available);
+  const presets = HOME_CONFIG.goldTransferPresets;
+  ctx.homeGoldTransferPresetIndex = Math.max(0, Math.min(Math.floor(ctx.homeGoldTransferPresetIndex ?? presets.length - 1), presets.length - 1));
+  const preset = presets[ctx.homeGoldTransferPresetIndex];
+  return Math.min(Number.isFinite(preset) ? preset : available, available);
+}
+function adjustHomeGoldTransferPreset(ctx, direction) {
+  const presets = HOME_CONFIG.goldTransferPresets;
+  ctx.homeGoldTransferPresetIndex = Math.max(0, Math.min((ctx.homeGoldTransferPresetIndex ?? presets.length - 1) + direction, presets.length - 1));
+  rebuildHomeMenuEntries(ctx);
+}
 function rebuildHomeMenuEntries(ctx) {
+  const storedEquipment = ctx.homeStorage?.equipment || [];
+  const pageSize = HOME_CONFIG.storagePageSize;
+  const pageCount = Math.max(1, Math.ceil(storedEquipment.length / pageSize));
+  ctx.homeStoredPage = Math.max(0, Math.min(Math.floor(ctx.homeStoredPage || 0), pageCount - 1));
+  const storedStart = ctx.homeStoredPage * pageSize;
   ctx.homeMenuEntries = [
     ...ctx.equipmentInventory.map((item, index) => ({ kind: 'carried', index, item })),
-    ...ctx.homeStorage.equipment.map((item, index) => ({ kind: 'stored', index, item })),
-    { kind: 'deposit_gold', amount: ctx.player.gold },
-    { kind: 'withdraw_gold', amount: Math.min(Math.max(0, Math.floor(autoPatrolRuntime.townGoldWithdrawalRequest || 0)) || 10, ctx.homeStorage.gold) }
+    { kind: 'deposit_gold', amount: homeGoldTransferAmount(ctx, ctx.player.gold) },
+    { kind: 'withdraw_gold', amount: homeGoldTransferAmount(ctx, ctx.homeStorage.gold) },
+    ...storedEquipment.slice(storedStart, storedStart + pageSize).map((item, offset) => ({
+      kind: 'stored', index: storedStart + offset, item, page: ctx.homeStoredPage
+    }))
   ];
   ctx.homeSelectedIndex = Math.min(ctx.homeSelectedIndex, Math.max(0, ctx.homeMenuEntries.length - 1));
 }
@@ -1900,7 +2316,9 @@ function createHomeStorageStagingContext(ctx) {
     },
     logs: [...ctx.logs],
     homeMenuEntries: [],
-    homeSelectedIndex: ctx.homeSelectedIndex
+    homeSelectedIndex: ctx.homeSelectedIndex,
+    homeStoredPage: ctx.homeStoredPage || 0,
+    homeGoldTransferPresetIndex: ctx.homeGoldTransferPresetIndex ?? HOME_CONFIG.goldTransferPresets.length - 1
   };
 }
 
@@ -1909,6 +2327,8 @@ function commitHomeStorageStagingContext(ctx, staged) {
   ctx.equipmentInventory = staged.equipmentInventory;
   ctx.homeStorage = staged.homeStorage;
   ctx.logs = staged.logs;
+  ctx.homeStoredPage = staged.homeStoredPage || 0;
+  ctx.homeGoldTransferPresetIndex = staged.homeGoldTransferPresetIndex ?? HOME_CONFIG.goldTransferPresets.length - 1;
   rebuildHomeMenuEntries(ctx);
   ctx.homeSelectedIndex = Math.min(staged.homeSelectedIndex, Math.max(0, ctx.homeMenuEntries.length - 1));
 }
@@ -2505,16 +2925,17 @@ function allocateEquipmentInstanceId(ctx, type) {
 
 function generateRandomEquipment(depth, type, qualityBias = 1, rarity = 'common', identityContext = context) {
   const prefixes = ["Bronze", "Iron", "Steel", "Chitin", "Mithril", "Demonic", "Astral", "Chrono", "Eternal"];
-  const ranks = ["E", "D", "C", "B", "A", "S", "SS", "SSS", "EX"];
+  const ranks = EQUIPMENT_RANKS;
   const tier = Math.min(prefixes.length - 1, Math.floor(Math.log2(Math.max(1, depth))));
   const quality = Math.max(0.9, qualityBias * (0.94 + gameRandom() * 0.18));
   const power = equipmentPowerForDepth(depth, type, quality);
   const enhancement = Math.max(0, Math.floor((quality - 0.9) * 20));
-  const option = createEquipmentOption(type, power, rarity, deterministicEquipmentOptionRolls(depth, type, quality, rarity));
-  const options = option ? [option] : [];
-  const basePower = Math.max(1, power - options.reduce((sum, current) => sum + current.value, 0));
+  const options = createEquipmentOptions(type, power, rarity, deterministicEquipmentOptionRolls(depth, type, quality, rarity));
+  const optionPower = options.reduce((sum, current) => sum + equipmentOptionPrimaryPower(current), 0);
+  const basePower = Math.max(1, power - optionPower);
+  const primaryStat = basePower + optionPower;
   const optionValue = options.reduce((sum, current) => sum + current.value * (1 + RARITY_RANK[current.rarity]), 0);
-  const value = Math.floor(18 + power * (type === 'weapon' ? 7 : 8) + optionValue * 3);
+  const value = Math.floor(18 + primaryStat * (type === 'weapon' ? 7 : 8) + optionValue * 3);
   const name = `${prefixes[tier]} ${type === 'weapon' ? 'Blade' : 'Aegis'} +${enhancement}`;
   const common = {
     instanceId: allocateEquipmentInstanceId(identityContext, type),
@@ -2522,8 +2943,8 @@ function generateRandomEquipment(depth, type, qualityBias = 1, rarity = 'common'
     name, type, rank: ranks[tier], value, rarity, options, basePower, equipmentLevel: Math.max(1, depth), masteryLevel: 0, masteryExp: 0, qualityRate: quality
   };
   return type === 'weapon'
-    ? { ...common, atk: power }
-    : { ...common, def: power };
+    ? { ...common, atk: primaryStat }
+    : { ...common, def: primaryStat };
 }
 
 function generateConsumable(depth, rarity = 'common') {
@@ -2751,6 +3172,15 @@ function canResolveFloorEquipmentPickup(ctx, equipment) {
 
 function autoPatrolResolvableFloorItems(ctx) {
   return ctx.items.filter(item => !['weapon', 'armor'].includes(item.type) || canResolveFloorEquipmentPickup(ctx, item));
+}
+function autoPatrolRemainingFoodEnemies(ctx) {
+  return (ctx.enemies || []).filter(enemy => enemy.isFoodEnemy && !enemy.isDead);
+}
+function autoPatrolHasPendingFloorCleanup(ctx) {
+  return autoPatrolRemainingFoodEnemies(ctx).length > 0 || autoPatrolResolvableFloorItems(ctx).length > 0;
+}
+function autoPatrolCanUseDungeonStairs(ctx) {
+  return !autoPatrolHostiles(ctx).length && !autoPatrolHasPendingFloorCleanup(ctx);
 }
 
 function autoEquipOrStoreEquipment(ctx, item, floorPosition = null) {
@@ -3289,6 +3719,7 @@ function commitMapTransitionStagingContext(ctx, staged) {
   ctx.explosionCells = staged.explosionCells;
   ctx.discoveredWarpFloors = staged.discoveredWarpFloors;
   ctx.pendingBossTownServiceFloors = staged.pendingBossTownServiceFloors;
+  ctx.pendingMapTransition = staged.pendingMapTransition || null;
   ctx.logs = staged.logs;
 }
 
@@ -3307,7 +3738,9 @@ function createMapGenerationStagingContext(ctx) {
     warpDestinations: ctx.warpDestinations.slice(),
     homeMenuEntries: ctx.homeMenuEntries.slice(),
     darkSmithMenuEntries: ctx.darkSmithMenuEntries.slice(),
+    darkSmithOptionIndex: ctx.darkSmithOptionIndex,
     darkSmithDismantleEntries: ctx.darkSmithDismantleEntries.slice(),
+    darkSmithReroll: stableClone(ctx.darkSmithReroll),
     darkSmithChange: stableClone(ctx.darkSmithChange),
     blacksmithEntries: ctx.blacksmithEntries.slice(),
     blacksmithProposal: ctx.blacksmithProposal ? stableClone(ctx.blacksmithProposal) : null,
@@ -3339,10 +3772,13 @@ function commitMapGenerationStagingContext(ctx, staged) {
   ctx.barMessage = staged.barMessage;
   ctx.homeMenuEntries = staged.homeMenuEntries;
   ctx.homeSelectedIndex = staged.homeSelectedIndex;
+  ctx.homeStoredPage = staged.homeStoredPage || 0;
   ctx.darkSmithMenuEntries = staged.darkSmithMenuEntries;
   ctx.darkSmithSelectedIndex = staged.darkSmithSelectedIndex;
+  ctx.darkSmithOptionIndex = staged.darkSmithOptionIndex;
   ctx.darkSmithDismantleEntries = staged.darkSmithDismantleEntries;
   ctx.darkSmithDismantleSelectedIndex = staged.darkSmithDismantleSelectedIndex;
+  ctx.darkSmithReroll = staged.darkSmithReroll;
   ctx.darkSmithChange = staged.darkSmithChange;
   ctx.blacksmithEntries = staged.blacksmithEntries;
   ctx.blacksmithSelectedIndex = staged.blacksmithSelectedIndex;
@@ -4332,7 +4768,7 @@ const turnLifecycleActions = {
   },
   apply_turn_recovery: runtime => {
     const ctx = runtime.ctx;
-    const recovery = ctx.player.maxHp * BALANCE_CONFIG.satiatedRegenRate;
+    const recovery = ctx.player.maxHp * BALANCE_CONFIG.satiatedRegenRate * naturalHpRecoveryMultiplier(ctx);
     const beforeHp = ctx.player.hp;
     ctx.player.hp = Math.min(ctx.player.maxHp, ctx.player.hp + recovery);
     if (ctx.player.hp > beforeHp) {
@@ -4681,7 +5117,7 @@ const EQUIPMENT_DEFINITION_TYPE = new Map([
 ]);
 const EQUIPMENT_OPTION_BY_ID = new Map(
   Object.entries(EQUIPMENT_OPTION_DEFINITIONS).flatMap(([type, definitions]) =>
-    definitions.map(definition => [`option.${definition.id}`, { ...definition, type, effect: "primary_stat" }])
+    definitions.map(definition => [`option.${definition.id}`, { ...definition, type, effect: definition.effect || "primary_stat" }])
   )
 );
 
@@ -4817,7 +5253,7 @@ function validateEquipment(saved, path, errors) {
   if (typeof saved.definitionId !== "string" || EQUIPMENT_DEFINITION_TYPE.get(saved.definitionId) !== saved.type) errors.push(`${path}.definitionId`);
   if (!validateBoundedNonEmptyString(saved.name, SAVE_TEXT_LIMITS.equipmentName)) errors.push(`${path}.name`);
   if (!RARITY_ORDER.includes(saved.rarity)) errors.push(`${path}.rarity`);
-  if (typeof saved.rank !== "string" || !/^[A-Z]$/.test(saved.rank)) errors.push(`${path}.rank`);
+  if (typeof saved.rank !== "string" || !EQUIPMENT_RANKS.includes(saved.rank)) errors.push(`${path}.rank`);
   if (!validateSafePositiveInteger(saved.basePower)) errors.push(`${path}.basePower`);
   if (!validateSafePositiveInteger(saved.equipmentLevel)) errors.push(`${path}.equipmentLevel`);
   if (!validateSafeNonNegativeInteger(saved.masteryLevel)) errors.push(`${path}.masteryLevel`);
@@ -4839,7 +5275,7 @@ function validateEquipment(saved, path, errors) {
   const optionIds = saved.options.map(option => option?.optionId).filter(optionId => typeof optionId === "string");
   if (new Set(optionIds).size !== optionIds.length) errors.push(`${path}.options.duplicateOptionId`);
   if (validateSafePositiveInteger(saved.basePower) && validateSafeNonNegativeInteger(saved.masteryLevel) && Array.isArray(saved.options)) {
-    const optionPower = saved.options.reduce((sum, option) => sum + (Number.isFinite(option?.value) ? option.value : 0), 0);
+    const optionPower = saved.options.reduce((sum, option) => sum + (option?.effect === 'primary_stat' && Number.isFinite(option?.value) ? option.value : 0), 0);
     const masteryPower = Math.floor(saved.basePower * saved.masteryLevel * EQUIPMENT_GROWTH_CONFIG.masteryPercentPerLevel);
     const expectedPrimaryStat = Math.max(1, saved.basePower + masteryPower + optionPower);
     if (!validateSafeDerivedNumber(masteryPower) && masteryPower !== 0) errors.push(`${path}.masteryLevel.derivedOverflow`);
@@ -5018,6 +5454,7 @@ const guards = {
   is_player_dead:    (ctx) => ctx.player.hp <= 0,
   is_player_won:     () => false,
   is_player_alive:   (ctx) => ctx.player.hp > 0,
+  has_pending_map_transition: (ctx) => ctx.player.hp > 0 && Boolean(ctx.pendingMapTransition),
 
   has_discovered_warps_at_town_stairs: (ctx) => ctx.currentMapType === "town" && ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs" && ctx.discoveredWarpFloors.length > 0,
   can_use_stairs:    (ctx) => ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "stairs" && !ctx.enemies.some(isHostileFloorEnemy),
@@ -5050,6 +5487,13 @@ const guards = {
   home_selected_stored_equipment: (ctx) => isCurrentHomeMenuEntry(ctx, ctx.homeMenuEntries[ctx.homeSelectedIndex]) && ctx.homeMenuEntries[ctx.homeSelectedIndex].kind === 'stored' && ctx.equipmentInventory.length < ctx.inventoryCapacity,
   home_selected_deposit_gold: (ctx) => ctx.homeMenuEntries[ctx.homeSelectedIndex]?.kind === 'deposit_gold' && ctx.player.gold > 0,
   home_selected_withdraw_gold: (ctx) => ctx.homeMenuEntries[ctx.homeSelectedIndex]?.kind === 'withdraw_gold' && ctx.homeStorage.gold > 0,
+  has_dark_smith_reroll_candidates: (ctx) => darkSmithCandidateEntries(ctx).length >= 1,
+  has_selected_dark_smith_reroll_target: (ctx) => isOwnedDarkSmithEntry(ctx, ctx.darkSmithReroll?.targetEntries?.[ctx.darkSmithReroll.targetIndex]),
+  can_confirm_dark_smith_reroll: (ctx) => {
+    const flow = ctx.darkSmithReroll;
+    const option = flow?.target?.item?.options?.[flow.optionIndex];
+    return Boolean(option && isOwnedDarkSmithEntry(ctx, flow.target) && ctx.player.gold >= DARK_SMITH_CONFIG.optionRerollCost);
+  },
   has_dark_smith_change_candidates: (ctx) => darkSmithCandidateEntries(ctx).length >= 2,
   has_selected_dark_smith_change_target: (ctx) => isOwnedDarkSmithEntry(ctx, ctx.darkSmithChange?.targetEntries?.[ctx.darkSmithChange.targetIndex]),
   has_selected_dark_smith_change_partner: (ctx) => isOwnedDarkSmithEntry(ctx, ctx.darkSmithChange?.partnerEntries?.[ctx.darkSmithChange.partnerIndex]),
@@ -5067,7 +5511,7 @@ const guards = {
   },
   can_attempt_dark_smith_upgrade: (ctx) => {
     const entry = ctx.darkSmithMenuEntries[ctx.darkSmithSelectedIndex];
-    const option = entry?.item?.options?.[0];
+    const option = entry?.item?.options?.[ctx.darkSmithOptionIndex || 0];
     return Boolean(isCurrentEquipmentEntry(ctx, entry) && option && ctx.forgeShards >= darkSmithMaterialCost(option));
   },
   has_selected_dark_smith_dismantle_item: (ctx) => { const entry = ctx.darkSmithDismantleEntries[ctx.darkSmithDismantleSelectedIndex]; return Boolean(entry && isCurrentEquipmentEntry(ctx, { source: 'inventory', index: entry.index, item: entry.item }) && entry.yield > 0); },
@@ -5083,7 +5527,7 @@ const guards = {
   can_afford_blacksmith: (ctx) => isCurrentEquipmentEntry(ctx, ctx.blacksmithEntries[ctx.blacksmithSelectedIndex]) && ctx.player.gold >= EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost,
   blacksmith_level_training_at_cap: (ctx) => {
     const entry = ctx.blacksmithEntries[ctx.blacksmithSelectedIndex];
-    return isCurrentEquipmentEntry(ctx, entry) && ctx.blacksmithKindIndex === 1 && (entry.item?.equipmentLevel || 1) >= equipmentLevelCap(ctx);
+    return isCurrentEquipmentEntry(ctx, entry) && ctx.blacksmithKindIndex === 0 && (entry.item?.equipmentLevel || 1) >= equipmentLevelCap(ctx);
   },
   has_blacksmith_proposal: (ctx) => Boolean(ctx.blacksmithProposal),
   can_place_bomb: (ctx) => ctx.currentMapType === "dungeon" && playerBombs(ctx).length < ctx.player.bombCapacity && !isBombAt(ctx, ctx.player.x, ctx.player.y)
@@ -5101,15 +5545,19 @@ function clearTransientInteractionRuntime(ctx) {
   ctx.barMessage = '';
   ctx.homeMenuEntries = [];
   ctx.homeSelectedIndex = 0;
+  ctx.homeStoredPage = 0;
   ctx.darkSmithMenuEntries = [];
   ctx.darkSmithSelectedIndex = 0;
+  ctx.darkSmithOptionIndex = 0;
   ctx.darkSmithDismantleEntries = [];
   ctx.darkSmithDismantleSelectedIndex = 0;
+  ctx.darkSmithReroll = { targetEntries: [], targetIndex: 0, target: null, optionIndex: 0 };
   ctx.darkSmithChange = { targetEntries: [], targetIndex: 0, target: null, partnerEntries: [], partnerIndex: 0, partner: null, focus: 'A', optionIndexA: 0, optionIndexB: 0 };
   ctx.blacksmithEntries = [];
   ctx.blacksmithSelectedIndex = 0;
   ctx.blacksmithKindIndex = 0;
   ctx.blacksmithProposal = null;
+  ctx.pendingMapTransition = null;
 }
 
 function createNewGameStagingContext(ctx) {
@@ -5165,6 +5613,7 @@ function commitDeathPenaltyStagingContext(ctx, staged) {
   ctx.darkSmithSelectedIndex = staged.darkSmithSelectedIndex;
   ctx.darkSmithDismantleEntries = staged.darkSmithDismantleEntries;
   ctx.darkSmithDismantleSelectedIndex = staged.darkSmithDismantleSelectedIndex;
+  ctx.darkSmithReroll = staged.darkSmithReroll;
   ctx.darkSmithChange = staged.darkSmithChange;
   ctx.blacksmithEntries = staged.blacksmithEntries;
   ctx.blacksmithSelectedIndex = staged.blacksmithSelectedIndex;
@@ -5277,8 +5726,11 @@ const actions = {
     staged.homeSelectedIndex = 0;
     staged.darkSmithMenuEntries = [];
     staged.darkSmithSelectedIndex = 0;
+    staged.darkSmithOptionIndex = 0;
     staged.darkSmithDismantleEntries = [];
     staged.darkSmithDismantleSelectedIndex = 0;
+    staged.darkSmithReroll = { targetEntries: [], targetIndex: 0, target: null, optionIndex: 0 };
+    staged.darkSmithChange = { targetEntries: [], targetIndex: 0, target: null, partnerEntries: [], partnerIndex: 0, partner: null, focus: 'A', optionIndexA: 0, optionIndexB: 0 };
     staged.forgeShards = 0;
     staged.blacksmithEntries = [];
     staged.blacksmithSelectedIndex = 0;
@@ -5361,8 +5813,22 @@ const actions = {
     captureDebugFloorStartSnapshot(ctx);
   },
 
-  trigger_stairs: (ctx) => {
+  prepare_stairs_transition: (ctx) => {
+    ctx.pendingMapTransition = {
+      kind: "STAIRS",
+      fromMapType: ctx.currentMapType,
+      fromDungeonMode: ctx.dungeonMode,
+      fromDepth: ctx.depth,
+      requestedTurn: ctx.turnCount
+    };
+  },
+
+  commit_pending_map_transition: (ctx) => {
+    const pending = ctx.pendingMapTransition;
+    if (!pending || pending.kind !== "STAIRS") return;
+    autoPatrolFinalizeFloorTransitionBoundary(ctx, pending);
     const staged = createMapTransitionStagingContext(ctx);
+    staged.explosionCells = [];
     if (staged.currentMapType === "town") {
       staged.currentMapType = "dungeon";
       staged.dungeonMode = "standard";
@@ -5384,7 +5850,9 @@ const actions = {
         if (staged.depth === 1000) addLog(staged, "MILESTONE: You reached the legendary B1000 floor!");
       }
     }
+    staged.pendingMapTransition = null;
     commitMapTransitionStagingContext(ctx, staged);
+    ctx.pendingMapTransition = null;
   },
 
   trigger_town_warp: (ctx) => {
@@ -5530,10 +5998,32 @@ const actions = {
   // --- 自宅ロジック ---
   prepare_home_menu: (ctx) => {
     ctx.homeStorage = ctx.homeStorage || { equipment: [], gold: 0 };
+    ctx.homeStoredPage = 0;
+    ctx.homeGoldTransferPresetIndex = HOME_CONFIG.goldTransferPresets.length - 1;
+    ctx.homeSelectedIndex = 0;
     rebuildHomeMenuEntries(ctx);
   },
   home_cursor_up: (ctx) => { ctx.homeSelectedIndex = Math.max(0, ctx.homeSelectedIndex - 1); },
   home_cursor_down: (ctx) => { ctx.homeSelectedIndex = Math.min(Math.max(0, ctx.homeMenuEntries.length - 1), ctx.homeSelectedIndex + 1); },
+  home_page_previous: (ctx) => {
+    const selected = ctx.homeMenuEntries[ctx.homeSelectedIndex];
+    if (selected?.kind === 'deposit_gold' || selected?.kind === 'withdraw_gold') { adjustHomeGoldTransferPreset(ctx, -1); return; }
+    if ((ctx.homeStoredPage || 0) <= 0) return;
+    ctx.homeStoredPage -= 1;
+    rebuildHomeMenuEntries(ctx);
+    const firstStored = ctx.homeMenuEntries.findIndex(entry => entry.kind === 'stored');
+    ctx.homeSelectedIndex = firstStored >= 0 ? firstStored : 0;
+  },
+  home_page_next: (ctx) => {
+    const selected = ctx.homeMenuEntries[ctx.homeSelectedIndex];
+    if (selected?.kind === 'deposit_gold' || selected?.kind === 'withdraw_gold') { adjustHomeGoldTransferPreset(ctx, 1); return; }
+    const pageCount = Math.max(1, Math.ceil((ctx.homeStorage?.equipment?.length || 0) / HOME_CONFIG.storagePageSize));
+    if ((ctx.homeStoredPage || 0) >= pageCount - 1) return;
+    ctx.homeStoredPage = (ctx.homeStoredPage || 0) + 1;
+    rebuildHomeMenuEntries(ctx);
+    const firstStored = ctx.homeMenuEntries.findIndex(entry => entry.kind === 'stored');
+    ctx.homeSelectedIndex = firstStored >= 0 ? firstStored : 0;
+  },
   deposit_home_equipment: (ctx) => {
     const entry = ctx.homeMenuEntries[ctx.homeSelectedIndex];
     if (!entry || entry.kind !== 'carried' || !isCurrentHomeMenuEntry(ctx, entry)) return;
@@ -5559,7 +6049,8 @@ const actions = {
   },
   deposit_home_gold: (ctx) => {
     const staged = createHomeStorageStagingContext(ctx);
-    const amount = staged.player.gold;
+    const entry = ctx.homeMenuEntries[ctx.homeSelectedIndex];
+    const amount = Math.min(Math.max(0, Math.floor(entry?.amount || 0)), staged.player.gold);
     if (amount <= 0) return;
     staged.player.gold -= amount;
     staged.homeStorage.gold += amount;
@@ -5569,8 +6060,8 @@ const actions = {
   },
   withdraw_home_gold: (ctx) => {
     const staged = createHomeStorageStagingContext(ctx);
-    const requested = Math.max(0, Math.floor(autoPatrolRuntime.townGoldWithdrawalRequest || 0));
-    const amount = Math.min(requested > 0 ? requested : 10, staged.homeStorage.gold);
+    const entry = ctx.homeMenuEntries[ctx.homeSelectedIndex];
+    const amount = Math.min(Math.max(0, Math.floor(entry?.amount || 0)), staged.homeStorage.gold);
     if (amount <= 0) return;
     staged.homeStorage.gold -= amount;
     staged.player.gold += amount;
@@ -5586,6 +6077,51 @@ const actions = {
   prepare_dark_smith_menu: (ctx) => {
     ctx.darkSmithMenuEntries = darkSmithCandidateEntries(ctx);
     ctx.darkSmithSelectedIndex = Math.min(ctx.darkSmithSelectedIndex, Math.max(0, ctx.darkSmithMenuEntries.length - 1));
+    const optionCount = ctx.darkSmithMenuEntries[ctx.darkSmithSelectedIndex]?.item?.options?.length || 1;
+    ctx.darkSmithOptionIndex = Math.min(ctx.darkSmithOptionIndex || 0, optionCount - 1);
+  },
+  prepare_dark_smith_reroll_target: (ctx) => {
+    ctx.darkSmithReroll = { targetEntries: darkSmithCandidateEntries(ctx), targetIndex: 0, target: null, optionIndex: 0 };
+  },
+  dark_smith_reroll_target_up: (ctx) => { ctx.darkSmithReroll.targetIndex = Math.max(0, ctx.darkSmithReroll.targetIndex - 1); },
+  dark_smith_reroll_target_down: (ctx) => { ctx.darkSmithReroll.targetIndex = Math.min(Math.max(0, ctx.darkSmithReroll.targetEntries.length - 1), ctx.darkSmithReroll.targetIndex + 1); },
+  prepare_dark_smith_reroll_option: (ctx) => {
+    const flow = ctx.darkSmithReroll;
+    flow.target = flow.targetEntries[flow.targetIndex] || null;
+    flow.optionIndex = 0;
+  },
+  dark_smith_reroll_option_up: (ctx) => { ctx.darkSmithReroll.optionIndex = Math.max(0, ctx.darkSmithReroll.optionIndex - 1); },
+  dark_smith_reroll_option_down: (ctx) => {
+    const flow = ctx.darkSmithReroll;
+    flow.optionIndex = Math.min(Math.max(0, (flow.target?.item?.options?.length || 1) - 1), flow.optionIndex + 1);
+  },
+  back_to_dark_smith_reroll_target: (ctx) => { ctx.darkSmithReroll.target = null; ctx.darkSmithReroll.optionIndex = 0; },
+  clear_dark_smith_reroll: (ctx) => { ctx.darkSmithReroll = { targetEntries: [], targetIndex: 0, target: null, optionIndex: 0 }; },
+  commit_dark_smith_reroll: (ctx) => {
+    if (!guards.can_confirm_dark_smith_reroll(ctx)) return;
+    const staged = createDarkSmithExchangeStagingContext(ctx);
+    if (!guards.can_confirm_dark_smith_reroll(staged)) return;
+    const flow = staged.darkSmithReroll;
+    const item = flow.target.item;
+    const oldOption = item.options[flow.optionIndex];
+    const definitions = (EQUIPMENT_OPTION_DEFINITIONS[item.type] || []).filter(definition => {
+      const occupiedByOtherSlot = item.options.some((option, index) => index !== flow.optionIndex && option.id === definition.id);
+      return !occupiedByOtherSlot;
+    });
+    const alternatives = definitions.filter(definition => definition.id !== oldOption.id);
+    const pool = alternatives.length ? alternatives : definitions;
+    if (!pool.length) return;
+    const definition = pool[Math.floor(gameRandom() * pool.length) % pool.length];
+    const totalPower = Math.max(2, item.type === 'weapon' ? item.atk : item.def);
+    const nextOption = createEquipmentOptionFromDefinition(definition, totalPower, item.rarity || 'common');
+    item.options[flow.optionIndex] = nextOption;
+    synchronizeEquipmentPower(item);
+    staged.player.gold -= DARK_SMITH_CONFIG.optionRerollCost;
+    recomputePlayerMaxHp(staged);
+    addLog(staged, `The Dark Smith rerolled ${oldOption.name} into ${nextOption.name} (${formatEquipmentOptionValue(nextOption)}) for ${DARK_SMITH_CONFIG.optionRerollCost} gold.`);
+    actions.clear_dark_smith_reroll(staged);
+    actions.prepare_dark_smith_menu(staged);
+    commitDarkSmithExchangeStagingContext(ctx, staged);
   },
   prepare_dark_smith_change_target: (ctx) => {
     ctx.darkSmithChange = { targetEntries: darkSmithCandidateEntries(ctx), targetIndex: 0, target: null, partnerEntries: [], partnerIndex: 0, partner: null, focus: 'A', optionIndexA: 0, optionIndexB: 0 };
@@ -5638,8 +6174,13 @@ const actions = {
     actions.prepare_dark_smith_menu(staged);
     commitDarkSmithExchangeStagingContext(ctx, staged);
   },
-  dark_smith_cursor_up: (ctx) => { ctx.darkSmithSelectedIndex = Math.max(0, ctx.darkSmithSelectedIndex - 1); },
-  dark_smith_cursor_down: (ctx) => { ctx.darkSmithSelectedIndex = Math.min(Math.max(0, ctx.darkSmithMenuEntries.length - 1), ctx.darkSmithSelectedIndex + 1); },
+  dark_smith_cursor_up: (ctx) => { ctx.darkSmithSelectedIndex = Math.max(0, ctx.darkSmithSelectedIndex - 1); ctx.darkSmithOptionIndex = 0; },
+  dark_smith_cursor_down: (ctx) => { ctx.darkSmithSelectedIndex = Math.min(Math.max(0, ctx.darkSmithMenuEntries.length - 1), ctx.darkSmithSelectedIndex + 1); ctx.darkSmithOptionIndex = 0; },
+  dark_smith_option_left: (ctx) => { ctx.darkSmithOptionIndex = Math.max(0, (ctx.darkSmithOptionIndex || 0) - 1); },
+  dark_smith_option_right: (ctx) => {
+    const count = ctx.darkSmithMenuEntries[ctx.darkSmithSelectedIndex]?.item?.options?.length || 1;
+    ctx.darkSmithOptionIndex = Math.min(count - 1, (ctx.darkSmithOptionIndex || 0) + 1);
+  },
   prepare_dark_smith_dismantle_menu: (ctx) => {
     ctx.darkSmithDismantleEntries = darkSmithDismantleEntries(ctx);
     ctx.darkSmithDismantleSelectedIndex = Math.min(ctx.darkSmithDismantleSelectedIndex, Math.max(0, ctx.darkSmithDismantleEntries.length - 1));
@@ -5659,24 +6200,26 @@ const actions = {
   },
   attempt_dark_smith_upgrade: (ctx) => {
     const entry = ctx.darkSmithMenuEntries[ctx.darkSmithSelectedIndex];
-    const option = entry?.item?.options?.[0];
+    const optionIndex = ctx.darkSmithOptionIndex || 0;
+    const option = entry?.item?.options?.[optionIndex];
     const materialCost = darkSmithMaterialCost(option);
     if (!isCurrentEquipmentEntry(ctx, entry) || !option || ctx.forgeShards < materialCost) return;
-    const staged = createDarkSmithActionStagingContext(ctx);
+    const staged = createDarkSmithExchangeStagingContext(ctx);
     staged.darkSmithMenuEntries = darkSmithCandidateEntries(staged);
+    staged.darkSmithOptionIndex = optionIndex;
     const stagedEntry = staged.darkSmithMenuEntries.find(candidate => candidate.item.instanceId === entry.item.instanceId);
-    const stagedOption = stagedEntry?.item?.options?.[0];
+    const stagedOption = stagedEntry?.item?.options?.[optionIndex];
     const stagedMaterialCost = darkSmithMaterialCost(stagedOption);
     if (!isCurrentEquipmentEntry(staged, stagedEntry) || !stagedOption || staged.forgeShards < stagedMaterialCost) return;
     const rate = darkSmithSuccessRate(stagedOption);
     staged.forgeShards -= stagedMaterialCost;
     if (gameRandom() < rate) {
       strengthenEquipmentOption(stagedEntry.item, stagedOption);
-      addLog(staged, `${stagedEntry.item.name}: ${stagedOption.name} strengthened to +${stagedOption.value}.`);
+      addLog(staged, `${stagedEntry.item.name}: ${stagedOption.name} strengthened to ${formatEquipmentOptionValue(stagedOption)}.`);
     } else {
       addLog(staged, `${stagedEntry.item.name}: forging failed. ${stagedMaterialCost} Forge Shard${stagedMaterialCost === 1 ? '' : 's'} consumed; the item was not damaged.`);
     }
-    commitDarkSmithActionStagingContext(ctx, staged);
+    commitDarkSmithExchangeStagingContext(ctx, staged);
   },
 
 
@@ -5713,14 +6256,14 @@ const actions = {
     actions.prepare_blacksmith_menu(ctx);
   },
   prepare_blacksmith_kind: (ctx) => { ctx.blacksmithKindIndex = 0; },
-  blacksmith_kind_up: (ctx) => { ctx.blacksmithKindIndex = Math.max(0, ctx.blacksmithKindIndex - 1); },
-  blacksmith_kind_down: (ctx) => { ctx.blacksmithKindIndex = Math.min(1, ctx.blacksmithKindIndex + 1); },
+  blacksmith_kind_up: (ctx) => { ctx.blacksmithKindIndex = 0; },
+  blacksmith_kind_down: (ctx) => { ctx.blacksmithKindIndex = 0; },
   roll_blacksmith_proposal: (ctx) => {
     const staged = createBlacksmithProposalStagingContext(ctx);
     const entry = staged.blacksmithEntries[staged.blacksmithSelectedIndex];
     if (!isCurrentEquipmentEntry(staged, entry) || staged.player.gold < EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost) return;
     staged.player.gold -= EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost;
-    const kind = staged.blacksmithKindIndex === 0 ? 'rarity' : 'level';
+    const kind = 'level';
     staged.blacksmithProposal = createBlacksmithProposal(entry, kind);
     addLog(staged, `The Blacksmith consumed ${EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost} gold and revealed a candidate alteration.`);
     commitBlacksmithProposalStagingContext(ctx, staged);
@@ -6842,14 +7385,14 @@ async function autoPatrolResolveDetectedCombatTrajectory(ctx, decision) {
       targetId: decision.targetId || objective.primaryTargetId || null
     };
   }
-  return autoPatrolLastStandDecision(ctx) || { kind: "PAUSE", reason: "detected-combat-no-untried-trajectory", targetId: decision.targetId || null };
+  return autoPatrolLastStandDecision(ctx) || autoPatrolForcedProgressDecision(ctx, decision.targetId || null, "forced-progress:detected-combat-no-untried-trajectory");
 }
 
 function autoPatrolObjectiveTypeFromDecision(decision) {
   const reason = decision?.reason || "";
   if (reason.startsWith("town-rest-")) return "REST_AT_INN";
   if (reason.startsWith("town-home-purchase-")) return "PURCHASE_HOME";
-  if (reason.startsWith("town-home-storage-")) return "STORE_RARE_EQUIPMENT";
+  if (reason.startsWith("town-home-storage-") || reason === "town-home-service-select" || reason === "town-home-storage-deposit") return "STORE_RARE_EQUIPMENT";
   if (reason.startsWith("town-smith-")) return "PROCESS_EQUIPMENT_AT_BLACKSMITH";
   if (reason.startsWith("town-sell-")) return "SELL_UNNEEDED_EQUIPMENT";
   if (reason.startsWith("town-shop-")) return "BUY_REQUIRED_RETURN_SCROLL";
@@ -7051,6 +7594,13 @@ function autoPatrolEnsureObjectiveForDecision(ctx, decision) {
   if (nextType === "ESCAPE_LETHAL_TARGET" && autoPatrolEscapeFailureBlocks(ctx, decision?.targetId)) return null;
   if (autoPatrolRuntime.activeObjective && autoPatrolRuntime.activeObjective.type !== nextType) autoPatrolFailObjective(ctx, `legacy-decision-changed:${nextType}`);
   const objective = autoPatrolRuntime.activeObjective || autoPatrolCreateObjective(ctx, decision);
+  objective.actionSequence = Array.isArray(objective.actionSequence) ? objective.actionSequence : [];
+  objective.progressSequence = Array.isArray(objective.progressSequence) ? objective.progressSequence : [];
+  objective.tacticalAttempts = Array.isArray(objective.tacticalAttempts) ? objective.tacticalAttempts : [];
+  objective.targetEnemyIds = Array.isArray(objective.targetEnemyIds) ? objective.targetEnemyIds : [];
+  objective.rejectedTrajectorySignatures = Array.isArray(objective.rejectedTrajectorySignatures) ? objective.rejectedTrajectorySignatures : [];
+  objective.visitedCombatStates = Array.isArray(objective.visitedCombatStates) ? objective.visitedCombatStates : [];
+  objective.visitedStateActions = Array.isArray(objective.visitedStateActions) ? objective.visitedStateActions : [];
   objective.allowedActions = [decision.event];
   if (objective.type === "DEFEAT_DETECTED_ENEMIES") {
     const addedTargetIds = autoPatrolUpdateDetectedCombatTargets(ctx, objective);
@@ -7377,7 +7927,7 @@ async function autoPatrolContinueLurePlan(ctx, frontendState) {
     if (classification === "ROBUST_SINGLE_LURE" && autoPatrolWalkableExitCount(ctx) >= plan.minimumExitCount && autoPatrolAdjacentHostiles(ctx).length <= plan.maximumAdjacentCount) {
       transitionAutoPatrolLurePlan("ROBUST_SINGLE");
       autoPatrolRuntime.lurePlansCompleted += 1;
-      autoPatrolStartMeleePlan(detected[0], "single-enemy-lure-complete");
+      autoPatrolStartMeleePlan(detected[0], "single-enemy-lure-complete", "HOLD_FOR_CONTACT");
       autoPatrolClearLurePlan(false);
       return autoPatrolContinueMeleePlan(ctx);
     }
@@ -7461,6 +8011,13 @@ const AUTO_PATROL_SURVIVAL_MODEL = Object.freeze({
   severeHpLossRatio: 0.40,
   materiallySaferHpRatio: 0.12,
   meleeVictoryReserveRatio: 0.08
+});
+const AUTO_PATROL_COMBAT_STYLE_MODEL = Object.freeze({
+  meleeTrainingHpRatio: 0.95,
+  meleeTrainingHunger: 60,
+  meleeTrainingDamageRatio: 0.35,
+  strongGeneralBombDamageRatio: 0.22,
+  strongGeneralBombMinimumHits: 4
 });
 
 function autoPatrolDistance(a, b) { return Math.abs(a.x - b.x) + Math.abs(a.y - b.y); }
@@ -7560,6 +8117,29 @@ function autoPatrolSelectAdjacent(ctx, enemies) {
     return { enemy, duel, pressure };
   }).sort((a, b) => autoPatrolCombatTargetPriority(ctx, a.enemy) - autoPatrolCombatTargetPriority(ctx, b.enemy) || a.duel.threat - b.duel.threat || a.enemy.id - b.enemy.id)[0];
 }
+function autoPatrolLureContactGuideDecision(ctx, target) {
+  const candidates = autoPatrolNeighbors(ctx.player.x, ctx.player.y)
+    .map(([x, y]) => ({ x, y, event: autoPatrolDirectionEvent(x - ctx.player.x, y - ctx.player.y) }))
+    .filter(cell => autoPatrolWalkable(ctx, cell.x, cell.y))
+    .filter(cell => !ctx.enemies.some(enemy => enemy.x === cell.x && enemy.y === cell.y))
+    .filter(cell => {
+      const detectedIds = autoPatrolDetectionIdsAtCell(ctx, cell.x, cell.y);
+      return detectedIds.length === 1 && detectedIds[0] === target.id;
+    })
+    .map(cell => {
+      const originalX = ctx.player.x, originalY = ctx.player.y;
+      ctx.player.x = cell.x; ctx.player.y = cell.y;
+      const exits = autoPatrolWalkableExitCount(ctx);
+      ctx.player.x = originalX; ctx.player.y = originalY;
+      return { ...cell, exits, distance: autoPatrolDistance(cell, target) };
+    })
+    .filter(cell => cell.exits >= 2)
+    .sort((left, right) => left.distance - right.distance || right.exits - left.exits || left.event.localeCompare(right.event));
+  const improving = candidates.find(cell => cell.distance < autoPatrolDistance(ctx.player, target));
+  if (improving) return { kind: "DISPATCH", event: improving.event, reason: "single-enemy-lure-guide-contact", targetId: target.id, combatOwnershipCommit: true };
+  return null;
+}
+
 function autoPatrolStartMeleePlan(target, reason, mode = "STANDARD") {
   autoPatrolRuntime.meleePlan = { targetId: target.id, reason, mode, committedAtTurn: context.turnCount };
 }
@@ -7577,7 +8157,20 @@ function autoPatrolContinueMeleePlan(ctx) {
   const target = autoPatrolEnemyById(ctx, plan.targetId);
   if (!target) { autoPatrolRuntime.meleePlan = null; autoPatrolRuntime.meleePlansCompleted += 1; return null; }
   const duel = autoPatrolDuel(ctx, target);
-  if (autoPatrolDistance(target, ctx.player) === 1) {
+  const targetDistance = autoPatrolDistance(target, ctx.player);
+  if (plan.mode === "HOLD_FOR_CONTACT" && targetDistance > 1) {
+    const detectedOthers = autoPatrolHostiles(ctx).filter(enemy => enemy.id !== target.id && enemy.hasDetectedPlayer);
+    if (target.hasDetectedPlayer && detectedOthers.length === 0 && autoPatrolWalkableExitCount(ctx) >= 2) {
+      const guide = autoPatrolLureContactGuideDecision(ctx, target);
+      if (guide) return guide;
+      plan.mode = "COMMIT_SAFE_MELEE_CONTACT_ROUTE";
+      const move = autoPatrolMoveDecision(ctx, [{ x: target.x, y: target.y }], "single-enemy-lure-committed-contact-route", true);
+      if (move) return { kind: "DISPATCH", ...move, targetId: target.id, combatOwnershipCommit: true };
+    }
+    autoPatrolRuntime.meleePlan = null;
+    return null;
+  }
+  if (targetDistance === 1) {
     if (!autoPatrolMeleeCommitmentIsSurvivable(ctx, target, duel)) {
       autoPatrolRuntime.meleePlan = null;
       return null;
@@ -7589,6 +8182,14 @@ function autoPatrolContinueMeleePlan(ctx) {
     const bomb = autoPatrolMaybeStartBombPlan(ctx, target, duel);
     if (bomb) { autoPatrolRuntime.meleePlan = null; return bomb; }
     return autoPatrolAttackDecision(ctx, target, "melee-plan-finish-target");
+  }
+  const adjacentBlocker = autoPatrolAdjacentHostiles(ctx).find(enemy => enemy.id !== target.id);
+  if (adjacentBlocker) {
+    // A committed route may become blocked by another hostile. Do not route
+    // around an adjacent enemy while it attacks; release the stale target so
+    // the base combat decision can own and resolve the immediate contact.
+    autoPatrolRuntime.meleePlan = null;
+    return null;
   }
   if (isCombatActive(ctx) || autoPatrolCommittedMeleePlanIsValid(ctx, plan, target)) {
     const reason = plan.mode === "COMMIT_SAFE_MELEE_CONTACT_ROUTE" ? "committed-safe-melee-contact-route" : "melee-plan-approach";
@@ -7638,6 +8239,11 @@ function autoPatrolFinalizeBombPlan(ctx, reason) {
     turn: ctx.turnCount
   };
   autoPatrolRecordUnproductiveBombTrajectory(ctx, plan, reason);
+  if (plan.wallBreach) {
+    const opened = ctx.grid[plan.wallBreach.y]?.[plan.wallBreach.x] !== 1;
+    if (opened) autoPatrolRuntime.wallBreachPlansCompleted += 1;
+    else autoPatrolRuntime.wallBreachPlansInvalidated += 1;
+  }
   autoPatrolRuntime.lastBombPlanTerminal = projection;
   autoPatrolRuntime.bombPlan = null;
   return projection;
@@ -7794,6 +8400,31 @@ function autoPatrolAdjacentBombTradeoff(ctx, target, duel) {
     escape
   };
 }
+function autoPatrolGeneralEnemyBombPreference(ctx, target, duel = autoPatrolDuel(ctx, target)) {
+  if (!target || target.isBoss || target.isAbyssBoss || !isHostileFloorEnemy(target)) {
+    return { preferBomb: false, allowMeleeTraining: false, strong: false, meleeExpectedDamage: 0 };
+  }
+  const hpRatio = ctx.player.hp / Math.max(1, ctx.player.maxHp);
+  const additionalPressure = autoPatrolAdditionalPressureDuringDuel(ctx, target, duel.hits, true);
+  const meleeExpectedDamage = duel.damage + additionalPressure;
+  const damageRatio = meleeExpectedDamage / Math.max(1, ctx.player.maxHp);
+  const strong = autoPatrolIsStrongHostile(ctx, target)
+    || damageRatio >= AUTO_PATROL_COMBAT_STYLE_MODEL.strongGeneralBombDamageRatio
+    || duel.hits >= AUTO_PATROL_COMBAT_STYLE_MODEL.strongGeneralBombMinimumHits;
+  const allowMeleeTraining = strong
+    && hpRatio >= AUTO_PATROL_COMBAT_STYLE_MODEL.meleeTrainingHpRatio
+    && ctx.player.hunger >= AUTO_PATROL_COMBAT_STYLE_MODEL.meleeTrainingHunger
+    && damageRatio <= AUTO_PATROL_COMBAT_STYLE_MODEL.meleeTrainingDamageRatio
+    && autoPatrolMeleeCommitmentIsSurvivable(ctx, target, duel);
+  return {
+    preferBomb: strong && !allowMeleeTraining,
+    allowMeleeTraining,
+    strong,
+    meleeExpectedDamage,
+    damageRatio,
+    hpRatio
+  };
+}
 function autoPatrolIsStrongHostile(ctx, enemy) {
   if (!enemy || !isHostileFloorEnemy(enemy)) return false;
   const band = enemyThreatBand(ctx, enemy);
@@ -7876,18 +8507,30 @@ function autoPatrolMaybeStartBombPlan(ctx, target, duel) {
   if (autoPatrolRuntime.bombEscapeSuppressUntilTurn >= ctx.turnCount
       && (!autoPatrolRuntime.bombEscapeSuppressTargetId || autoPatrolRuntime.bombEscapeSuppressTargetId === target.id)) return null;
   if (!guards.can_place_bomb(ctx)) return null;
-  if (enemyMovementPolicy(target) !== ENEMY_MOVEMENT_POLICY.HORIZONTAL_FIRST) return null;
+  // Bomb combat policy is based on enemy role, not movement implementation.
+  // Very-rare general enemies use A* movement but remain general enemies; only
+  // bosses are excluded by autoPatrolGeneralEnemyBombPreference().
   const aligned = target.x === ctx.player.x || target.y === ctx.player.y;
   const range = autoPatrolDistance(target, ctx.player);
-  if (!aligned || range < 1 || range > 4 || autoPatrolBombDamageAgainstEnemy(ctx, target) < target.hp) return null;
+  if (!aligned || range < 1 || range > 4) return null;
+  const generalPreference = autoPatrolGeneralEnemyBombPreference(ctx, target, duel);
+  if (generalPreference.allowMeleeTraining) return null;
+  const bombCanFinish = autoPatrolBombDamageAgainstEnemy(ctx, target) >= target.hp;
+  if (!bombCanFinish && !generalPreference.preferBomb) return null;
   const pressure = autoPatrolPressureAfterTarget(ctx, target, duel.hits);
   const nearestOther = ctx.enemies.filter(enemy => enemy !== target && isHostileFloorEnemy(enemy)).reduce((min, enemy) => Math.min(min, autoPatrolArrivalTurns(ctx, enemy)), 999);
   const arrivalRisk = nearestOther <= duel.hits + AUTO_PATROL_SURVIVAL_MODEL.arrivalMargin;
   const strong = duel.damage / ctx.player.maxHp >= AUTO_PATROL_SURVIVAL_MODEL.strongDamageRatio || duel.remainingHp < ctx.player.maxHp * AUTO_PATROL_SURVIVAL_MODEL.reserveHpRatio || duel.hits >= 3 || arrivalRisk;
-  if (!strong || pressure < 1) return null;
+  if (!strong || (pressure < 1 && !generalPreference.preferBomb)) return null;
   const tradeoff = autoPatrolAdjacentBombTradeoff(ctx, target, duel);
-  if (!tradeoff.allowed) return null;
-  return autoPatrolStartBombPlan(ctx, target, tradeoff.reason, tradeoff.escape);
+  const bombMateriallySafer = tradeoff.escape
+    && tradeoff.bombExpectedDamage < ctx.player.hp
+    && tradeoff.bombExpectedDamage + Math.max(1, ctx.player.maxHp * 0.04) < generalPreference.meleeExpectedDamage;
+  if (!tradeoff.allowed && !(generalPreference.preferBomb && bombMateriallySafer)) return null;
+  const reason = generalPreference.preferBomb
+    ? "planned-bomb-strong-general-enemy"
+    : tradeoff.reason;
+  return autoPatrolStartBombPlan(ctx, target, reason, tradeoff.escape);
 }
 
 async function autoPatrolContinueBombSetupPlan(ctx, frontendState) {
@@ -7956,7 +8599,7 @@ function autoPatrolTacticalFoodOpportunity(ctx, target) {
   const nearestArrival = hostiles.reduce((min, enemy) => Math.min(min, autoPatrolArrivalTurns(ctx, enemy)), 999);
   const foodCombatReserve = Math.max(ctx.player.maxHp * 0.10, enemyDamageAgainstPlayer(ctx, target), 1);
   const requiredHp = duel.damage + foodCombatReserve;
-  const recoveryPerTurn = Math.max(0.01, ctx.player.maxHp * BALANCE_CONFIG.satiatedRegenRate);
+  const recoveryPerTurn = Math.max(0.01, ctx.player.maxHp * BALANCE_CONFIG.satiatedRegenRate * naturalHpRecoveryMultiplier(ctx));
   const detectedHostiles = hostiles.filter(enemy => enemy.hasDetectedPlayer);
   const recoveryTurns = detectedHostiles.length ? Math.max(0, Math.ceil((requiredHp - ctx.player.hp) / recoveryPerTurn)) : 0;
   const commitmentTurns = huntTurns + recoveryTurns;
@@ -7976,17 +8619,18 @@ function autoPatrolFoodHuntDecision(ctx) {
   const hostileCount = autoPatrolHostiles(ctx).length;
   const stairsReady = autoPatrolHasStairs(ctx);
   const floorBlockedByFood = !stairsReady && hostileCount === 0 && allFoodEnemies.length > 0;
-  const optionalFoodHunt = stairsReady && ctx.player.hunger < BALANCE_CONFIG.fullHunger;
+  const mandatoryFloorCleanup = stairsReady && hostileCount === 0 && allFoodEnemies.length > 0;
+  const optionalFoodHunt = mandatoryFloorCleanup || (stairsReady && ctx.player.hunger < BALANCE_CONFIG.fullHunger);
   const tacticalTarget = hostileCount > 0 ? autoPatrolFoodTarget(ctx, autoPatrolRuntime.foodHuntPlan?.targetId, false, true) : null;
   const tacticalOpportunity = autoPatrolTacticalFoodOpportunity(ctx, tacticalTarget);
   const tacticalFoodHunt = Boolean(tacticalOpportunity);
-  const huntNeeded = autoPatrolResolvableFloorItems(ctx).length === 0 && (passiveFoods.length > 0 || Boolean(plannedTarget?.isFoodEnemy)) && ((hostileCount === 0 && (floorBlockedByFood || optionalFoodHunt)) || tacticalFoodHunt);
+  const huntNeeded = autoPatrolResolvableFloorItems(ctx).length === 0 && ((mandatoryFloorCleanup && allFoodEnemies.length > 0) || passiveFoods.length > 0 || Boolean(plannedTarget?.isFoodEnemy)) && ((hostileCount === 0 && (floorBlockedByFood || optionalFoodHunt)) || tacticalFoodHunt);
   if (!huntNeeded) {
     if (autoPatrolRuntime.foodHuntPlan) { transitionAutoPatrolFoodHunt("TARGET_DEFEATED"); autoPatrolRuntime.foodHuntTargetsDefeated += 1; }
     autoPatrolResetFoodHunt("TARGET_DEFEATED");
     return null;
   }
-  const target = tacticalFoodHunt ? tacticalTarget : autoPatrolFoodTarget(ctx, autoPatrolRuntime.foodHuntPlan?.targetId, floorBlockedByFood);
+  const target = tacticalFoodHunt ? tacticalTarget : autoPatrolFoodTarget(ctx, autoPatrolRuntime.foodHuntPlan?.targetId, floorBlockedByFood || mandatoryFloorCleanup);
   if (!target) {
     if (autoPatrolRuntime.foodHuntState === "FOOD_HUNT_EVALUATE") transitionAutoPatrolFoodHunt("TARGET_UNAVAILABLE");
     autoPatrolResetFoodHunt();
@@ -8003,8 +8647,10 @@ function autoPatrolFoodHuntDecision(ctx) {
       return { kind: "DISPATCH", event: "PASS", reason: tacticalFoodHunt ? "food-hunt-tactical-recovery" : "food-hunt-recovery", targetId: target.id };
     }
     if (autoPatrolRuntime.foodHuntState === "FOOD_HUNT_RECOVER") transitionAutoPatrolFoodHunt("RECOVERY_UNAVAILABLE");
-    autoPatrolResetFoodHunt();
-    return null;
+    if (!mandatoryFloorCleanup) {
+      autoPatrolResetFoodHunt();
+      return null;
+    }
   }
   if (autoPatrolRuntime.foodHuntState === "FOOD_HUNT_RECOVER") transitionAutoPatrolFoodHunt("RECHECK");
   if (!autoPatrolRuntime.foodHuntPlan || autoPatrolRuntime.foodHuntPlan.targetId !== target.id) {
@@ -8145,6 +8791,10 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
   if (frontendState === "FE_WARP_MENU") return { kind: "DISPATCH", event: "SELECT", reason: "town-resume-select-warp" };
   if (frontendState === "FE_HOME_PURCHASE_MENU") return { kind: "DISPATCH", event: autoPatrolTownNeedsHomePurchase(ctx) ? "SELECT" : "ESCAPE", reason: autoPatrolTownNeedsHomePurchase(ctx) ? "town-home-purchase-confirm" : "town-home-purchase-unaffordable" };
   if (frontendState === "FE_HOME_MENU") {
+    // Debug/save snapshots created before storage paging may still contain the
+    // entire warehouse in homeMenuEntries. Re-project the current page before
+    // deciding so manual resume and auto patrol share the same bounded menu.
+    rebuildHomeMenuEntries(ctx);
     let entryIndex = -1;
     let reason = "town-home-storage-select";
     if (autoPatrolTownNeedsInnWithdrawal(ctx)) {
@@ -8506,6 +9156,10 @@ function autoPatrolStallBombDecision(ctx) {
 function autoPatrolOscillationStairsFallback(ctx) {
   if (ctx.currentMapType !== "dungeon") return null;
   if (autoPatrolHostiles(ctx).some(enemy => enemy.hasDetectedPlayer) || autoPatrolAdjacentHostiles(ctx).length) return null;
+  const cleanupLoot = autoPatrolMoveDecision(ctx, autoPatrolResolvableFloorItems(ctx), "oscillation-cleanup-loot");
+  if (cleanupLoot) return { kind: "DISPATCH", ...cleanupLoot };
+  const cleanupFood = autoPatrolFoodHuntDecision(ctx);
+  if (cleanupFood) return cleanupFood;
   const stairs = autoPatrolStairsTiles(ctx);
   if (!stairs.length) {
     if (!autoPatrolHostiles(ctx).length) return null;
@@ -8518,7 +9172,7 @@ function autoPatrolOscillationStairsFallback(ctx) {
   }
   autoPatrolRuntime.floorHuntAbandonedDepth = ctx.depth;
   autoPatrolRuntime.floorHuntAbandonReason = "oscillation-no-alternative";
-  if (stairs.some(tile => tile.x === ctx.player.x && tile.y === ctx.player.y) && !ctx.enemies.some(enemy => enemy.isBoss)) {
+  if (stairs.some(tile => tile.x === ctx.player.x && tile.y === ctx.player.y) && autoPatrolCanUseDungeonStairs(ctx)) {
     return { kind: "DISPATCH", event: "INTERACT", reason: "oscillation-stairs-fallback" };
   }
   const move = autoPatrolMoveDecision(ctx, stairs, "oscillation-stairs-fallback");
@@ -8587,7 +9241,7 @@ function decideAutoPatrolBaseAction(ctx, frontendState) {
     if (portalMove) return { kind: "DISPATCH", ...portalMove };
   }
   const stairs = Object.entries(ctx.tiles).filter(([, type]) => type === "stairs").map(([key]) => { const [x, y] = key.split(',').map(Number); return { x, y }; });
-  if (stairs.some(tile => tile.x === ctx.player.x && tile.y === ctx.player.y) && !ctx.enemies.some(enemy => enemy.isBoss)) return { kind: "DISPATCH", event: "INTERACT", reason: ctx.player.hunger <= AUTO_PATROL_SURVIVAL_MODEL.hungerFloor ? "descend-hunger-reserve" : "descend-ready" };
+  if (stairs.some(tile => tile.x === ctx.player.x && tile.y === ctx.player.y) && autoPatrolCanUseDungeonStairs(ctx)) return { kind: "DISPATCH", event: "INTERACT", reason: ctx.player.hunger <= AUTO_PATROL_SURVIVAL_MODEL.hungerFloor ? "descend-hunger-reserve" : "descend-ready" };
   const suppressedApproachTargetId = autoPatrolRuntime.bombEscapeSuppressUntilTurn >= ctx.turnCount
     ? autoPatrolRuntime.bombEscapeSuppressTargetId
     : null;
@@ -8608,12 +9262,14 @@ function decideAutoPatrolBaseAction(ctx, frontendState) {
 function autoPatrolRestoreContext(target, snapshot) {
   for (const key of Object.keys(target)) delete target[key];
   Object.assign(target, structuredClone(snapshot));
+  target.pendingMapTransition = null;
 }
 function autoPatrolClonePlanRuntime() {
   return structuredClone({
     bombPlan: autoPatrolRuntime.bombPlan,
     pendingBombPlan: autoPatrolRuntime.pendingBombPlan,
     bombSetupPlan: autoPatrolRuntime.bombSetupPlan,
+    wallBreachPlan: autoPatrolRuntime.wallBreachPlan,
     bombLurePlan: autoPatrolRuntime.bombLurePlan,
     bombLureEvaluatedDepth: autoPatrolRuntime.bombLureEvaluatedDepth,
     meleePlan: autoPatrolRuntime.meleePlan,
@@ -9224,6 +9880,14 @@ function autoPatrolClassifyBombSimulation(result) {
   if ((result?.detonationPlayerHpLoss || 0) > (result?.detonationHostileHpLoss || 0) && (result?.detonationPlayerHpLoss || 0) > 0) reasons.push('POOR_DETONATION_TRADE');
   return { safe: reasons.length === 0, reasons };
 }
+function autoPatrolBombSimulationBeatsMelee(ctx, target, result) {
+  if (!target || target.isBoss || target.isAbyssBoss || !result?.accepted || result.dead || result.unresolved) return false;
+  if ((result.trapped || 0) > 0 || (result.maxAdjacent || 0) >= 2 || (result.targetHpLoss || 0) <= 0) return false;
+  const preference = autoPatrolGeneralEnemyBombPreference(ctx, target);
+  if (!preference.preferBomb) return false;
+  const margin = Math.max(1, ctx.player.maxHp * 0.04);
+  return (result.playerHpLoss || 0) + margin < preference.meleeExpectedDamage;
+}
 async function autoPatrolSimulatePendingBombLifecycle(transaction, horizon = 8) {
   const contextSnapshot = structuredClone(context);
   const stateSnapshot = engine.currentState;
@@ -9391,6 +10055,30 @@ async function autoPatrolSimulateShiftedWallAlternative(event, targetId, transac
 }
 
 async function autoPatrolSelectBombRejectedFallback(ctx, targetId) {
+  const hostiles = autoPatrolHostiles(ctx);
+  if (hostiles.length > 4) {
+    const currentAdjacent = hostiles.filter(enemy => autoPatrolDistance(enemy, ctx.player) === 1).length;
+    const staticRetreats = [];
+    for (const [x, y] of autoPatrolNeighbors(ctx.player.x, ctx.player.y)) {
+      if (!autoPatrolWalkable(ctx, x, y) || ctx.enemies.some(enemy => enemy.x === x && enemy.y === y)) continue;
+      const event = autoPatrolDirectionEvent(x - ctx.player.x, y - ctx.player.y);
+      if (!event) continue;
+      const adjacent = hostiles.filter(enemy => Math.abs(enemy.x - x) + Math.abs(enemy.y - y) === 1).length;
+      const exits = autoPatrolNeighbors(x, y).filter(([nx, ny]) => autoPatrolWalkable(ctx, nx, ny)
+        && !ctx.enemies.some(enemy => enemy.x === nx && enemy.y === ny)).length;
+      if (adjacent < currentAdjacent) staticRetreats.push({ event, adjacent, exits });
+    }
+    staticRetreats.sort((left, right) => left.adjacent - right.adjacent || right.exits - left.exits || left.event.localeCompare(right.event));
+    if (staticRetreats[0]) {
+      autoPatrolRuntime.emergencyPositions = (autoPatrolRuntime.emergencyPositions || 0) + 1;
+      return { kind: 'DISPATCH', event: staticRetreats[0].event, reason: 'bomb-preflight-rejected-fast-retreat', targetId };
+    }
+    const adjacent = autoPatrolAdjacentHostiles(ctx).slice().sort((left, right) => left.hp - right.hp || left.id - right.id);
+    if (adjacent.length) {
+      autoPatrolRuntime.lastStandStarts = (autoPatrolRuntime.lastStandStarts || 0) + 1;
+      return autoPatrolAttackDecision(ctx, adjacent[0], 'last-stand:bomb-preflight-fast-no-retreat');
+    }
+  }
   const candidates = [];
   for (const [x, y] of autoPatrolNeighbors(ctx.player.x, ctx.player.y)) {
     if (!autoPatrolWalkable(ctx, x, y) || ctx.enemies.some(enemy => enemy.x === x && enemy.y === y)) continue;
@@ -9422,19 +10110,45 @@ async function autoPatrolSelectBombRejectedFallback(ctx, targetId) {
 
 async function autoPatrolPreflightBombEscape(ctx, decision, runtimeSnapshot) {
   if (decision?.kind !== 'DISPATCH' || decision.event !== 'PLACE_BOMB' || !autoPatrolRuntime.pendingBombPlan) return decision;
+  if (autoPatrolHostiles(ctx).length > 4) {
+    const targetId = autoPatrolRuntime.pendingBombPlan?.targetId || decision.targetId || null;
+    const target = autoPatrolEnemyById(ctx, targetId);
+    const escape = autoPatrolRuntime.pendingBombPlan?.escape || null;
+    const escapeX = escape ? ctx.player.x + Number(escape.dx || 0) : null;
+    const escapeY = escape ? ctx.player.y + Number(escape.dy || 0) : null;
+    const locallyValidGeneralEnemyPlan = Boolean(
+      target && !target.isBoss && !target.isAbyssBoss && escape
+      && autoPatrolWalkable(ctx, escapeX, escapeY)
+      && !ctx.enemies.some(enemy => enemy.x === escapeX && enemy.y === escapeY)
+    );
+    autoPatrolRuntime.bombEscapePreflightEvaluations = (autoPatrolRuntime.bombEscapePreflightEvaluations || 0) + 1;
+    // Large-floor simulations were disabled to avoid multi-second synchronous ticks.  Do not turn
+    // that performance guard into a blanket rejection of the already-approved general-enemy bomb
+    // plan; trust its local placement/escape ownership and keep bosses on their separate tactics.
+    if (locallyValidGeneralEnemyPlan) return decision;
+    const suppressedTargetId = targetId;
+    autoPatrolRuntime.pendingBombPlan = null;
+    autoPatrolRuntime.bombLurePlan = null;
+    autoPatrolRuntime.bombEscapeSuppressUntilTurn = ctx.turnCount + 8;
+    autoPatrolRuntime.bombEscapeSuppressTargetId = suppressedTargetId;
+    autoPatrolRuntime.bombEscapePreflightRejected = (autoPatrolRuntime.bombEscapePreflightRejected || 0) + 1;
+    return await autoPatrolSelectBombRejectedFallback(ctx, suppressedTargetId);
+  }
   const transaction = beginGameRandomTransaction();
   const fullRuntimeSnapshot = autoPatrolCloneSimulationRuntime();
   try {
     const bomb = await autoPatrolSimulatePendingBombLifecycle(transaction, 8);
     autoPatrolRestoreSimulationRuntime(fullRuntimeSnapshot);
-    const dangerous = !bomb.classification?.safe;
+    const targetId = autoPatrolRuntime.pendingBombPlan?.targetId || decision.targetId || null;
+    const target = autoPatrolEnemyById(ctx, targetId);
+    const preferredGeneralBomb = autoPatrolBombSimulationBeatsMelee(ctx, target, bomb);
+    const dangerous = !bomb.classification?.safe && !preferredGeneralBomb;
     if (!dangerous) {
       rollbackGameRandomTransaction(transaction);
       autoPatrolRuntime.bombEscapePreflightEvaluations = (autoPatrolRuntime.bombEscapePreflightEvaluations || 0) + 1;
       return decision;
     }
     const alternatives = [];
-    const targetId = autoPatrolRuntime.pendingBombPlan?.targetId || decision.targetId || null;
     for (const [x, y] of autoPatrolNeighbors(ctx.player.x, ctx.player.y)) {
       if (!autoPatrolWalkable(ctx, x, y) || ctx.enemies.some(enemy => enemy.x === x && enemy.y === y)) continue;
       const event = autoPatrolDirectionEvent(x - ctx.player.x, y - ctx.player.y);
@@ -9988,6 +10702,111 @@ async function autoPatrolMaybeStartHorizontalFlowPlan(ctx, frontendState) {
   autoPatrolRuntime.horizontalFlowDirection = plan.direction;
   autoPatrolRuntime.horizontalFlowPlansStarted += 1;
   return autoPatrolContinueHorizontalFlowPlan(ctx, frontendState);
+}
+
+
+function autoPatrolWallBreachRoute(ctx, start, goals, openedWall = null) {
+  const goalKeys = new Set(goals.map(cell => `${cell.x},${cell.y}`));
+  const queue = [{ x: start.x, y: start.y }];
+  const previous = new Map([[`${start.x},${start.y}`, null]]);
+  const eventByKey = new Map();
+  const directions = [
+    { dx: 0, dy: -1, event: "MOVE_UP" }, { dx: 1, dy: 0, event: "MOVE_RIGHT" },
+    { dx: 0, dy: 1, event: "MOVE_DOWN" }, { dx: -1, dy: 0, event: "MOVE_LEFT" }
+  ];
+  while (queue.length) {
+    const current = queue.shift();
+    const currentKey = `${current.x},${current.y}`;
+    if (goalKeys.has(currentKey)) {
+      const events = [];
+      let key = currentKey;
+      while (previous.get(key)) { events.push(eventByKey.get(key)); key = previous.get(key); }
+      events.reverse();
+      return { events, end: current };
+    }
+    for (const direction of directions) {
+      const x = current.x + direction.dx, y = current.y + direction.dy, key = `${x},${y}`;
+      if (previous.has(key)) continue;
+      const opened = openedWall && x === openedWall.x && y === openedWall.y;
+      if (!opened && !autoPatrolWalkable(ctx, x, y)) continue;
+      if (!opened && ctx.enemies.some(enemy => enemy.x === x && enemy.y === y)) continue;
+      previous.set(key, currentKey); eventByKey.set(key, direction.event); queue.push({ x, y });
+    }
+  }
+  return null;
+}
+function autoPatrolWallBreachCandidate(ctx, targetId) {
+  if (ctx.currentMapType !== "dungeon" || !guards.can_place_bomb(ctx) || playerBombs(ctx).length) return null;
+  const target = autoPatrolEnemyById(ctx, targetId);
+  if (!target || !isHostileFloorEnemy(target)) return null;
+  const targetGoals = autoPatrolNeighbors(target.x, target.y).map(([x, y]) => ({ x, y }))
+    .filter(cell => autoPatrolWalkable(ctx, cell.x, cell.y) && !ctx.enemies.some(enemy => enemy.id !== target.id && enemy.x === cell.x && enemy.y === cell.y));
+  if (!targetGoals.length) return null;
+  if (autoPatrolWallBreachRoute(ctx, ctx.player, targetGoals)) return null;
+  const candidates = [];
+  for (let y = 1; y < ctx.grid.length - 1; y += 1) for (let x = 1; x < ctx.grid[y].length - 1; x += 1) {
+    if (ctx.grid[y][x] !== 1) continue;
+    const placementCells = autoPatrolNeighbors(x, y).map(([px, py]) => ({ x: px, y: py }))
+      .filter(cell => autoPatrolWalkable(ctx, cell.x, cell.y) && !ctx.enemies.some(enemy => enemy.x === cell.x && enemy.y === cell.y));
+    if (!placementCells.length) continue;
+    const placementRoute = autoPatrolWallBreachRoute(ctx, ctx.player, placementCells);
+    if (!placementRoute) continue;
+    const openedRoute = autoPatrolWallBreachRoute(ctx, ctx.player, targetGoals, { x, y });
+    if (!openedRoute) continue;
+    const placement = placementRoute.end;
+    const bomb = { x: placement.x, y: placement.y, range: ctx.player.bombRange };
+    if (!(placement.x === x || placement.y === y) || autoPatrolDistance(placement, { x, y }) > bomb.range) continue;
+    const originalX = ctx.player.x, originalY = ctx.player.y;
+    ctx.player.x = placement.x; ctx.player.y = placement.y;
+    const escape = autoPatrolBombEscapeCandidates(ctx, bomb, null)[0] || null;
+    ctx.player.x = originalX; ctx.player.y = originalY;
+    if (!escape) continue;
+    const adjacentCover = autoPatrolNeighbors(x, y).filter(([nx, ny]) => ctx.grid[ny]?.[nx] === 1 || ctx.grid[ny]?.[nx] === 2).length;
+    const score = placementRoute.events.length * 100 + openedRoute.events.length * 10 - adjacentCover * 4;
+    candidates.push({ targetId: target.id, wallX: x, wallY: y, placementX: placement.x, placementY: placement.y,
+      route: placementRoute.events, escape: { dx: escape.dx, dy: escape.dy, event: escape.event, fromX: placement.x, fromY: placement.y, toX: escape.x, toY: escape.y }, score });
+  }
+  candidates.sort((a, b) => a.score - b.score || a.wallY - b.wallY || a.wallX - b.wallX);
+  return candidates[0] || null;
+}
+function autoPatrolContinueWallBreachPlan(ctx, frontendState) {
+  const plan = autoPatrolRuntime.wallBreachPlan;
+  if (!plan || frontendState !== "FE_PLAYER_TURN") return null;
+  if (ctx.currentMapType !== "dungeon" || ctx.depth !== plan.depth || !autoPatrolEnemyById(ctx, plan.targetId)) {
+    autoPatrolRuntime.wallBreachPlan = null; autoPatrolRuntime.wallBreachPlansInvalidated += 1; return null;
+  }
+  if (ctx.grid[plan.wallY]?.[plan.wallX] !== 1) {
+    autoPatrolRuntime.wallBreachPlan = null; autoPatrolRuntime.wallBreachPlansCompleted += 1; return null;
+  }
+  if (plan.route.length) {
+    const event = plan.route[0];
+    if (!autoPatrolPlannedMovementIsApplicable(ctx, event)) {
+      autoPatrolRuntime.wallBreachPlan = null; autoPatrolRuntime.wallBreachPlansInvalidated += 1; return null;
+    }
+    plan.route.shift();
+    return { kind: "DISPATCH", event, reason: "wall-breach-approach", targetId: plan.targetId };
+  }
+  if (ctx.player.x !== plan.placementX || ctx.player.y !== plan.placementY || !guards.can_place_bomb(ctx)) {
+    autoPatrolRuntime.wallBreachPlan = null; autoPatrolRuntime.wallBreachPlansInvalidated += 1; return null;
+  }
+  const target = autoPatrolEnemyById(ctx, plan.targetId);
+  const hostiles = autoPatrolHostiles(ctx);
+  autoPatrolRuntime.pendingBombPlan = {
+    targetId: plan.targetId, bombX: ctx.player.x, bombY: ctx.player.y, escape: structuredClone(plan.escape),
+    reason: "wall-breach-open-target-route", trajectorySignature: `wall-breach|${ctx.depth}|${plan.wallX},${plan.wallY}|${plan.targetId}`,
+    mapType: ctx.currentMapType, depth: ctx.depth, startTargetHp: Math.max(0, target?.hp || 0), startHostiles: hostiles.length,
+    startHostileHp: hostiles.reduce((sum, enemy) => sum + Math.max(0, enemy.hp), 0), wallBreach: { x: plan.wallX, y: plan.wallY }
+  };
+  autoPatrolRuntime.wallBreachPlan = null;
+  return { kind: "DISPATCH", event: "PLACE_BOMB", reason: "wall-breach-open-target-route", targetId: plan.targetId };
+}
+function autoPatrolMaybeStartWallBreachPlan(ctx, targetId) {
+  if (autoPatrolRuntime.wallBreachPlan || autoPatrolRuntime.bombPlan || autoPatrolRuntime.pendingBombPlan) return null;
+  const candidate = autoPatrolWallBreachCandidate(ctx, targetId);
+  if (!candidate) return null;
+  autoPatrolRuntime.wallBreachPlan = { ...candidate, depth: ctx.depth, createdTurn: ctx.turnCount, route: candidate.route.slice() };
+  autoPatrolRuntime.wallBreachPlansStarted += 1;
+  return autoPatrolContinueWallBreachPlan(ctx, engine.currentState);
 }
 
 async function decideAutoPatrolRuntimeAction(ctx, frontendState, rolloutContext = false) {
@@ -10730,6 +11549,46 @@ async function autoPatrolEvaluateTargetFinishShadow(ctx, targetId, options = {})
   return result;
 }
 
+function autoPatrolForcedProgressDecision(ctx, preferredTargetId = null, reason = "forced-progress:commit-or-die") {
+  const hostiles = autoPatrolHostiles(ctx);
+  if (!hostiles.length) return { kind: "DISPATCH", event: "PASS", reason: "forced-progress:no-hostile" };
+  const objectiveTargetId = autoPatrolRuntime.activeObjective?.primaryTargetId ?? null;
+  const adjacentHostiles = autoPatrolAdjacentHostiles(ctx);
+  const adjacentTarget = adjacentHostiles.length ? autoPatrolSelectAdjacent(ctx, adjacentHostiles).enemy : null;
+  const target = adjacentTarget
+    || autoPatrolEnemyById(ctx, preferredTargetId)
+    || autoPatrolEnemyById(ctx, objectiveTargetId)
+    || hostiles.slice().sort((a, b) => {
+      const detected = Number(Boolean(b.hasDetectedPlayer)) - Number(Boolean(a.hasDetectedPlayer));
+      if (detected) return detected;
+      const distance = autoPatrolDistance(a, ctx.player) - autoPatrolDistance(b, ctx.player);
+      if (distance) return distance;
+      return autoPatrolCombatTargetPriority(ctx, a) - autoPatrolCombatTargetPriority(ctx, b) || a.hp - b.hp || a.id - b.id;
+    })[0];
+  if (!target) return { kind: "DISPATCH", event: "PASS", reason: "forced-progress:no-target" };
+  autoPatrolRuntime.meleePlan = null;
+  autoPatrolRuntime.lurePlan = null;
+  autoPatrolRuntime.contactRoutePlan = null;
+  autoPatrolRuntime.initialRoutePlan = null;
+  autoPatrolRuntime.bombEscapeAlternativePlan = null;
+  if (autoPatrolDistance(target, ctx.player) === 1) {
+    autoPatrolStartMeleePlan(target, reason, "FORCED_PROGRESS");
+    return autoPatrolAttackDecision(ctx, target, reason);
+  }
+  const pursuit = autoPatrolMoveDecision(ctx, [{ x: target.x, y: target.y }], reason, true);
+  if (pursuit?.event) {
+    autoPatrolStartMeleePlan(target, reason, "FORCED_PROGRESS");
+    return { kind: "DISPATCH", event: pursuit.event, reason, targetId: target.id };
+  }
+  const fallback = autoPatrolNeighbors(ctx.player.x, ctx.player.y)
+    .filter(([x, y]) => autoPatrolWalkable(ctx, x, y))
+    .filter(([x, y]) => !ctx.enemies.some(enemy => enemy.x === x && enemy.y === y))
+    .map(([x, y]) => ({ x, y, distance: Math.abs(target.x - x) + Math.abs(target.y - y) }))
+    .sort((a, b) => a.distance - b.distance || a.y - b.y || a.x - b.x)[0];
+  if (fallback) return { kind: "DISPATCH", event: autoPatrolDirectionEvent(fallback.x - ctx.player.x, fallback.y - ctx.player.y), reason, targetId: target.id };
+  return { kind: "DISPATCH", event: "PASS", reason: "forced-progress:trapped", targetId: target.id };
+}
+
 function autoPatrolLastStandDecision(ctx) {
   if (!autoPatrolEmergencyOscillationIsIrrecoverable(ctx)) return null;
   const target = autoPatrolAdjacentHostiles(ctx).slice().sort((left, right) => {
@@ -10796,8 +11655,9 @@ function autoPatrolConflictLoser(ctx, firstObjective, secondObjective, repeatedO
   return repeatedObjective;
 }
 function autoPatrolConflictStairsDecision(ctx) {
+  if (autoPatrolHasPendingFloorCleanup(ctx)) return null;
   const stairs = Object.entries(ctx.tiles).filter(([, type]) => type === "stairs").map(([key]) => { const [x, y] = key.split(',').map(Number); return { x, y }; });
-  if (stairs.some(tile => tile.x === ctx.player.x && tile.y === ctx.player.y) && !ctx.enemies.some(enemy => enemy.isBoss)) {
+  if (stairs.some(tile => tile.x === ctx.player.x && tile.y === ctx.player.y) && autoPatrolCanUseDungeonStairs(ctx)) {
     return { kind: "DISPATCH", event: "INTERACT", reason: "objective-conflict-continue-stairs" };
   }
   const move = autoPatrolMoveDecision(ctx, stairs, "objective-conflict-continue-stairs");
@@ -10893,33 +11753,10 @@ async function autoPatrolBreakTwoCellOscillation(ctx, decision) {
   transitionAutoPatrolOscillation("ALTERNATIVE_UNAVAILABLE");
   autoPatrolRuntime.oscillationFallbacks += 1;
   if (sameObjectiveCycle) {
-    const lastStand = autoPatrolLastStandDecision(ctx);
-    if (lastStand) {
-      autoPatrolRuntime.oscillationBreaks += 1;
-      autoPatrolRuntime.objectiveAlternativeCommits += 1;
-      return lastStand;
-    }
-    const targetId = decision.targetId || first.targetId || second.targetId || null;
-    const target = targetId != null ? autoPatrolEnemyById(ctx, targetId) : null;
-    if (target) {
-      const finish = await autoPatrolEvaluateTargetFinishShadow(ctx, target.id, { horizon: 12, beamWidth: 48 });
-      if (finish.selected?.tactic === "COMMIT_SAFE_MELEE_CONTACT_ROUTE" && finish.selected.targetKilled && finish.selected.safe && !finish.selected.bombPlaced) {
-        autoPatrolStartMeleePlan(target, "oscillation-safe-melee-contact-route", "COMMIT_SAFE_MELEE_CONTACT_ROUTE");
-        const committed = autoPatrolContinueMeleePlan(ctx);
-        if (committed) {
-          autoPatrolRuntime.oscillationBreaks += 1;
-          autoPatrolRuntime.objectiveAlternativeCommits += 1;
-          return { ...committed, reason: "oscillation-safe-melee-contact-route", targetId: target.id };
-        }
-      }
-    }
-    const stairsFallback = autoPatrolOscillationStairsFallback(ctx);
-    if (stairsFallback) {
-      autoPatrolRuntime.oscillationBreaks += 1;
-      autoPatrolRuntime.objectiveAlternativeCommits += 1;
-      return stairsFallback;
-    }
-    return { kind: "PAUSE", reason: "same-objective-oscillation-no-alternative", targetId: decision.targetId || null };
+    const forced = autoPatrolForcedProgressDecision(ctx, decision.targetId || first.targetId || second.targetId || null, "forced-progress:same-objective-oscillation-no-alternative");
+    autoPatrolRuntime.oscillationBreaks += 1;
+    autoPatrolRuntime.objectiveAlternativeCommits += 1;
+    return forced;
   }
   return decision;
 }
@@ -10975,7 +11812,52 @@ function autoPatrolResetTransientPlansAfterDeathReturn() {
   autoPatrolRuntime.stopReason = "";
 }
 
-function autoPatrolSignature(ctx, decision) { return [ctx.currentMapType, ctx.depth, ctx.player.x, ctx.player.y, ctx.player.hp, ctx.player.hunger, ctx.enemies.length, ctx.items.length, decision?.event, decision?.reason].join('|'); }
+function autoPatrolFinalizeFloorTransitionBoundary(ctx, pending) {
+  const departedDepth = pending?.fromDepth;
+  const objective = autoPatrolRuntime.activeObjective;
+  if (objective) {
+    if (objective.type === "REACH_STAIRS" && objective.createdDepth === departedDepth) {
+      autoPatrolCompleteObjective(ctx, "floor-transition");
+    } else {
+      autoPatrolFailObjective(ctx, "floor-transition");
+    }
+  }
+  resetAutoPatrolProductionShadow("floor-transition");
+  autoPatrolRuntime.bombPlan = null;
+  autoPatrolRuntime.pendingBombPlan = null;
+  autoPatrolRuntime.bombSetupPlan = null;
+  autoPatrolRuntime.bombLurePlan = null;
+  autoPatrolRuntime.meleePlan = null;
+  autoPatrolRuntime.lurePlan = null;
+  autoPatrolRuntime.contactRoutePlan = null;
+  autoPatrolRuntime.initialRoutePlan = null;
+  autoPatrolRuntime.foodHuntPlan = null;
+  autoPatrolRuntime.engagementPlan = null;
+  autoPatrolRuntime.horizontalFlowPlan = null;
+  autoPatrolRuntime.encirclementBreakPlan = null;
+  autoPatrolRuntime.lurePlanState = "LURE_PLAN_NONE";
+  autoPatrolRuntime.contactRouteState = "CONTACT_ROUTE_EVALUATE";
+  autoPatrolRuntime.initialRouteState = "INITIAL_ROUTE_EVALUATE";
+  autoPatrolRuntime.foodHuntState = "FOOD_HUNT_EVALUATE";
+  autoPatrolRuntime.encirclementBreakState = "ENCIRCLEMENT_BREAK_EVALUATE";
+  autoPatrolRuntime.activeCombatTactic = null;
+  autoPatrolRuntime.combatTacticState = "TACTIC_NONE";
+  autoPatrolRuntime.repeatedSignature = "";
+  autoPatrolRuntime.repeatCount = 0;
+}
+
+function autoPatrolUiProgressSignature(ctx) {
+  switch (engine.currentState) {
+    case "FE_HOME_MENU": return `home:${ctx.homeSelectedIndex}:${ctx.homeMenuEntries.length}`;
+    case "FE_SHOP_MENU": return `shop:${ctx.shopSelectedIndex}:${ctx.shopInventory.length}`;
+    case "FE_WARP_MENU": return `warp:${ctx.warpSelectedIndex}:${ctx.warpDestinations.length}`;
+    case "FE_BLACKSMITH_MENU": return `smith:${ctx.blacksmithSelectedIndex}:${ctx.blacksmithEntries.length}`;
+    case "FE_DARK_SMITH_MENU": return `dark-smith:${ctx.darkSmithSelectedIndex}:${ctx.darkSmithMenuEntries.length}`;
+    case "FE_INVENTORY_MENU": return `inventory:${ctx.inventorySelectedIndex}:${ctx.equipmentInventory.length}`;
+    default: return engine.currentState;
+  }
+}
+function autoPatrolSignature(ctx, decision) { return [ctx.currentMapType, ctx.depth, ctx.player.x, ctx.player.y, ctx.player.hp, ctx.player.hunger, ctx.enemies.length, ctx.items.length, autoPatrolUiProgressSignature(ctx), decision?.event, decision?.reason].join('|'); }
 function clearAutoPatrolTimer() { if (autoPatrolRuntime.timerId !== null) clearTimeout(autoPatrolRuntime.timerId); autoPatrolRuntime.timerId = null; }
 function stopAutoPatrol(reason = "user-toggle", failed = false) {
   clearAutoPatrolTimer(); resetAutoPatrolProductionShadow(`stop:${reason}`); autoPatrolRuntime.generation += 1; autoPatrolRuntime.stopReason = reason;
@@ -10990,11 +11872,18 @@ async function runAutoPatrolTick(generation) {
   if (generation !== autoPatrolRuntime.generation || !autoPatrolIsActive()) return;
   if (document.hidden) { transitionAutoPatrol("PAUSE"); autoPatrolRuntime.stopReason = "tab-hidden"; return; }
   if (autoPatrolRuntime.state === "AUTO_PATROL_READY") transitionAutoPatrol("DECIDE");
-  let decision = null;
+  let decision = autoPatrolContinueWallBreachPlan(context, engine.currentState);
   let shadowAdvancedAtTickStart = false;
-  if (autoPatrolProductionShadowRuntime.session || autoPatrolProductionShadowRuntime.committedRoute.length > 0) {
+  if (!decision && (autoPatrolProductionShadowRuntime.session || autoPatrolProductionShadowRuntime.committedRoute.length > 0)) {
+    shadowAdvancedAtTickStart = true;
     decision = await autoPatrolMaybeAdvanceProductionShadow(context);
-    shadowAdvancedAtTickStart = Boolean(decision);
+  }
+  if (!decision) {
+    const contactObjective = autoPatrolEnsureImminentStrongContactObjective(context);
+    if (contactObjective) {
+      decision = await autoPatrolMaybeAdvanceProductionShadow(context);
+      shadowAdvancedAtTickStart = Boolean(decision);
+    }
   }
   if (!decision) {
     decision = await decideAutoPatrolRuntimeAction(context, engine.currentState);
@@ -11004,14 +11893,18 @@ async function runAutoPatrolTick(generation) {
   if (decision?.kind === "DISPATCH" && !decision.lifecycleOnly) {
     const objective = autoPatrolEnsureObjectiveForDecision(context, decision);
     if (!objective && autoPatrolObjectiveTypeFromDecision(decision) === "ESCAPE_LETHAL_TARGET") {
-      decision = autoPatrolLastStandDecision(context) || { kind: "PAUSE", reason: "escape-failure-memory-blocked" };
+      decision = autoPatrolLastStandDecision(context) || autoPatrolForcedProgressDecision(context, decision.targetId || null, "forced-progress:escape-failure-memory-blocked");
       if (decision.kind === "DISPATCH") autoPatrolEnsureObjectiveForDecision(context, decision);
     }
     if (!shadowAdvancedAtTickStart) {
       const shadowDecision = await autoPatrolMaybeAdvanceProductionShadow(context);
       if (shadowDecision) decision = shadowDecision;
     }
-    if (decision.kind === "DISPATCH" && !decision.shadowRouteCommit) decision = await autoPatrolResolveDetectedCombatTrajectory(context, decision);
+    if (decision.kind === "DISPATCH" && !decision.shadowRouteCommit && !decision.combatOwnershipCommit) decision = await autoPatrolResolveDetectedCombatTrajectory(context, decision);
+  }
+  if (decision?.kind === "SEARCH_PENDING") {
+    const breachDecision = autoPatrolMaybeStartWallBreachPlan(context, decision.targetId || autoPatrolProductionShadowRuntime.targetId || null);
+    if (breachDecision) { resetAutoPatrolProductionShadow("wall-breach-route-committed"); decision = breachDecision; }
   }
   autoPatrolRuntime.decision = decision;
   if (decision.kind === "SEARCH_PENDING") {
@@ -11035,7 +11928,7 @@ async function runAutoPatrolTick(generation) {
     if (!accepted) throw new Error(`dispatch-rejected:${decision.event}`);
     if (decision.shadowRouteCommit) {
       if (autoPatrolProductionShadowRuntime.state === "SHADOW_SEARCH_COMPLETED") transitionAutoPatrolProductionShadow("COMMIT");
-      if (autoPatrolProductionShadowRuntime.committedRouteClass === "SINGLE_BOMB_CONTACT_OWNERSHIP" && decision.event === "PLACE_BOMB") {
+      if (["SINGLE_BOMB_CONTACT_OWNERSHIP", "SINGLE_BOMB_ROOT_PLACEMENT"].includes(autoPatrolProductionShadowRuntime.committedRouteClass) && decision.event === "PLACE_BOMB") {
         const ownedBomb = context.bombs.find(bomb => !beforeBombIds.has(bomb.id));
         autoPatrolProductionShadowRuntime.ownedBombId = ownedBomb?.id ?? null;
       }
@@ -11073,10 +11966,11 @@ function startAutoPatrol() {
   resetAutoPatrolProductionShadow("start");
   if (autoPatrolRuntime.state === "AUTO_PATROL_FAILED") transitionAutoPatrol("RESET");
   if (autoPatrolRuntime.state !== "AUTO_PATROL_OFF") return false;
-  if (engine.currentState !== "FE_PLAYER_TURN" || !["dungeon", "town"].includes(context.currentMapType) || context.player.hp <= 0) { autoPatrolRuntime.stopReason = "start-condition-rejected"; renderAutoPatrolStatus(); return false; }
+  const resumableFrontendState = autoPatrolSupportedFrontendState(engine.currentState);
+  if (!resumableFrontendState || !["dungeon", "town"].includes(context.currentMapType) || context.player.hp <= 0) { autoPatrolRuntime.stopReason = "start-condition-rejected"; renderAutoPatrolStatus(); return false; }
   autoPatrolRuntime.generation += 1; autoPatrolRuntime.stopReason = ""; autoPatrolRuntime.decision = null; autoPatrolRuntime.repeatCount = 0; autoPatrolRuntime.repeatedSignature = "";
-  autoPatrolRuntime.bombPlan = null; autoPatrolRuntime.pendingBombPlan = null; autoPatrolRuntime.bombSetupPlan = null; autoPatrolRuntime.bombLurePlan = null; autoPatrolRuntime.bombLureEvaluatedDepth = 0; autoPatrolRuntime.meleePlan = null; autoPatrolRuntime.contactRoutePlan = null; autoPatrolRuntime.contactRouteState = "CONTACT_ROUTE_EVALUATE"; autoPatrolRuntime.initialRoutePlan = null; autoPatrolRuntime.initialRouteState = "INITIAL_ROUTE_EVALUATE"; autoPatrolRuntime.foodHuntPlan = null; autoPatrolRuntime.foodHuntState = "FOOD_HUNT_EVALUATE";
-  autoPatrolRuntime.plansStarted = 0; autoPatrolRuntime.plannedBombKills = 0; autoPatrolRuntime.meleePlansCompleted = 0; autoPatrolRuntime.contactRoutePlansStarted = 0; autoPatrolRuntime.contactRoutePlansCompleted = 0; autoPatrolRuntime.initialRoutePlansStarted = 0; autoPatrolRuntime.initialRoutePlansCompleted = 0; autoPatrolRuntime.foodHuntPlansStarted = 0; autoPatrolRuntime.foodHuntTargetsDefeated = 0; autoPatrolRuntime.levelCommitAttacks = 0; autoPatrolRuntime.emergencyPositions = 0; autoPatrolRuntime.multiStrongWallLastEvaluationTurn = -999; autoPatrolRuntime.multiStrongWallLastEvaluationDepth = 0; autoPatrolRuntime.multiStrongWallLastEvaluationSignature = ""; autoPatrolRuntime.multiStrongWallEvaluations = 0; autoPatrolRuntime.multiStrongWallPlansStarted = 0; autoPatrolRuntime.bombEscapePreflightEvaluations = 0; autoPatrolRuntime.bombEscapePreflightRejected = 0; autoPatrolRuntime.bombEscapeSuppressUntilTurn = -1; autoPatrolRuntime.bombEscapeSuppressTargetId = null; autoPatrolRuntime.floorBombPlacementRejectedDepth = 0; autoPatrolRuntime.bombEscapeAlternativePlan = null; autoPatrolRuntime.bombEscapeAlternativePlansStarted = 0; autoPatrolRuntime.bombEscapeAlternativePlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlan = null; autoPatrolRuntime.horizontalFlowDirection = null; autoPatrolRuntime.horizontalFlowDisabled = false; autoPatrolRuntime.horizontalFlowBeamWidth = 0; autoPatrolRuntime.horizontalFlowEvaluations = 0; autoPatrolRuntime.horizontalFlowBudgetDepth = 0; autoPatrolRuntime.horizontalFlowBudgetUsed = 0; autoPatrolRuntime.horizontalFlowPlansStarted = 0; autoPatrolRuntime.horizontalFlowPlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlansInvalidated = 0; autoPatrolRuntime.horizontalFlowLastResult = null; autoPatrolRuntime.horizontalFlowLastSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionTurn = -999; autoPatrolRuntime.horizontalFlowLastRejectionHpRatio = 0; autoPatrolRuntime.movementHistory = []; autoPatrolRuntime.oscillationState = "OBJECTIVE_CONFLICT_EVALUATE"; autoPatrolRuntime.oscillationBreaks = 0; autoPatrolRuntime.oscillationFallbacks = 0; autoPatrolRuntime.objectiveSuppressions = {}; autoPatrolRuntime.objectiveConflictDetections = 0; autoPatrolRuntime.objectiveDemotions = 0; autoPatrolRuntime.objectiveAlternativeCommits = 0; autoPatrolRuntime.objectiveState = "OBJECTIVE_NONE"; autoPatrolRuntime.activeObjective = null; autoPatrolRuntime.objectiveSequence = 0; autoPatrolRuntime.objectiveHistory = []; autoPatrolRuntime.objectiveCreatedCount = 0; autoPatrolRuntime.objectiveCompletedCount = 0; autoPatrolRuntime.objectiveFailedCount = 0; autoPatrolRuntime.objectiveDeathCount = 0; autoPatrolRuntime.lastBombPlanTerminal = null; autoPatrolRuntime.escapeFailureMemory = []; autoPatrolRuntime.huntStallSignature = ""; autoPatrolRuntime.huntStallStartTurn = -1; autoPatrolRuntime.floorHuntAbandonedDepth = 0; autoPatrolRuntime.floorHuntAbandonReason = ""; autoPatrolRuntime.engagementPlan = null; autoPatrolRuntime.engagementPlansStarted = 0; autoPatrolRuntime.engagementPlansEnded = 0; autoPatrolRuntime.engagementLastEndReason = ""; autoPatrolRuntime.huntStallLastHp = null;
+  autoPatrolRuntime.bombPlan = null; autoPatrolRuntime.pendingBombPlan = null; autoPatrolRuntime.bombSetupPlan = null; autoPatrolRuntime.wallBreachPlan = null; autoPatrolRuntime.bombLurePlan = null; autoPatrolRuntime.bombLureEvaluatedDepth = 0; autoPatrolRuntime.meleePlan = null; autoPatrolRuntime.contactRoutePlan = null; autoPatrolRuntime.contactRouteState = "CONTACT_ROUTE_EVALUATE"; autoPatrolRuntime.initialRoutePlan = null; autoPatrolRuntime.initialRouteState = "INITIAL_ROUTE_EVALUATE"; autoPatrolRuntime.foodHuntPlan = null; autoPatrolRuntime.foodHuntState = "FOOD_HUNT_EVALUATE";
+  autoPatrolRuntime.plansStarted = 0; autoPatrolRuntime.plannedBombKills = 0; autoPatrolRuntime.wallBreachPlansStarted = 0; autoPatrolRuntime.wallBreachPlansCompleted = 0; autoPatrolRuntime.wallBreachPlansInvalidated = 0; autoPatrolRuntime.meleePlansCompleted = 0; autoPatrolRuntime.contactRoutePlansStarted = 0; autoPatrolRuntime.contactRoutePlansCompleted = 0; autoPatrolRuntime.initialRoutePlansStarted = 0; autoPatrolRuntime.initialRoutePlansCompleted = 0; autoPatrolRuntime.foodHuntPlansStarted = 0; autoPatrolRuntime.foodHuntTargetsDefeated = 0; autoPatrolRuntime.levelCommitAttacks = 0; autoPatrolRuntime.emergencyPositions = 0; autoPatrolRuntime.multiStrongWallLastEvaluationTurn = -999; autoPatrolRuntime.multiStrongWallLastEvaluationDepth = 0; autoPatrolRuntime.multiStrongWallLastEvaluationSignature = ""; autoPatrolRuntime.multiStrongWallEvaluations = 0; autoPatrolRuntime.multiStrongWallPlansStarted = 0; autoPatrolRuntime.bombEscapePreflightEvaluations = 0; autoPatrolRuntime.bombEscapePreflightRejected = 0; autoPatrolRuntime.bombEscapeSuppressUntilTurn = -1; autoPatrolRuntime.bombEscapeSuppressTargetId = null; autoPatrolRuntime.floorBombPlacementRejectedDepth = 0; autoPatrolRuntime.bombEscapeAlternativePlan = null; autoPatrolRuntime.bombEscapeAlternativePlansStarted = 0; autoPatrolRuntime.bombEscapeAlternativePlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlan = null; autoPatrolRuntime.horizontalFlowDirection = null; autoPatrolRuntime.horizontalFlowDisabled = false; autoPatrolRuntime.horizontalFlowBeamWidth = 0; autoPatrolRuntime.horizontalFlowEvaluations = 0; autoPatrolRuntime.horizontalFlowBudgetDepth = 0; autoPatrolRuntime.horizontalFlowBudgetUsed = 0; autoPatrolRuntime.horizontalFlowPlansStarted = 0; autoPatrolRuntime.horizontalFlowPlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlansInvalidated = 0; autoPatrolRuntime.horizontalFlowLastResult = null; autoPatrolRuntime.horizontalFlowLastSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionTurn = -999; autoPatrolRuntime.horizontalFlowLastRejectionHpRatio = 0; autoPatrolRuntime.movementHistory = []; autoPatrolRuntime.oscillationState = "OBJECTIVE_CONFLICT_EVALUATE"; autoPatrolRuntime.oscillationBreaks = 0; autoPatrolRuntime.oscillationFallbacks = 0; autoPatrolRuntime.objectiveSuppressions = {}; autoPatrolRuntime.objectiveConflictDetections = 0; autoPatrolRuntime.objectiveDemotions = 0; autoPatrolRuntime.objectiveAlternativeCommits = 0; autoPatrolRuntime.objectiveState = "OBJECTIVE_NONE"; autoPatrolRuntime.activeObjective = null; autoPatrolRuntime.objectiveSequence = 0; autoPatrolRuntime.objectiveHistory = []; autoPatrolRuntime.objectiveCreatedCount = 0; autoPatrolRuntime.objectiveCompletedCount = 0; autoPatrolRuntime.objectiveFailedCount = 0; autoPatrolRuntime.objectiveDeathCount = 0; autoPatrolRuntime.lastBombPlanTerminal = null; autoPatrolRuntime.escapeFailureMemory = []; autoPatrolRuntime.huntStallSignature = ""; autoPatrolRuntime.huntStallStartTurn = -1; autoPatrolRuntime.floorHuntAbandonedDepth = 0; autoPatrolRuntime.floorHuntAbandonReason = ""; autoPatrolRuntime.engagementPlan = null; autoPatrolRuntime.engagementPlansStarted = 0; autoPatrolRuntime.engagementPlansEnded = 0; autoPatrolRuntime.engagementLastEndReason = ""; autoPatrolRuntime.huntStallLastHp = null;
   autoPatrolRuntime.encirclementBreakPlan = null; autoPatrolRuntime.encirclementBreakState = "ENCIRCLEMENT_BREAK_EVALUATE"; autoPatrolRuntime.encirclementBreakBudgetDepth = 0; autoPatrolRuntime.encirclementBreakBudgetUsed = 0; autoPatrolRuntime.encirclementBreakLastTriggerSignature = ""; autoPatrolRuntime.encirclementBreakPlansStarted = 0; autoPatrolRuntime.encirclementBreakPlansCompleted = 0; autoPatrolRuntime.encirclementBreakPlansInvalidated = 0; autoPatrolRuntime.encirclementBreakEvaluationBudgetExhausted = 0; autoPatrolRuntime.encirclementBreakLastEvaluationSimulations = 0; autoPatrolRuntime.encirclementBreakLastEvaluationReason = "";
   transitionAutoPatrol("TOGGLE_ON"); scheduleAutoPatrolTick(0); return true;
 }
@@ -11412,6 +12306,8 @@ function applyDebugSnapshot(snapshot, restoreMode = "floor-start") {
   const stagedAutoPatrol = structuredClone(restorePoint.autoPatrol);
   stopAutoPatrol("debug-snapshot-load");
   autoPatrolRestoreContext(context, stagedContext);
+  context.explosionCells = [];
+  context.pendingMapTransition = null;
   applyTimelineSnapshot(context, restorePoint.timeline || createTimelineSnapshot(stagedContext));
   engine.currentState = restorePoint.engineState;
   restoreDebugRandomRuntime(stagedRandom);
@@ -11486,7 +12382,10 @@ const SFA_STATE_DESCRIPTIONS = Object.freeze({
     FE_HOME_PURCHASE_MENU: "Confirm purchase of the player home.",
     FE_BLACKSMITH_LOCKED_MENU: "Explain that the blacksmith milestone is not yet cleared.",
     FE_HOME_MENU: "Transfer equipment and gold between carried and home storage.",
-    FE_DARK_SMITH_MENU: "Choose dark-smith enhancement, option change, or dismantling operations.",
+    FE_DARK_SMITH_MENU: "Choose dark-smith enhancement, single-option reroll, option exchange, or dismantling operations.",
+    FE_DARK_SMITH_REROLL_TARGET: "Select one owned equipment item whose option will be rerolled.",
+    FE_DARK_SMITH_REROLL_OPTION: "Select exactly one existing option slot to reroll while preserving the other slots.",
+    FE_DARK_SMITH_REROLL_CONFIRM: "Confirm one atomic paid reroll of the selected option slot.",
     FE_DARK_SMITH_CHANGE_TARGET: "Select Equipment A as the fixed option-change target.",
     FE_DARK_SMITH_CHANGE_PARTNER: "Keep Equipment A visible while selecting compatible Equipment B.",
     FE_DARK_SMITH_CHANGE_OPTIONS: "Select one option from each side of the A/B comparison.",
@@ -11494,7 +12393,7 @@ const SFA_STATE_DESCRIPTIONS = Object.freeze({
     FE_DARK_SMITH_DISMANTLE_MENU: "Select a high-rarity item to dismantle.",
     FE_DARK_SMITH_DISMANTLE_CONFIRM: "Confirm dismantling the selected equipment.",
     FE_BLACKSMITH_MENU: "Alter, sell, or dismantle weapons and armor.",
-    FE_BLACKSMITH_KIND_MENU: "Select which equipment property the blacksmith should reroll.",
+    FE_BLACKSMITH_KIND_MENU: "Confirm the normal blacksmith Equipment Lv increase.",
     FE_BLACKSMITH_COMPARE: "Accept or reject the generated blacksmith proposal.",
     FE_ABYSS_ENTRY_MENU: "Confirm entry into the Abyss dungeon mode.",
     FE_DEATH_SUMMARY: "Display the death result and wait for return or exit.",
@@ -11802,6 +12701,7 @@ function render(state, ctxGame) {
   // 3. メニューオーバレイ制御（projection policyに従って画面を完全ロック）
   const overlay = document.getElementById("overlay");
   const overlayMode = PROJECTION_POLICY[state] ? PROJECTION_POLICY[state].overlay : null;
+  overlay.className = overlayMode === "home" ? "home-overlay" : "";
   if (overlayMode === "boot") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<h1>SFA ROGUE</h1><p style='font-size:13px;color:#aabbee;'>Inspecting save slot...</p>`;
@@ -11889,25 +12789,70 @@ function render(state, ctxGame) {
     overlay.innerHTML = `<div class="menu-title">CLOSED FORGE</div><p style="font-size:12px;line-height:1.7;color:#aaa;">The master smith will return after the guardian of B${DARK_SMITH_CONFIG.unlockBossFloor} is defeated.<br>A sealed high-difficulty dungeon gate is said to awaken at the same time.</p><p style="font-size:10px;color:#888;">[Enter/Esc]: Leave</p>`;
   } else if (overlayMode === "home") {
     overlay.style.display = "flex";
+    const pageSize = HOME_CONFIG.storagePageSize;
+    const storedCount = ctxGame.homeStorage.equipment.length;
+    const pageCount = Math.max(1, Math.ceil(storedCount / pageSize));
+    const pageNumber = Math.min((ctxGame.homeStoredPage || 0) + 1, pageCount);
+    const selectedEntry = ctxGame.homeMenuEntries[ctxGame.homeSelectedIndex];
+    let previousSection = null;
     const rows = ctxGame.homeMenuEntries.map((entry, idx) => {
+      const section = entry.kind === 'carried' ? 'Carried equipment' : (entry.kind === 'stored' ? 'Stored equipment' : 'Gold actions');
+      const sectionHeader = section !== previousSection ? `<div class="home-section-label">${section}</div>` : '';
+      previousSection = section;
       let label = '';
-      if (entry.kind === 'carried') label = `Store: ${coloredEquipmentName(entry.item)} / ${equipmentOptionSummary(entry.item)}`;
-      else if (entry.kind === 'stored') label = `Take: ${coloredEquipmentName(entry.item)} / ${equipmentOptionSummary(entry.item)}`;
-      else if (entry.kind === 'deposit_gold') label = `Deposit all gold (carried ${ctxGame.player.gold}g)`;
-      else label = `Withdraw ${entry.amount || 10}g (stored ${ctxGame.homeStorage.gold}g)`;
-      return `<div class="menu-item ${idx === ctxGame.homeSelectedIndex ? 'selected' : ''}">${label}</div>`;
+      if (entry.kind === 'carried') label = `Store · ${coloredEquipmentName(entry.item)}`;
+      else if (entry.kind === 'stored') label = `Take · ${coloredEquipmentName(entry.item)}`;
+      else if (entry.kind === 'deposit_gold') label = `Deposit gold · ${entry.amount.toLocaleString()}g`;
+      else label = `Withdraw gold · ${entry.amount.toLocaleString()}g`;
+      return `${sectionHeader}<div class="home-row ${idx === ctxGame.homeSelectedIndex ? 'selected' : ''}" data-home-index="${idx}">${label}</div>`;
     }).join('');
-    overlay.innerHTML = `<div class="menu-title">MY HOME</div><p style="font-size:11px;color:#aabbee;">Stored gold: ${ctxGame.homeStorage.gold}g / Stored equipment: ${ctxGame.homeStorage.equipment.length}</p><div style="width:100%;max-height:250px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">[↑/↓]: Cursor | [Enter]: Store / Take | Automatic purchases withdraw only the required amount | [Esc]: Exit</p>`;
+
+    let detail = `<div class="home-detail-heading">Select an action</div><div style="color:#888;">Choose equipment or a Gold action from the list.</div>`;
+    if (selectedEntry?.item) {
+      const candidate = selectedEntry.item;
+      const current = candidate.type === 'weapon' ? ctxGame.player.weapon : ctxGame.player.armor;
+      const key = candidate.type === 'weapon' ? 'atk' : 'def';
+      const statLabel = key.toUpperCase();
+      const diff = candidate[key] - current[key];
+      const diffClass = diff > 0 ? 'inventory-positive' : diff < 0 ? 'inventory-negative' : '';
+      const actionLabel = selectedEntry.kind === 'carried' ? 'Item to store' : 'Item to take';
+      detail = `<div class="home-detail-heading">${selectedEntry.kind === 'carried' ? 'STORE EQUIPMENT' : 'TAKE EQUIPMENT'}</div>
+        <div class="home-equipment-card"><div class="home-card-label">${actionLabel}</div><div>${coloredEquipmentName(candidate)}</div><div class="home-stat-line"><span>${equipmentOptionSummary(candidate)}</span><b>${statLabel} ${candidate[key]}</b></div></div>
+        <div class="home-equipment-card"><div class="home-card-label">Currently equipped</div><div>${coloredEquipmentName(current)}</div><div class="home-stat-line"><span>${equipmentOptionSummary(current)}</span><b>${statLabel} ${current[key]}</b></div></div>
+        <div class="home-difference ${diffClass}">Difference: ${diff >= 0 ? '+' : ''}${diff} ${statLabel}</div>`;
+    } else if (selectedEntry?.kind === 'deposit_gold') {
+      detail = `<div class="home-detail-heading">DEPOSIT GOLD</div><div class="home-equipment-card"><div class="home-card-label">Transfer amount</div><div style="font-size:18px;color:#ffdd66;">${selectedEntry.amount.toLocaleString()}g</div></div><div>Carried by character: <b>${ctxGame.player.gold.toLocaleString()}g</b></div><div style="margin-top:8px;color:#888;">Use ←/→ to change the amount. Enter deposits the displayed amount.</div>`;
+    } else if (selectedEntry?.kind === 'withdraw_gold') {
+      detail = `<div class="home-detail-heading">WITHDRAW GOLD</div><div class="home-equipment-card"><div class="home-card-label">Transfer amount</div><div style="font-size:18px;color:#ffdd66;">${selectedEntry.amount.toLocaleString()}g</div></div><div>Stored at home: <b>${ctxGame.homeStorage.gold.toLocaleString()}g</b></div><div style="margin-top:8px;color:#888;">Use ←/→ to change the amount. Enter withdraws the displayed amount.</div>`;
+    }
+
+    overlay.innerHTML = `<div class="home-shell"><div class="menu-title">MY HOME</div><div class="home-summary"><span>Character: ${ctxGame.player.gold.toLocaleString()}g · Home: ${ctxGame.homeStorage.gold.toLocaleString()}g</span><span>Equipment: ${storedCount} · Page ${pageNumber}/${pageCount}</span></div><div class="home-main"><section class="home-list-panel"><div class="home-panel-title">ACTIONS</div><div id="home-list" class="home-list">${rows}</div></section><section class="home-detail-panel"><div class="home-panel-title">DETAIL / COMPARISON</div><div class="home-detail">${detail}</div></section></div><div class="home-help">[↑/↓] Select · [←/→] Amount / Storage page · [Enter] Store / Take / Transfer · [Esc] Exit</div></div>`;
+    requestAnimationFrame(() => overlay.querySelector(`[data-home-index="${ctxGame.homeSelectedIndex}"]`)?.scrollIntoView({ block: 'nearest' }));
   } else if (overlayMode === "dark-smith") {
     overlay.style.display = "flex";
     const rows = ctxGame.darkSmithMenuEntries.length ? ctxGame.darkSmithMenuEntries.map((entry, idx) => {
-      const option = entry.item.options[0];
+      const selectedOptionIndex = idx === ctxGame.darkSmithSelectedIndex ? (ctxGame.darkSmithOptionIndex || 0) : 0;
+      const option = entry.item.options[selectedOptionIndex];
       const chance = Math.round(darkSmithSuccessRate(option) * 100);
       const cost = darkSmithMaterialCost(option);
       const stat = entry.item.type === 'weapon' ? `ATK ${entry.item.atk}` : `DEF ${entry.item.def}`;
-      return `<div class="menu-item ${idx === ctxGame.darkSmithSelectedIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)} [${stat}]<br><span style="font-size:9px;">${equipmentOptionSummary(entry.item)} / Cost ${cost} shard${cost === 1 ? '' : 's'} / Success ${chance}%</span></div>`;
+      const optionRows = entry.item.options.map((candidate, optionIndex) => `${optionIndex === selectedOptionIndex && idx === ctxGame.darkSmithSelectedIndex ? '▶' : ''}${optionIndex + 1}. ${rarityLabel(candidate.rarity)} ${candidate.name} ${formatEquipmentOptionValue(candidate)}`).join(' / ');
+      return `<div class="menu-item ${idx === ctxGame.darkSmithSelectedIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)} [${stat}]<br><span style="font-size:9px;">${escapeHtml(optionRows)} / Cost ${cost} shard${cost === 1 ? '' : 's'} / Success ${chance}%</span></div>`;
     }).join('') : `<div class="menu-item" style="color:#777;">No equipment with an option.</div>`;
-    overlay.innerHTML = `<div class="menu-title">DARK SMITH</div><p style="font-size:11px;color:#c58cff;">Forge Shards: ${ctxGame.forgeShards}. Dismantle Rare or better carried equipment for material.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">First 10 successful upgrades: 100%. Option change costs 1000g.<br>[↑/↓]: Cursor | [Enter]: Forge | [R]: Change option | [D]: Dismantle | [Esc]: Exit</p>`;
+    overlay.innerHTML = `<div class="menu-title">DARK SMITH</div><p style="font-size:11px;color:#c58cff;">Forge Shards: ${ctxGame.forgeShards}. Dismantle Rare or better carried equipment for material.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">First 10 successful upgrades: 100%. Reroll costs 1000g.<br>[↑/↓]: Equipment | [←/→]: Option | [Enter]: Forge selected option | [R]: Reroll one option | [C]: Exchange options | [D]: Dismantle | [Esc]: Exit</p>`;
+  } else if (overlayMode === "dark-smith-reroll-target") {
+    overlay.style.display = "flex";
+    const flow = ctxGame.darkSmithReroll;
+    const rows = flow.targetEntries.length ? flow.targetEntries.map((entry, idx) => `<div class="menu-item ${idx === flow.targetIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)}<br><span style="font-size:9px;">${equipmentOptionSummary(entry.item)}</span></div>`).join('') : `<div class="menu-item" style="color:#777;">No equipment with options.</div>`;
+    overlay.innerHTML = `<div class="menu-title">REROLL OPTION — SELECT EQUIPMENT</div><p style="font-size:11px;color:#ffcc66;">One existing option will be selected and regenerated. The number of option slots does not change.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">[↑/↓]: Equipment | [Enter]: Select option | [Esc]: Back</p>`;
+  } else if (overlayMode === "dark-smith-reroll-option") {
+    overlay.style.display = "flex";
+    const flow = ctxGame.darkSmithReroll;
+    overlay.innerHTML = `<div class="menu-title">REROLL OPTION — SELECT SLOT</div>${darkSmithEquipmentCard(flow.target, 'Selected equipment', flow.optionIndex, true)}<p style="font-size:10px;color:#888;">[↑/↓]: Option slot | [Enter]: Review reroll | [Esc]: Equipment list</p>`;
+  } else if (overlayMode === "dark-smith-reroll-confirm") {
+    overlay.style.display = "flex";
+    const flow = ctxGame.darkSmithReroll; const option = flow.target?.item?.options?.[flow.optionIndex];
+    overlay.innerHTML = `<div class="menu-title">CONFIRM OPTION REROLL</div>${darkSmithEquipmentCard(flow.target, 'Selected equipment', flow.optionIndex)}<p style="font-size:12px;line-height:1.7;">Reroll slot ${flow.optionIndex + 1}: ${escapeHtml(option?.name || '?')} ${escapeHtml(formatEquipmentOptionValue(option))}<br>Cost: ${DARK_SMITH_CONFIG.optionRerollCost} Gold / Carried: ${ctxGame.player.gold} Gold</p><p style="font-size:10px;color:#888;">The option type, rarity, and value are regenerated. Other slots remain unchanged.<br>[Enter]: Reroll selected option | [Esc]: Back</p>`;
   } else if (overlayMode === "dark-smith-change-target") {
     overlay.style.display = "flex";
     const flow = ctxGame.darkSmithChange;
@@ -11946,9 +12891,9 @@ function render(state, ctxGame) {
   } else if (overlayMode === "blacksmith-kind") {
     overlay.style.display = "flex";
     const entry = ctxGame.blacksmithEntries[ctxGame.blacksmithSelectedIndex];
-    const kinds = ['Reroll item rarity', 'Raise Equipment Lv +1'];
+    const kinds = ['Raise Equipment Lv +1'];
     const rows = kinds.map((label, idx) => `<div class="menu-item ${idx === ctxGame.blacksmithKindIndex ? 'selected' : ''}">${label}</div>`).join('');
-    overlay.innerHTML = `<div class="menu-title">CHOOSE ALTERATION</div><p style="font-size:11px;">${entry ? coloredEquipmentName(entry.item) : 'No equipment'} / Equipment Lv.${entry?.item?.equipmentLevel || 1} / Cap ${equipmentLevelCap(ctxGame)} / Carried gold ${ctxGame.player.gold}</p>${rows}<p style="font-size:10px;color:#888;">Cost ${EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost}g. Equipment Lv can rise only to the deepest reached floor. [Enter]: Proceed | [Esc]: Back</p>`;
+    overlay.innerHTML = `<div class="menu-title">CHOOSE ALTERATION</div><p style="font-size:11px;">${entry ? coloredEquipmentName(entry.item) : 'No equipment'} / Equipment Lv.${entry?.item?.equipmentLevel || 1} / Cap ${equipmentLevelCap(ctxGame)} / Carried gold ${ctxGame.player.gold}</p>${rows}<p style="font-size:10px;color:#888;">The normal Blacksmith only raises Equipment Lv. Option rerolling is performed by the Dark Smith. Cost ${EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost}g. [Enter]: Proceed | [Esc]: Back</p>`;
   } else if (overlayMode === "blacksmith-compare") {
     overlay.style.display = "flex";
     const proposal = ctxGame.blacksmithProposal;
