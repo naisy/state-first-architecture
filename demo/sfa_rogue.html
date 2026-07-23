@@ -224,7 +224,7 @@
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage153v-debug-snapshot-size-and-dedup-20260723";
+const SFA_ROGUE_BUILD_ID = "stage153w-debug-restore-context-normalization-20260723";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -5121,7 +5121,10 @@ const EQUIPMENT_OPTION_BY_ID = new Map(
   )
 );
 
-function stableClone(value) { return JSON.parse(JSON.stringify(value)); }
+function stableClone(value) {
+  if (value === undefined) return undefined;
+  return JSON.parse(JSON.stringify(value));
+}
 function uniqueSortedIntegers(values) { return [...new Set(values)].sort((a, b) => a - b); }
 function equipmentDefinitionId(item) {
   if (item?.definitionId) return String(item.definitionId);
@@ -12311,6 +12314,25 @@ function createCapturedPointRestorePoint(payload) {
     autoPatrol: structuredClone(payload.autoPatrol)
   };
 }
+function normalizeDebugRestoreContext(stagedContext) {
+  if (!stagedContext || typeof stagedContext !== "object") return stagedContext;
+  if (!Array.isArray(stagedContext.homeMenuEntries)) stagedContext.homeMenuEntries = [];
+  if (!Number.isInteger(stagedContext.homeSelectedIndex)) stagedContext.homeSelectedIndex = 0;
+  if (!Number.isInteger(stagedContext.homeStoredPage)) stagedContext.homeStoredPage = 0;
+  if (!Number.isInteger(stagedContext.homeGoldTransferPresetIndex)) stagedContext.homeGoldTransferPresetIndex = 4;
+  if (!Array.isArray(stagedContext.darkSmithMenuEntries)) stagedContext.darkSmithMenuEntries = [];
+  if (!Number.isInteger(stagedContext.darkSmithSelectedIndex)) stagedContext.darkSmithSelectedIndex = 0;
+  if (!Number.isInteger(stagedContext.darkSmithOptionIndex)) stagedContext.darkSmithOptionIndex = 0;
+  if (!Array.isArray(stagedContext.darkSmithDismantleEntries)) stagedContext.darkSmithDismantleEntries = [];
+  if (!Number.isInteger(stagedContext.darkSmithDismantleSelectedIndex)) stagedContext.darkSmithDismantleSelectedIndex = 0;
+  if (!stagedContext.darkSmithReroll || typeof stagedContext.darkSmithReroll !== "object") {
+    stagedContext.darkSmithReroll = { targetEntries: [], targetIndex: 0, target: null, optionIndex: 0 };
+  }
+  if (!stagedContext.darkSmithChange || typeof stagedContext.darkSmithChange !== "object") {
+    stagedContext.darkSmithChange = { targetEntries: [], targetIndex: 0, target: null, partnerEntries: [], partnerIndex: 0, partner: null, focus: "A", optionIndexA: 0, optionIndexB: 0 };
+  }
+  return stagedContext;
+}
 function applyDebugSnapshot(snapshot, restoreMode = "floor-start") {
   const validation = validateDebugSnapshot(snapshot);
   if (!validation.ok) throw new Error(`Invalid debug snapshot: ${validation.errors.join(", ")}`);
@@ -12318,7 +12340,7 @@ function applyDebugSnapshot(snapshot, restoreMode = "floor-start") {
   const restorePoint = restoreMode === "captured-point"
     ? createCapturedPointRestorePoint(snapshot.payload)
     : snapshot.payload.floorStartSnapshot;
-  const stagedContext = structuredClone(restorePoint.context);
+  const stagedContext = normalizeDebugRestoreContext(structuredClone(restorePoint.context));
   const stagedRandom = structuredClone(restorePoint.random);
   const stagedAutoPatrol = structuredClone(restorePoint.autoPatrol);
   stopAutoPatrol("debug-snapshot-load");
