@@ -224,7 +224,7 @@
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage153u-dark-smith-reroll-and-vital-recovery-20260723";
+const SFA_ROGUE_BUILD_ID = "stage153v-debug-snapshot-size-and-dedup-20260723";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -12118,7 +12118,8 @@ resetAnalysisTrace("runtime-initialized", context);
 
 const DEBUG_SNAPSHOT_FORMAT = "sfa-rogue-debug-snapshot";
 const DEBUG_SNAPSHOT_SCHEMA_VERSION = 2;
-const DEBUG_SNAPSHOT_MAX_CHARS = 16 * 1024 * 1024;
+const DEBUG_SNAPSHOT_MAX_BYTES = 64 * 1024 * 1024;
+const DEBUG_SNAPSHOT_MAX_CHARS = 64 * 1024 * 1024;
 const DEBUG_SNAPSHOT_KEYS = Object.freeze({ export: "F8", importFloorStart: "F9", importCapturedPoint: "F10" });
 const debugSnapshotRuntime = {
   importInput: null,
@@ -12148,15 +12149,28 @@ function cloneDebugRandomRuntime() {
     canonicalReplay: gameRandomRuntime.canonicalReplay.slice()
   };
 }
+function cloneDebugContext(ctx = context) {
+  const snapshot = structuredClone(ctx);
+  if (snapshot.saveUi && Object.prototype.hasOwnProperty.call(snapshot.saveUi, "canonicalSavedSnapshot")) {
+    // This is a serialized copy of the verified save already represented by the live context and browser storage.
+    // Keeping it in every debug restore point multiplies snapshot size without adding replay information.
+    snapshot.saveUi.canonicalSavedSnapshot = null;
+  }
+  return snapshot;
+}
 function createDebugRestorePoint(ctx = context, engineState = engine.currentState) {
   return {
     engineState,
     floorKey: analysisTraceFloorKey(ctx),
     timeline: createTimelineSnapshot(ctx),
-    context: structuredClone(ctx),
+    context: cloneDebugContext(ctx),
     random: cloneDebugRandomRuntime(),
     autoPatrol: cloneDebugAutoPatrolRuntime()
   };
+}
+function debugRestorePointsEqual(left, right) {
+  if (!left || !right) return false;
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 function captureDebugFloorStartSnapshot(ctx = context) {
   if (gameRandomRuntime.simulationStack.length || gameRandomRuntime.transactionStack.length) throw new Error("Cannot capture floor start during a random simulation or transaction.");
@@ -12223,14 +12237,17 @@ function debugSnapshotHash(text) {
 }
 function buildDebugSnapshot() {
   if (gameRandomRuntime.simulationStack.length || gameRandomRuntime.transactionStack.length) throw new Error("Cannot capture during a random simulation or transaction.");
+  const floorStartSnapshot = cloneDebugFloorStartSnapshotForExport();
+  const currentMapStartCandidate = cloneDebugCurrentMapStartSnapshotForExport();
+  const lastDungeonFloorStartCandidate = cloneDebugLastDungeonFloorStartSnapshotForExport();
   const payload = {
     engineState: engine.currentState,
-    context: structuredClone(context),
+    context: cloneDebugContext(context),
     random: cloneDebugRandomRuntime(),
     autoPatrol: cloneDebugAutoPatrolRuntime(),
-    floorStartSnapshot: cloneDebugFloorStartSnapshotForExport(),
-    currentMapStartSnapshot: cloneDebugCurrentMapStartSnapshotForExport(),
-    lastDungeonFloorStartSnapshot: cloneDebugLastDungeonFloorStartSnapshotForExport(),
+    floorStartSnapshot,
+    currentMapStartSnapshot: debugRestorePointsEqual(currentMapStartCandidate, floorStartSnapshot) ? null : currentMapStartCandidate,
+    lastDungeonFloorStartSnapshot: debugRestorePointsEqual(lastDungeonFloorStartCandidate, floorStartSnapshot) ? null : lastDungeonFloorStartCandidate,
     analysisTrace: cloneAnalysisTraceForExport()
   };
   const payloadText = JSON.stringify(payload);
@@ -12275,7 +12292,7 @@ function validateDebugSnapshot(snapshot) {
 }
 function downloadDebugSnapshot() {
   const snapshot = buildDebugSnapshot();
-  const serialized = JSON.stringify(snapshot, null, 2);
+  const serialized = JSON.stringify(snapshot);
   const blob = new Blob([serialized], { type: "application/json" });
   const link = document.createElement("a");
   const depth = context.currentMapType === "dungeon" ? `${context.dungeonMode === "abyss" ? "A" : "B"}${context.depth}` : context.currentMapType;
@@ -12336,7 +12353,7 @@ function ensureDebugSnapshotInput() {
     const file = input.files?.[0]; input.value = ""; if (!file) return;
     const restoreMode = debugSnapshotRuntime.importMode === "captured-point" ? "captured-point" : "floor-start";
     try {
-      if (file.size > DEBUG_SNAPSHOT_MAX_CHARS) throw new Error("Debug snapshot is too large.");
+      if (file.size > DEBUG_SNAPSHOT_MAX_BYTES) throw new Error("Debug snapshot is too large.");
       const raw = await file.text();
       if (raw.length > DEBUG_SNAPSHOT_MAX_CHARS) throw new Error("Debug snapshot is too large.");
       applyDebugSnapshot(JSON.parse(raw), restoreMode);
