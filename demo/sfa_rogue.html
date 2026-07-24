@@ -194,6 +194,39 @@
     .smith-option-list { margin-top:8px; }
     .smith-option-row { padding:5px 6px; margin-top:3px; border:1px solid transparent; font-size:10px; }
     .smith-option-row.selected { border-color:#ffcc55; background:rgba(255,204,85,.14); }
+    #overlay.facility-overlay {
+        left:50%; right:auto; width:min(680px, calc(100vw - 24px));
+        transform:translateX(-50%); padding:14px 16px; justify-content:flex-start;
+        text-align:left; overflow:hidden;
+    }
+    .facility-shell { width:100%; height:100%; display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; gap:8px; }
+    .facility-shell .menu-title { text-align:center; margin:0; }
+    .facility-summary { display:flex; justify-content:space-between; gap:16px; font-size:10px; color:#aabbee; border-bottom:1px solid #3b3b4f; padding-bottom:7px; }
+    .facility-main { min-height:0; display:grid; grid-template-columns:minmax(0,1.02fr) minmax(0,.98fr); gap:12px; }
+    .facility-list-panel, .facility-detail-panel { min-width:0; min-height:0; border:1px solid #3b3b4f; background:rgba(8,8,12,.72); }
+    .facility-panel-title { padding:6px 8px; color:#66e3ff; font-size:10px; letter-spacing:.08em; border-bottom:1px solid #3b3b4f; }
+    .facility-list { height:calc(100% - 27px); overflow:hidden; padding:4px 6px 8px; box-sizing:border-box; }
+    .facility-row { font-size:11px; line-height:1.35; padding:6px 7px; margin:2px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border:1px solid transparent; }
+    .facility-row.selected { color:#ffff00; border-color:#6b6330; background:rgba(255,255,0,.08); }
+    .facility-row.selected::before { content:"> "; }
+    .facility-detail { padding:9px 10px; font-size:11px; line-height:1.5; overflow-y:auto; height:calc(100% - 27px); box-sizing:border-box; }
+    .facility-detail-heading { color:#fff; font-size:12px; margin-bottom:7px; }
+    .facility-card { border:1px solid #343445; padding:7px; margin-bottom:7px; }
+    .facility-card-label { color:#888; font-size:9px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; }
+    .facility-action { display:flex; justify-content:space-between; gap:8px; margin-top:5px; padding-top:5px; border-top:1px solid #292936; }
+    .facility-action.disabled { color:#666; }
+    .facility-help { border-top:1px solid #3b3b4f; padding-top:7px; font-size:10px; color:#888; text-align:center; white-space:normal; }
+    .material-breakdown { color:#c7bdd8; font-size:10px; line-height:1.5; }
+    #overlay.facility-overlay .facility-detail { padding:7px 9px; line-height:1.35; }
+    #overlay.facility-overlay .facility-card { padding:5px 7px; margin-bottom:5px; }
+    #overlay.facility-overlay .facility-action { margin-top:3px; padding-top:3px; }
+    #overlay.facility-overlay .smith-option-list { margin-top:4px; }
+    #overlay.facility-overlay .smith-option-row { padding:3px 5px; margin-top:2px; }
+    @media (max-width:560px) {
+        #overlay.facility-overlay { width:calc(100vw - 12px); padding:10px; }
+        .facility-main { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,.82fr); }
+        .facility-summary { font-size:9px; }
+    }
 </style>
 </head>
 <body>
@@ -224,7 +257,7 @@
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage153w-debug-restore-context-normalization-20260723";
+const SFA_ROGUE_BUILD_ID = "stage154b-portal-smith-paging-and-material-yield-20260724";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -364,7 +397,7 @@ const SFA_DEFINITIONS = {
       { event: "INTERACT", guard: "is_on_closed_smith_tile", target_state: "FE_BLACKSMITH_LOCKED_MENU" },
       { event: "INTERACT", guard: "is_on_smith_tile", action: "prepare_blacksmith_menu", target_state: "FE_BLACKSMITH_MENU" },
       { event: "INTERACT", guard: "is_on_dark_smith_tile", action: "prepare_dark_smith_menu", target_state: "FE_DARK_SMITH_MENU" },
-      { event: "INTERACT", guard: "is_on_abyss_gate", target_state: "FE_ABYSS_ENTRY_MENU" }
+      { event: "INTERACT", guard: "is_on_abyss_gate", action: "prepare_abyss_warp_menu", target_state: "FE_WARP_MENU" }
     ]
   },
   FE_RESOLVE_PLAYER: {
@@ -434,6 +467,8 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "warp_cursor_up", target_state: "FE_WARP_MENU" },
       { event: "MENU_DOWN", action: "warp_cursor_down", target_state: "FE_WARP_MENU" },
+      { event: "MOVE_LEFT", action: "warp_page_previous", target_state: "FE_WARP_MENU" },
+      { event: "MOVE_RIGHT", action: "warp_page_next", target_state: "FE_WARP_MENU" },
       { event: "SELECT", guard: "has_selected_warp_destination", action: "enter_selected_warp", target_state: "FE_GENERATE_MAP" },
       { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
     ]
@@ -485,6 +520,8 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "dark_smith_cursor_up", target_state: "FE_DARK_SMITH_MENU" },
       { event: "MENU_DOWN", action: "dark_smith_cursor_down", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "PAGE_UP", action: "dark_smith_page_up", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "PAGE_DOWN", action: "dark_smith_page_down", target_state: "FE_DARK_SMITH_MENU" },
       { event: "MOVE_LEFT", action: "dark_smith_option_left", target_state: "FE_DARK_SMITH_MENU" },
       { event: "MOVE_RIGHT", action: "dark_smith_option_right", target_state: "FE_DARK_SMITH_MENU" },
       { event: "SELECT", guard: "can_attempt_dark_smith_upgrade", action: "attempt_dark_smith_upgrade", target_state: "FE_DARK_SMITH_MENU" },
@@ -499,6 +536,8 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "dark_smith_reroll_target_up", target_state: "FE_DARK_SMITH_REROLL_TARGET" },
       { event: "MENU_DOWN", action: "dark_smith_reroll_target_down", target_state: "FE_DARK_SMITH_REROLL_TARGET" },
+      { event: "PAGE_UP", action: "dark_smith_reroll_target_page_up", target_state: "FE_DARK_SMITH_REROLL_TARGET" },
+      { event: "PAGE_DOWN", action: "dark_smith_reroll_target_page_down", target_state: "FE_DARK_SMITH_REROLL_TARGET" },
       { event: "SELECT", guard: "has_selected_dark_smith_reroll_target", action: "prepare_dark_smith_reroll_option", target_state: "FE_DARK_SMITH_REROLL_OPTION" },
       { event: "ESCAPE", action: "clear_dark_smith_reroll", target_state: "FE_DARK_SMITH_MENU" }
     ]
@@ -524,6 +563,8 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "dark_smith_change_target_up", target_state: "FE_DARK_SMITH_CHANGE_TARGET" },
       { event: "MENU_DOWN", action: "dark_smith_change_target_down", target_state: "FE_DARK_SMITH_CHANGE_TARGET" },
+      { event: "PAGE_UP", action: "dark_smith_change_target_page_up", target_state: "FE_DARK_SMITH_CHANGE_TARGET" },
+      { event: "PAGE_DOWN", action: "dark_smith_change_target_page_down", target_state: "FE_DARK_SMITH_CHANGE_TARGET" },
       { event: "SELECT", guard: "has_selected_dark_smith_change_target", action: "prepare_dark_smith_change_partner", target_state: "FE_DARK_SMITH_CHANGE_PARTNER" },
       { event: "ESCAPE", action: "clear_dark_smith_change", target_state: "FE_DARK_SMITH_MENU" }
     ]
@@ -533,6 +574,8 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "dark_smith_change_partner_up", target_state: "FE_DARK_SMITH_CHANGE_PARTNER" },
       { event: "MENU_DOWN", action: "dark_smith_change_partner_down", target_state: "FE_DARK_SMITH_CHANGE_PARTNER" },
+      { event: "PAGE_UP", action: "dark_smith_change_partner_page_up", target_state: "FE_DARK_SMITH_CHANGE_PARTNER" },
+      { event: "PAGE_DOWN", action: "dark_smith_change_partner_page_down", target_state: "FE_DARK_SMITH_CHANGE_PARTNER" },
       { event: "SELECT", guard: "has_selected_dark_smith_change_partner", action: "prepare_dark_smith_change_options", target_state: "FE_DARK_SMITH_CHANGE_OPTIONS" },
       { event: "ESCAPE", action: "back_to_dark_smith_change_target", target_state: "FE_DARK_SMITH_CHANGE_TARGET" }
     ]
@@ -561,6 +604,8 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "dark_smith_dismantle_cursor_up", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
       { event: "MENU_DOWN", action: "dark_smith_dismantle_cursor_down", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
+      { event: "PAGE_UP", action: "dark_smith_dismantle_page_up", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
+      { event: "PAGE_DOWN", action: "dark_smith_dismantle_page_down", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
       { event: "SELECT", guard: "has_selected_dark_smith_dismantle_item", target_state: "FE_DARK_SMITH_DISMANTLE_CONFIRM" },
       { event: "ESCAPE", action: "prepare_dark_smith_menu", target_state: "FE_DARK_SMITH_MENU" }
     ]
@@ -578,6 +623,8 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "blacksmith_cursor_up", target_state: "FE_BLACKSMITH_MENU" },
       { event: "MENU_DOWN", action: "blacksmith_cursor_down", target_state: "FE_BLACKSMITH_MENU" },
+      { event: "PAGE_UP", action: "blacksmith_page_up", target_state: "FE_BLACKSMITH_MENU" },
+      { event: "PAGE_DOWN", action: "blacksmith_page_down", target_state: "FE_BLACKSMITH_MENU" },
       { event: "SELECT", guard: "has_selected_blacksmith_item", action: "prepare_blacksmith_kind", target_state: "FE_BLACKSMITH_KIND_MENU" },
       { event: "SELL", guard: "blacksmith_selected_inventory_item", action: "sell_selected_blacksmith_item", target_state: "FE_BLACKSMITH_MENU" },
       { event: "DISMANTLE", guard: "blacksmith_selected_dismantle_item", action: "dismantle_selected_blacksmith_item", target_state: "FE_BLACKSMITH_MENU" },
@@ -599,13 +646,6 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "SELECT", guard: "has_blacksmith_proposal", action: "accept_blacksmith_proposal", target_state: "FE_BLACKSMITH_MENU" },
       { event: "ESCAPE", action: "reject_blacksmith_proposal", target_state: "FE_BLACKSMITH_MENU" }
-    ]
-  },
-  FE_ABYSS_ENTRY_MENU: {
-    role: "frontend",
-    next_transitions: [
-      { event: "SELECT", action: "enter_abyss_dungeon", target_state: "FE_GENERATE_MAP" },
-      { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
     ]
   },
   FE_DEATH_SUMMARY: {
@@ -647,26 +687,25 @@ const PROJECTION_POLICY = {
   FE_DEATH_RESOLVE:          { overlay: null,            inputMode: "locked" },
   FE_INVENTORY_MENU:        { overlay: "inventory",     inputMode: "inventory-menu" },
   FE_SHOP_MENU:              { overlay: "shop",          inputMode: "list-menu" },
-  FE_WARP_MENU:              { overlay: "warp",          inputMode: "list-menu" },
+  FE_WARP_MENU:              { overlay: "warp",          inputMode: "portal-menu" },
   FE_INN_MENU:               { overlay: "inn",           inputMode: "confirm-menu" },
   FE_BAR_MENU:               { overlay: "bar",           inputMode: "confirm-menu" },
   FE_HOME_PURCHASE_MENU:     { overlay: "home-purchase", inputMode: "confirm-menu" },
   FE_BLACKSMITH_LOCKED_MENU:      { overlay: "smith-locked",  inputMode: "confirm-menu" },
   FE_HOME_MENU:              { overlay: "home",          inputMode: "home-menu" },
   FE_DARK_SMITH_MENU:             { overlay: "dark-smith", inputMode: "dark-smith-menu" },
-  FE_DARK_SMITH_REROLL_TARGET:    { overlay: "dark-smith-reroll-target", inputMode: "list-menu" },
+  FE_DARK_SMITH_REROLL_TARGET:    { overlay: "dark-smith-reroll-target", inputMode: "paged-list-menu" },
   FE_DARK_SMITH_REROLL_OPTION:    { overlay: "dark-smith-reroll-option", inputMode: "list-menu" },
   FE_DARK_SMITH_REROLL_CONFIRM:   { overlay: "dark-smith-reroll-confirm", inputMode: "confirm-menu" },
-  FE_DARK_SMITH_CHANGE_TARGET:    { overlay: "dark-smith-change-target", inputMode: "list-menu" },
-  FE_DARK_SMITH_CHANGE_PARTNER:   { overlay: "dark-smith-change-partner", inputMode: "list-menu" },
+  FE_DARK_SMITH_CHANGE_TARGET:    { overlay: "dark-smith-change-target", inputMode: "paged-list-menu" },
+  FE_DARK_SMITH_CHANGE_PARTNER:   { overlay: "dark-smith-change-partner", inputMode: "paged-list-menu" },
   FE_DARK_SMITH_CHANGE_OPTIONS:   { overlay: "dark-smith-change-options", inputMode: "dark-smith-change-options" },
   FE_DARK_SMITH_CHANGE_CONFIRM:   { overlay: "dark-smith-change-confirm", inputMode: "confirm-menu" },
-  FE_DARK_SMITH_DISMANTLE_MENU:   { overlay: "dark-smith-dismantle", inputMode: "list-menu" },
+  FE_DARK_SMITH_DISMANTLE_MENU:   { overlay: "dark-smith-dismantle", inputMode: "paged-list-menu" },
   FE_DARK_SMITH_DISMANTLE_CONFIRM:{ overlay: "dark-smith-dismantle-confirm", inputMode: "confirm-menu" },
   FE_BLACKSMITH_MENU:        { overlay: "blacksmith", inputMode: "blacksmith-menu" },
   FE_BLACKSMITH_KIND_MENU:   { overlay: "blacksmith-kind", inputMode: "list-menu" },
   FE_BLACKSMITH_COMPARE:     { overlay: "blacksmith-compare", inputMode: "confirm-menu" },
-  FE_ABYSS_ENTRY_MENU:       { overlay: "abyss-entry",   inputMode: "confirm-menu" },
   FE_DEATH_SUMMARY:          { overlay: "death-summary", inputMode: "death-summary" },
   FE_VICTORY:                { overlay: "victory",       inputMode: "victory" }
 };
@@ -680,9 +719,11 @@ const INPUT_EVENT_BY_MODE = {
   },
   "inventory-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
   "list-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
+  "paged-list-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", PageUp: "PAGE_UP", PageDown: "PAGE_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
+  "portal-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", Escape: "ESCAPE" },
   "home-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", Escape: "ESCAPE" },
-  "blacksmith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", s: "SELL", S: "SELL", d: "DISMANTLE", D: "DISMANTLE", Escape: "ESCAPE" },
-  "dark-smith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", r: "OPEN_OPTION_REROLL", R: "OPEN_OPTION_REROLL", c: "OPEN_OPTION_CHANGE", C: "OPEN_OPTION_CHANGE", d: "OPEN_DISMANTLE", D: "OPEN_DISMANTLE", Escape: "ESCAPE" },
+  "blacksmith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", PageUp: "PAGE_UP", PageDown: "PAGE_DOWN", Enter: "SELECT", s: "SELL", S: "SELL", d: "DISMANTLE", D: "DISMANTLE", Escape: "ESCAPE" },
+  "dark-smith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", PageUp: "PAGE_UP", PageDown: "PAGE_DOWN", Enter: "SELECT", r: "OPEN_OPTION_REROLL", R: "OPEN_OPTION_REROLL", c: "OPEN_OPTION_CHANGE", C: "OPEN_OPTION_CHANGE", d: "OPEN_DISMANTLE", D: "OPEN_DISMANTLE", Escape: "ESCAPE" },
   "dark-smith-change-options": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", Escape: "ESCAPE" },
   "confirm-menu": { Enter: "SELECT", Escape: "ESCAPE" },
   "death-summary": { Enter: "RETURN_TO_TOWN", Escape: "ESCAPE" },
@@ -729,6 +770,7 @@ const context = {
   inventoryCapacity: 8,
   warpDestinations: [1],
   warpSelectedIndex: 0,
+  warpDungeonMode: "standard",
   discoveredWarpFloors: [],
   pendingBossTownServiceFloors: [],
   barMessage: "",
@@ -804,7 +846,9 @@ const autoPatrolRuntime = {
   horizontalFlowPlan: null, horizontalFlowDirection: null, horizontalFlowDisabled: false, horizontalFlowBeamWidth: 0, horizontalFlowEvaluations: 0, horizontalFlowBudgetDepth: 0, horizontalFlowBudgetUsed: 0, horizontalFlowPlansStarted: 0, horizontalFlowPlansCompleted: 0, horizontalFlowPlansInvalidated: 0, horizontalFlowLastResult: null, horizontalFlowLastSignature: "", horizontalFlowLastRejectionSignature: "", horizontalFlowLastRejectionTurn: -999, horizontalFlowLastRejectionHpRatio: 0,
   encirclementShadowEvaluations: 0, encirclementShadowLastResult: null, encirclementBreakPlan: null, encirclementBreakState: "ENCIRCLEMENT_BREAK_EVALUATE", encirclementBreakBudgetDepth: 0, encirclementBreakBudgetUsed: 0, encirclementBreakLastTriggerSignature: "", encirclementBreakPlansStarted: 0, encirclementBreakPlansCompleted: 0, encirclementBreakPlansInvalidated: 0, encirclementBreakEvaluationBudgetExhausted: 0, encirclementBreakLastEvaluationSimulations: 0, encirclementBreakLastEvaluationReason: "",
   targetFinishShadowEvaluations: 0, targetFinishShadowLastResult: null,
-  townGoldWithdrawalRequest: 0, townGoldWithdrawalPurpose: null
+  townGoldWithdrawalRequest: 0, townGoldWithdrawalPurpose: null,
+  townObjectiveState: "TOWN_OBJECTIVE_NONE", activeTownObjective: null, townObjectiveSequence: 0, townObjectiveHistory: [],
+  townCombatPlan: null
 };
 
 const AUTO_PATROL_PRODUCTION_SHADOW_CONFIG = Object.freeze({
@@ -1857,6 +1901,55 @@ function equipmentOptionSummary(item) {
 }
 
 const HOME_CONFIG = { purchasePrice: 10000, storagePageSize: 10, goldTransferPresets: [100, 1000, 10000, 100000, Infinity] };
+const PORTAL_MENU_CONFIG = Object.freeze({ pageSize: 8 });
+const FACILITY_LIST_CONFIG = Object.freeze({ pageSize: 5 });
+
+function pagedSelectionWindow(entries, selectedIndex, pageSize) {
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const safePageSize = Math.max(1, Number.isInteger(pageSize) ? pageSize : 1);
+  const clampedIndex = safeEntries.length ? Math.max(0, Math.min(Number.isInteger(selectedIndex) ? selectedIndex : 0, safeEntries.length - 1)) : 0;
+  const pageCount = Math.max(1, Math.ceil(safeEntries.length / safePageSize));
+  const pageIndex = safeEntries.length ? Math.floor(clampedIndex / safePageSize) : 0;
+  const start = pageIndex * safePageSize;
+  return {
+    pageSize: safePageSize,
+    pageIndex,
+    pageNumber: pageIndex + 1,
+    pageCount,
+    selectedIndex: clampedIndex,
+    start,
+    end: Math.min(safeEntries.length, start + safePageSize),
+    entries: safeEntries.slice(start, start + safePageSize).map((entry, offset) => ({ entry, globalIndex: start + offset }))
+  };
+}
+
+function movePagedSelection(selectedIndex, entryCount, pageSize, pageDelta) {
+  if (entryCount <= 0) return 0;
+  const safePageSize = Math.max(1, pageSize);
+  const current = Math.max(0, Math.min(selectedIndex, entryCount - 1));
+  const row = current % safePageSize;
+  const pageCount = Math.max(1, Math.ceil(entryCount / safePageSize));
+  const currentPage = Math.floor(current / safePageSize);
+  const targetPage = Math.max(0, Math.min(currentPage + pageDelta, pageCount - 1));
+  return Math.min(entryCount - 1, targetPage * safePageSize + row);
+}
+
+function uniqueSortedPortalFloors(floors) {
+  return [...new Set((Array.isArray(floors) ? floors : [])
+    .filter(floor => Number.isInteger(floor) && floor > 0))].sort((a, b) => a - b);
+}
+
+function portalDestinationsForMode(ctx, mode) {
+  const registered = mode === 'abyss' ? ctx.defeatedAbyssBossFloors : ctx.discoveredWarpFloors;
+  return uniqueSortedPortalFloors([1, ...(registered || [])]);
+}
+
+function preparePortalMenu(ctx, mode) {
+  ctx.warpDungeonMode = mode === 'abyss' ? 'abyss' : 'standard';
+  ctx.warpDestinations = portalDestinationsForMode(ctx, ctx.warpDungeonMode);
+  ctx.warpSelectedIndex = Math.max(0, ctx.warpDestinations.length - 1);
+}
+
 const EQUIPMENT_RANKS = Object.freeze(["E", "D", "C", "B", "A", "S", "SS", "SSS", "EX"]);
 const BLACKSMITH_CONFIG = { rerollCost: 1000, rarityWeights: [0.45, 0.30, 0.18, 0.07] };
 const EQUIPMENT_GROWTH_CONFIG = {
@@ -1928,7 +2021,7 @@ const DARK_SMITH_CONFIG = {
   guaranteedSuccesses: 10,
   minimumSuccessRate: 0.10,
   unlockBossFloor: 100,
-  dismantleYield: { rare: 1, very_rare: 3, ultra_rare: 8 }
+  dismantleYield: { rare: 1, very_rare: 2, ultra_rare: 4 }
 };
 const ABYSS_MIRROR_SPEC = {
   bossFloor: 30,
@@ -1967,13 +2060,30 @@ function darkSmithMaterialCost(option) {
   return 1 + Math.floor((option?.enhancementSuccesses || 0) / 10);
 }
 
+function dismantleRarityYield(rarity) {
+  return DARK_SMITH_CONFIG.dismantleYield[rarity || 'common'] || 0;
+}
+
+function dismantleYieldBreakdown(item) {
+  const equipment = dismantleRarityYield(item?.rarity);
+  const options = (item?.options || []).map(option => dismantleRarityYield(option?.rarity));
+  const optionTotal = options.reduce((sum, value) => sum + value, 0);
+  return { equipment, options, optionTotal, total: equipment + optionTotal };
+}
+
 function dismantleYield(item) {
-  return DARK_SMITH_CONFIG.dismantleYield[item?.rarity || 'common'] || 0;
+  return dismantleYieldBreakdown(item).total;
+}
+
+function dismantleYieldSummary(item) {
+  const breakdown = dismantleYieldBreakdown(item);
+  const optionParts = (item?.options || []).map((option, index) => `${index + 1}:${rarityLabel(option.rarity)} +${breakdown.options[index]}`).join(' / ');
+  return `Equipment ${rarityLabel(item?.rarity || 'common')} +${breakdown.equipment}${optionParts ? ` / Options ${optionParts}` : ' / Options none'} / Total ${breakdown.total}`;
 }
 
 function darkSmithDismantleEntries(ctx) {
   return ctx.equipmentInventory
-    .map((item, index) => ({ index, item, yield: dismantleYield(item) }))
+    .map((item, index) => ({ index, item, yield: dismantleYield(item), breakdown: dismantleYieldBreakdown(item) }))
     .filter(entry => entry.yield > 0);
 }
 
@@ -2247,26 +2357,8 @@ function createDarkSmithActionStagingContext(ctx) {
 
 function commitDarkSmithActionStagingContext(ctx, staged) {
   const currentById = new Map(ctx.equipmentInventory.map(item => [item.instanceId, item]));
-  ctx.equipmentInventory = staged.equipmentInventory.map(stagedItem => {
-    const current = currentById.get(stagedItem.instanceId);
-    if (!current) return stagedItem;
-    const snapshot = stableClone(stagedItem);
-    const currentOptions = Array.isArray(current.options) ? current.options : [];
-    for (const key of Object.keys(current)) {
-      if (key !== 'options') delete current[key];
-    }
-    for (const [key, value] of Object.entries(snapshot)) {
-      if (key !== 'options') current[key] = value;
-    }
-    current.options = (snapshot.options || []).map((stagedOption, index) => {
-      const currentOption = currentOptions.find(option => option.optionId === stagedOption.optionId) || currentOptions[index];
-      if (!currentOption) return stagedOption;
-      for (const key of Object.keys(currentOption)) delete currentOption[key];
-      Object.assign(currentOption, stagedOption);
-      return currentOption;
-    });
-    return current;
-  });
+  // Dismantle removes one selected item but must not rewrite any surviving equipment or option identity.
+  ctx.equipmentInventory = staged.equipmentInventory.map(stagedItem => currentById.get(stagedItem.instanceId) || stagedItem);
   ctx.forgeShards = staged.forgeShards;
   ctx.logs = staged.logs;
   ctx.darkSmithDismantleEntries = darkSmithDismantleEntries(ctx);
@@ -3769,6 +3861,7 @@ function commitMapGenerationStagingContext(ctx, staged) {
   ctx.shopSelectedIndex = staged.shopSelectedIndex;
   ctx.warpDestinations = staged.warpDestinations;
   ctx.warpSelectedIndex = staged.warpSelectedIndex;
+  ctx.warpDungeonMode = staged.warpDungeonMode || "standard";
   ctx.barMessage = staged.barMessage;
   ctx.homeMenuEntries = staged.homeMenuEntries;
   ctx.homeSelectedIndex = staged.homeSelectedIndex;
@@ -5545,6 +5638,7 @@ function clearTransientInteractionRuntime(ctx) {
   ctx.shopSelectedIndex = 0;
   ctx.warpDestinations = [];
   ctx.warpSelectedIndex = 0;
+  ctx.warpDungeonMode = "standard";
   ctx.barMessage = '';
   ctx.homeMenuEntries = [];
   ctx.homeSelectedIndex = 0;
@@ -5609,6 +5703,7 @@ function commitDeathPenaltyStagingContext(ctx, staged) {
   ctx.shopSelectedIndex = staged.shopSelectedIndex;
   ctx.warpDestinations = staged.warpDestinations;
   ctx.warpSelectedIndex = staged.warpSelectedIndex;
+  ctx.warpDungeonMode = staged.warpDungeonMode || "standard";
   ctx.barMessage = staged.barMessage;
   ctx.homeMenuEntries = staged.homeMenuEntries;
   ctx.homeSelectedIndex = staged.homeSelectedIndex;
@@ -5713,6 +5808,7 @@ const actions = {
     staged.pendingBossTownServiceFloors = [];
     staged.warpDestinations = [1];
     staged.warpSelectedIndex = 0;
+    staged.warpDungeonMode = "standard";
     staged.maxReachedDepth = 0;
     staged.maxReachedAbyssDepth = 0;
     staged.bombs = [];
@@ -5885,20 +5981,27 @@ const actions = {
     commitMapTransitionStagingContext(ctx, staged);
   },
 
-  prepare_warp_menu: (ctx) => {
-    ctx.warpDestinations = [1, ...ctx.discoveredWarpFloors];
-    ctx.warpSelectedIndex = Math.max(0, ctx.warpDestinations.indexOf(Math.max(...ctx.warpDestinations)));
-  },
+  prepare_warp_menu: (ctx) => { preparePortalMenu(ctx, 'standard'); },
+  prepare_abyss_warp_menu: (ctx) => { preparePortalMenu(ctx, 'abyss'); },
   warp_cursor_up: (ctx) => { ctx.warpSelectedIndex = Math.max(0, ctx.warpSelectedIndex - 1); },
-  warp_cursor_down: (ctx) => { ctx.warpSelectedIndex = Math.min(ctx.warpDestinations.length - 1, ctx.warpSelectedIndex + 1); },
+  warp_cursor_down: (ctx) => { ctx.warpSelectedIndex = Math.min(Math.max(0, ctx.warpDestinations.length - 1), ctx.warpSelectedIndex + 1); },
+  warp_page_previous: (ctx) => { ctx.warpSelectedIndex = movePagedSelection(ctx.warpSelectedIndex, ctx.warpDestinations.length, PORTAL_MENU_CONFIG.pageSize, -1); },
+  warp_page_next: (ctx) => { ctx.warpSelectedIndex = movePagedSelection(ctx.warpSelectedIndex, ctx.warpDestinations.length, PORTAL_MENU_CONFIG.pageSize, 1); },
   enter_selected_warp: (ctx) => {
     const destination = ctx.warpDestinations[ctx.warpSelectedIndex] || 1;
+    const mode = ctx.warpDungeonMode === 'abyss' ? 'abyss' : 'standard';
+    const prefix = mode === 'abyss' ? 'A' : 'B';
     const staged = createMapTransitionStagingContext(ctx);
-    resolveBombsOnMapExit(staged, `B${destination}`);
+    resolveBombsOnMapExit(staged, `${prefix}${destination}`);
     staged.currentMapType = "dungeon";
-    staged.dungeonMode = "standard";
+    staged.dungeonMode = mode;
     staged.depth = destination;
-    addLog(staged, destination === 1 ? "You entered the Underworld from B1." : `The town gate reconstructed a new B${destination} map. Its guardian will return.`);
+    staged.warpDungeonMode = mode;
+    if (mode === 'abyss') {
+      addLog(staged, destination === 1 ? "You entered the Abyss from A1." : `The Abyss gate reconstructed a new A${destination} map. Its guardian will return.`);
+    } else {
+      addLog(staged, destination === 1 ? "You entered the Underworld from B1." : `The town gate reconstructed a new B${destination} map. Its guardian will return.`);
+    }
     commitMapTransitionStagingContext(ctx, staged);
   },
 
@@ -5963,20 +6066,6 @@ const actions = {
     addLog(staged, `Equipped ${stagedSelected.name}. Stored ${previous.name}.`);
     commitManualEquipmentSwapStagingContext(ctx, staged);
   },
-  sell_selected_inventory: (ctx) => {
-    const selected = ctx.equipmentInventory[ctx.inventorySelectedIndex];
-    if (!selected) return;
-    const staged = createInventorySaleStagingContext(ctx);
-    const stagedSelected = staged.equipmentInventory[staged.inventorySelectedIndex];
-    if (!stagedSelected || stagedSelected.instanceId !== selected.instanceId) return;
-    const price = Math.floor((stagedSelected.value || 0) / 2);
-    staged.player.gold += price;
-    staged.equipmentInventory.splice(staged.inventorySelectedIndex, 1);
-    staged.inventorySelectedIndex = Math.min(staged.inventorySelectedIndex, Math.max(0, staged.equipmentInventory.length - 1));
-    addLog(staged, `Sold ${stagedSelected.name} for ${price} gold.`);
-    pickupFloorItemAtPlayerPosition(staged);
-    commitInventorySaleStagingContext(ctx, staged);
-  },
 
   // --- 町の進行施設ロジック ---
   purchase_home: (ctx) => {
@@ -5987,15 +6076,6 @@ const actions = {
     staged.homePurchased = true;
     addLog(staged, `Purchased a home in town for ${HOME_CONFIG.purchasePrice} gold.`);
     commitHomePurchaseStagingContext(ctx, staged);
-  },
-  enter_abyss_dungeon: (ctx) => {
-    if (!hasClearedBlacksmithMilestone(ctx)) return;
-    const staged = createMapTransitionStagingContext(ctx);
-    staged.currentMapType = 'dungeon';
-    staged.dungeonMode = 'abyss';
-    staged.depth = ABYSS_CONFIG.startDepth;
-    addLog(staged, `You crossed the Abyss Gate. Descent begins at A${staged.depth}.`);
-    commitMapTransitionStagingContext(ctx, staged);
   },
 
   // --- 自宅ロジック ---
@@ -6088,6 +6168,8 @@ const actions = {
   },
   dark_smith_reroll_target_up: (ctx) => { ctx.darkSmithReroll.targetIndex = Math.max(0, ctx.darkSmithReroll.targetIndex - 1); },
   dark_smith_reroll_target_down: (ctx) => { ctx.darkSmithReroll.targetIndex = Math.min(Math.max(0, ctx.darkSmithReroll.targetEntries.length - 1), ctx.darkSmithReroll.targetIndex + 1); },
+  dark_smith_reroll_target_page_up: (ctx) => { ctx.darkSmithReroll.targetIndex = movePagedSelection(ctx.darkSmithReroll.targetIndex, ctx.darkSmithReroll.targetEntries.length, FACILITY_LIST_CONFIG.pageSize, -1); },
+  dark_smith_reroll_target_page_down: (ctx) => { ctx.darkSmithReroll.targetIndex = movePagedSelection(ctx.darkSmithReroll.targetIndex, ctx.darkSmithReroll.targetEntries.length, FACILITY_LIST_CONFIG.pageSize, 1); },
   prepare_dark_smith_reroll_option: (ctx) => {
     const flow = ctx.darkSmithReroll;
     flow.target = flow.targetEntries[flow.targetIndex] || null;
@@ -6131,6 +6213,8 @@ const actions = {
   },
   dark_smith_change_target_up: (ctx) => { ctx.darkSmithChange.targetIndex = Math.max(0, ctx.darkSmithChange.targetIndex - 1); },
   dark_smith_change_target_down: (ctx) => { ctx.darkSmithChange.targetIndex = Math.min(Math.max(0, ctx.darkSmithChange.targetEntries.length - 1), ctx.darkSmithChange.targetIndex + 1); },
+  dark_smith_change_target_page_up: (ctx) => { ctx.darkSmithChange.targetIndex = movePagedSelection(ctx.darkSmithChange.targetIndex, ctx.darkSmithChange.targetEntries.length, FACILITY_LIST_CONFIG.pageSize, -1); },
+  dark_smith_change_target_page_down: (ctx) => { ctx.darkSmithChange.targetIndex = movePagedSelection(ctx.darkSmithChange.targetIndex, ctx.darkSmithChange.targetEntries.length, FACILITY_LIST_CONFIG.pageSize, 1); },
   prepare_dark_smith_change_partner: (ctx) => {
     const flow = ctx.darkSmithChange;
     flow.target = flow.targetEntries[flow.targetIndex] || null;
@@ -6139,6 +6223,8 @@ const actions = {
   },
   dark_smith_change_partner_up: (ctx) => { ctx.darkSmithChange.partnerIndex = Math.max(0, ctx.darkSmithChange.partnerIndex - 1); },
   dark_smith_change_partner_down: (ctx) => { ctx.darkSmithChange.partnerIndex = Math.min(Math.max(0, ctx.darkSmithChange.partnerEntries.length - 1), ctx.darkSmithChange.partnerIndex + 1); },
+  dark_smith_change_partner_page_up: (ctx) => { ctx.darkSmithChange.partnerIndex = movePagedSelection(ctx.darkSmithChange.partnerIndex, ctx.darkSmithChange.partnerEntries.length, FACILITY_LIST_CONFIG.pageSize, -1); },
+  dark_smith_change_partner_page_down: (ctx) => { ctx.darkSmithChange.partnerIndex = movePagedSelection(ctx.darkSmithChange.partnerIndex, ctx.darkSmithChange.partnerEntries.length, FACILITY_LIST_CONFIG.pageSize, 1); },
   prepare_dark_smith_change_options: (ctx) => {
     const flow = ctx.darkSmithChange;
     flow.partner = flow.partnerEntries[flow.partnerIndex] || null;
@@ -6179,6 +6265,8 @@ const actions = {
   },
   dark_smith_cursor_up: (ctx) => { ctx.darkSmithSelectedIndex = Math.max(0, ctx.darkSmithSelectedIndex - 1); ctx.darkSmithOptionIndex = 0; },
   dark_smith_cursor_down: (ctx) => { ctx.darkSmithSelectedIndex = Math.min(Math.max(0, ctx.darkSmithMenuEntries.length - 1), ctx.darkSmithSelectedIndex + 1); ctx.darkSmithOptionIndex = 0; },
+  dark_smith_page_up: (ctx) => { ctx.darkSmithSelectedIndex = movePagedSelection(ctx.darkSmithSelectedIndex, ctx.darkSmithMenuEntries.length, FACILITY_LIST_CONFIG.pageSize, -1); ctx.darkSmithOptionIndex = 0; },
+  dark_smith_page_down: (ctx) => { ctx.darkSmithSelectedIndex = movePagedSelection(ctx.darkSmithSelectedIndex, ctx.darkSmithMenuEntries.length, FACILITY_LIST_CONFIG.pageSize, 1); ctx.darkSmithOptionIndex = 0; },
   dark_smith_option_left: (ctx) => { ctx.darkSmithOptionIndex = Math.max(0, (ctx.darkSmithOptionIndex || 0) - 1); },
   dark_smith_option_right: (ctx) => {
     const count = ctx.darkSmithMenuEntries[ctx.darkSmithSelectedIndex]?.item?.options?.length || 1;
@@ -6190,6 +6278,8 @@ const actions = {
   },
   dark_smith_dismantle_cursor_up: (ctx) => { ctx.darkSmithDismantleSelectedIndex = Math.max(0, ctx.darkSmithDismantleSelectedIndex - 1); },
   dark_smith_dismantle_cursor_down: (ctx) => { ctx.darkSmithDismantleSelectedIndex = Math.min(Math.max(0, ctx.darkSmithDismantleEntries.length - 1), ctx.darkSmithDismantleSelectedIndex + 1); },
+  dark_smith_dismantle_page_up: (ctx) => { ctx.darkSmithDismantleSelectedIndex = movePagedSelection(ctx.darkSmithDismantleSelectedIndex, ctx.darkSmithDismantleEntries.length, FACILITY_LIST_CONFIG.pageSize, -1); },
+  dark_smith_dismantle_page_down: (ctx) => { ctx.darkSmithDismantleSelectedIndex = movePagedSelection(ctx.darkSmithDismantleSelectedIndex, ctx.darkSmithDismantleEntries.length, FACILITY_LIST_CONFIG.pageSize, 1); },
   dismantle_selected_dark_smith_item: (ctx) => {
     const entry = ctx.darkSmithDismantleEntries[ctx.darkSmithDismantleSelectedIndex];
     if (!entry || entry.yield <= 0 || !isCurrentEquipmentEntry(ctx, { source: 'inventory', index: entry.index, item: entry.item })) return;
@@ -6226,10 +6316,12 @@ const actions = {
   },
 
 
-  // --- 鍛冶屋（1000Gold再抽選）ロジック ---
+  // --- 通常鍛冶屋（Equipment Lv上昇・売却・分解）ロジック ---
   prepare_blacksmith_menu: (ctx) => { ctx.blacksmithEntries = blacksmithCandidateEntries(ctx); ctx.blacksmithSelectedIndex = Math.min(ctx.blacksmithSelectedIndex, Math.max(0, ctx.blacksmithEntries.length - 1)); ctx.blacksmithProposal = null; },
   blacksmith_cursor_up: (ctx) => { ctx.blacksmithSelectedIndex = Math.max(0, ctx.blacksmithSelectedIndex - 1); },
   blacksmith_cursor_down: (ctx) => { ctx.blacksmithSelectedIndex = Math.min(Math.max(0, ctx.blacksmithEntries.length - 1), ctx.blacksmithSelectedIndex + 1); },
+  blacksmith_page_up: (ctx) => { ctx.blacksmithSelectedIndex = movePagedSelection(ctx.blacksmithSelectedIndex, ctx.blacksmithEntries.length, FACILITY_LIST_CONFIG.pageSize, -1); },
+  blacksmith_page_down: (ctx) => { ctx.blacksmithSelectedIndex = movePagedSelection(ctx.blacksmithSelectedIndex, ctx.blacksmithEntries.length, FACILITY_LIST_CONFIG.pageSize, 1); },
   sell_selected_blacksmith_item: (ctx) => {
     const entry = ctx.blacksmithEntries[ctx.blacksmithSelectedIndex];
     if (!entry || entry.source !== 'inventory' || !isCurrentEquipmentEntry(ctx, entry)) return;
@@ -6940,12 +7032,13 @@ function autoPatrolDetectedCombatEnemies(ctx) {
   return autoPatrolHostiles(ctx).filter(enemy => enemy.hasDetectedPlayer);
 }
 function autoPatrolDecisionIsDetectedCombatTactic(ctx, decision) {
-  if (ctx.currentMapType !== "dungeon") return false;
+  if (!["dungeon", "town"].includes(ctx.currentMapType)) return false;
   const active = autoPatrolRuntime.activeObjective;
   const engagementActive = active?.type === "DEFEAT_DETECTED_ENEMIES"
     && (active.targetEnemyIds || []).some(id => Boolean(autoPatrolEnemyById(ctx, id)));
   if (!engagementActive && autoPatrolDetectedCombatEnemies(ctx).length === 0) return false;
   const reason = decision?.reason || "";
+  if (ctx.currentMapType === "town") return engagementActive || reason.startsWith("town-hostile-");
   const category = autoPatrolObjectiveCategory(reason);
   return ["RECOVERY", "COMBAT", "SURVIVAL", "BOMB"].includes(category)
     || /detected-combat|wall-cover|strong-wall|separate-multi-enemy|open-lane|single-enemy-lure/i.test(reason)
@@ -7665,9 +7758,23 @@ function autoPatrolRecordObjectiveProjection(before, decision, accepted) {
     autoPatrolRuntime.combatNoProgressCount = objective.combatNoProgressCount;
     objective.pendingTrajectorySignature = null;
     objective.pendingStateAction = null;
-    if (autoPatrolPlayerIsCurrentlyDead(context)) { autoPatrolTerminateObjectiveOnDeath(context); return; }
+    if (autoPatrolPlayerIsCurrentlyDead(context)) {
+      const deathReason = context.currentMapType === "town" && autoPatrolRuntime.activeTownObjective
+        ? "player-dead-during-auto-patrol"
+        : "player-dead";
+      autoPatrolTerminateObjectiveOnDeath(context, deathReason);
+      return;
+    }
     const remainingTargets = objective.targetEnemyIds.filter(id => Boolean(autoPatrolEnemyById(context, id)));
-    if (!remainingTargets.length) { autoPatrolCompleteObjective(context, "detected-combat-targets-defeated"); return; }
+    if (!remainingTargets.length) {
+      const completionReason = context.currentMapType === "town"
+        && context.timePhase === 5
+        && autoPatrolRuntime.activeTownObjective?.status === "SUSPENDED"
+        ? "town-hostiles-dispersed-at-dawn"
+        : "detected-combat-targets-defeated";
+      autoPatrolCompleteObjective(context, completionReason);
+      return;
+    }
     transitionAutoPatrolObjective("PROGRESS");
     objective.noProgressCount = 0;
     transitionAutoPatrolObjective("CONTINUE");
@@ -7693,7 +7800,13 @@ function autoPatrolRecordObjectiveProjection(before, decision, accepted) {
     || (objective.type === "ESCAPE_LETHAL_TARGET" && targetDistance > previousTargetDistance)
     || (townObjective && (after.playerX !== before.playerX || after.playerY !== before.playerY));
   objective.progressSequence.push({ turn: after.turn, progressed, state: after });
-  if (autoPatrolPlayerIsCurrentlyDead(context)) { autoPatrolTerminateObjectiveOnDeath(context); return; }
+  if (autoPatrolPlayerIsCurrentlyDead(context)) {
+    const deathReason = context.currentMapType === "town" && autoPatrolRuntime.activeTownObjective
+      ? "player-dead-during-auto-patrol"
+      : "player-dead";
+    autoPatrolTerminateObjectiveOnDeath(context, deathReason);
+    return;
+  }
   const targetAlive = objective.target?.enemyId == null || Boolean(autoPatrolEnemyById(context, objective.target.enemyId));
   const completed = ((objective.type === "DEFEAT_TARGET" || objective.type === "LAST_STAND") && !targetAlive)
     || (objective.type === "COLLECT_TARGET_LOOT" && after.lootCount < objective.startState.lootCount)
@@ -8688,6 +8801,299 @@ function autoPatrolFoodHuntDecision(ctx) {
   return { kind: "DISPATCH", event, reason: tacticalFoodHunt ? "food-hunt-tactical-approach" : (event === move.event ? "food-hunt-approach" : "food-hunt-anti-oscillation"), targetId: target.id };
 }
 
+
+const AUTO_PATROL_TOWN_OBJECTIVE_SFA = Object.freeze({
+  TOWN_OBJECTIVE_NONE: { description: "No town-service objective is active.", next_transitions: [{ event: "CREATE", target_state: "TOWN_OBJECTIVE_CREATED" }] },
+  TOWN_OBJECTIVE_CREATED: { description: "One town-service objective and its completion condition have been created.", next_transitions: [{ event: "ACCEPT", target_state: "TOWN_OBJECTIVE_ACCEPTED" }] },
+  TOWN_OBJECTIVE_ACCEPTED: { description: "The objective owns its required resources and may begin execution.", next_transitions: [{ event: "EXECUTE", target_state: "TOWN_OBJECTIVE_EXECUTING" }, { event: "FAIL", target_state: "TOWN_OBJECTIVE_FAILED" }] },
+  TOWN_OBJECTIVE_EXECUTING: { description: "Only actions belonging to the accepted town objective may be dispatched.", next_transitions: [{ event: "STEP", target_state: "TOWN_OBJECTIVE_EXECUTING" }, { event: "VERIFY", target_state: "TOWN_OBJECTIVE_VERIFYING" }, { event: "SUSPEND", target_state: "TOWN_OBJECTIVE_SUSPENDED" }, { event: "FAIL", target_state: "TOWN_OBJECTIVE_FAILED" }] },
+  TOWN_OBJECTIVE_SUSPENDED: { description: "A higher-priority foreground objective temporarily owns actions while the town objective retains its phase and reservations.", next_transitions: [{ event: "RESUME", target_state: "TOWN_OBJECTIVE_EXECUTING" }, { event: "FAIL", target_state: "TOWN_OBJECTIVE_FAILED" }] },
+  TOWN_OBJECTIVE_VERIFYING: { description: "Canonical state is checked against the objective completion condition.", next_transitions: [{ event: "COMPLETE", target_state: "TOWN_OBJECTIVE_COMPLETED" }, { event: "CONTINUE", target_state: "TOWN_OBJECTIVE_EXECUTING" }, { event: "FAIL", target_state: "TOWN_OBJECTIVE_FAILED" }] },
+  TOWN_OBJECTIVE_COMPLETED: { description: "The town objective completed and releases its resource reservations.", next_transitions: [{ event: "CLEAR", target_state: "TOWN_OBJECTIVE_NONE" }] },
+  TOWN_OBJECTIVE_FAILED: { description: "The town objective failed explicitly and releases its resource reservations.", next_transitions: [{ event: "CLEAR", target_state: "TOWN_OBJECTIVE_NONE" }] }
+});
+function transitionAutoPatrolTownObjective(event) {
+  const definition = AUTO_PATROL_TOWN_OBJECTIVE_SFA[autoPatrolRuntime.townObjectiveState];
+  const transition = definition?.next_transitions?.find(candidate => candidate.event === event);
+  if (!transition) return false;
+  autoPatrolRuntime.townObjectiveState = transition.target_state;
+  return true;
+}
+function autoPatrolTownReservedGold() {
+  const objective = autoPatrolRuntime.activeTownObjective;
+  return ["ACTIVE", "SUSPENDED"].includes(objective?.status) ? Math.max(0, Math.floor(objective.reservedGold || 0)) : 0;
+}
+function autoPatrolSuspendTownObjective(ctx, reason = "hostile-interference") {
+  const objective = autoPatrolRuntime.activeTownObjective;
+  if (!objective || objective.status !== "ACTIVE") return objective || null;
+  if (autoPatrolRuntime.townObjectiveState !== "TOWN_OBJECTIVE_EXECUTING" || !transitionAutoPatrolTownObjective("SUSPEND")) return objective;
+  objective.status = "SUSPENDED";
+  objective.suspendedTurn = ctx.turnCount;
+  objective.suspensionReason = reason;
+  objective.suspendedPhase = objective.phase;
+  objective.phaseHistory = [...(objective.phaseHistory || []), { turn: ctx.turnCount, from: objective.phase, to: objective.phase, reason: `suspended:${reason}` }].slice(-50);
+  return objective;
+}
+function autoPatrolResumeTownObjective(ctx, reason = "foreground-objective-completed") {
+  const objective = autoPatrolRuntime.activeTownObjective;
+  if (!objective || objective.status !== "SUSPENDED") return objective || null;
+  if (autoPatrolRuntime.townObjectiveState !== "TOWN_OBJECTIVE_SUSPENDED" || !transitionAutoPatrolTownObjective("RESUME")) return objective;
+  objective.status = "ACTIVE";
+  objective.resumedTurn = ctx.turnCount;
+  objective.resumeReason = reason;
+  objective.phaseHistory = [...(objective.phaseHistory || []), { turn: ctx.turnCount, from: objective.phase, to: objective.phase, reason: `resumed:${reason}` }].slice(-50);
+  return objective;
+}
+function autoPatrolTownHandoffLegacyObjective(ctx) {
+  const objective = autoPatrolRuntime.activeObjective;
+  if (!objective || objective.type === "DEFEAT_DETECTED_ENEMIES") return objective || null;
+  autoPatrolFailObjective(ctx, "town-foreground-handoff");
+  return null;
+}
+function autoPatrolTownFinaliseObjective(ctx, status, reason) {
+  const objective = autoPatrolRuntime.activeTownObjective;
+  if (!objective) return null;
+  objective.status = status;
+  objective.endReason = reason;
+  objective.endTurn = ctx.turnCount;
+  objective.endGold = ctx.player.gold;
+  objective.endHomeGold = ctx.homeStorage?.gold || 0;
+  objective.releasedReservedGold = Math.max(0, Math.floor(objective.reservedGold || 0));
+  objective.reservationReleased = true;
+  autoPatrolRuntime.townObjectiveHistory = [...(autoPatrolRuntime.townObjectiveHistory || []), structuredClone(objective)].slice(-100);
+  autoPatrolRuntime.activeTownObjective = null;
+  return objective;
+}
+function autoPatrolCompleteTownObjective(ctx, reason) {
+  if (!autoPatrolRuntime.activeTownObjective) return null;
+  if (autoPatrolRuntime.townObjectiveState === "TOWN_OBJECTIVE_EXECUTING") transitionAutoPatrolTownObjective("VERIFY");
+  transitionAutoPatrolTownObjective("COMPLETE");
+  const result = autoPatrolTownFinaliseObjective(ctx, "COMPLETED", reason);
+  transitionAutoPatrolTownObjective("CLEAR");
+  return result;
+}
+function autoPatrolFailTownObjective(ctx, reason) {
+  if (!autoPatrolRuntime.activeTownObjective) return null;
+  transitionAutoPatrolTownObjective("FAIL");
+  const result = autoPatrolTownFinaliseObjective(ctx, "FAILED", reason);
+  transitionAutoPatrolTownObjective("CLEAR");
+  return result;
+}
+function autoPatrolCreateTownRestObjective(ctx) {
+  if (autoPatrolRuntime.activeTownObjective) return autoPatrolRuntime.activeTownObjective;
+  transitionAutoPatrolTownObjective("CREATE");
+  const objective = {
+    objectiveId: `town-objective-${ctx.turnCount}-${++autoPatrolRuntime.townObjectiveSequence}`,
+    type: "REST_AT_INN",
+    status: "ACTIVE",
+    phase: ctx.player.gold >= 20 ? "MOVE_TO_INN" : "ACQUIRE_INN_FEE",
+    reservedGold: 20,
+    createdTurn: ctx.turnCount,
+    startGold: ctx.player.gold,
+    startHomeGold: ctx.homeStorage?.gold || 0,
+    completionCondition: "Inn rest is acknowledged, time is no longer Midnight, and HP/Hunger are full.",
+    phaseHistory: []
+  };
+  autoPatrolRuntime.activeTownObjective = objective;
+  transitionAutoPatrolTownObjective("ACCEPT");
+  transitionAutoPatrolTownObjective("EXECUTE");
+  return objective;
+}
+function autoPatrolTownShopTargetCount(ctx, targetType) {
+  if (targetType === "return_scroll") return ctx.player.returnScrolls;
+  if (targetType === "bomb_capacity") return ctx.player.bombCapacityShopPurchases;
+  if (targetType === "bomb_range") return ctx.player.bombRangeShopPurchases;
+  return 0;
+}
+function autoPatrolTownShopTargetLabel(targetType) {
+  if (targetType === "return_scroll") return "Return to Town Scroll";
+  if (targetType === "bomb_capacity") return "Bomb Harness Upgrade";
+  if (targetType === "bomb_range") return "Blast Range Amplifier";
+  return targetType || "shop item";
+}
+function autoPatrolCreateTownShopPurchaseObjective(ctx, target = autoPatrolTownDesiredShopPurchase(ctx)) {
+  if (autoPatrolRuntime.activeTownObjective) return autoPatrolRuntime.activeTownObjective;
+  if (!target || autoPatrolTownAvailablePurchaseGold(ctx) < target.value) return null;
+  transitionAutoPatrolTownObjective("CREATE");
+  const startCount = autoPatrolTownShopTargetCount(ctx, target.type);
+  const objective = {
+    objectiveId: `town-objective-${ctx.turnCount}-${++autoPatrolRuntime.townObjectiveSequence}`,
+    type: "BUY_SHOP_ITEM",
+    status: "ACTIVE",
+    phase: "CREATED",
+    targetType: target.type,
+    targetReason: target.reason,
+    targetLabel: autoPatrolTownShopTargetLabel(target.type),
+    targetValue: target.value,
+    targetCountBefore: startCount,
+    targetCountGoal: startCount + 1,
+    reservedGold: target.value,
+    createdTurn: ctx.turnCount,
+    startGold: ctx.player.gold,
+    startHomeGold: ctx.homeStorage?.gold || 0,
+    completionCondition: `${autoPatrolTownShopTargetLabel(target.type)} count reaches ${startCount + 1}.`,
+    failureConditions: ["purchase funding becomes unavailable", "shop target disappears", "purchase result is not confirmed"],
+    phaseHistory: []
+  };
+  autoPatrolRuntime.activeTownObjective = objective;
+  transitionAutoPatrolTownObjective("ACCEPT");
+  transitionAutoPatrolTownObjective("EXECUTE");
+  autoPatrolTownSetObjectivePhase(ctx, objective, ctx.player.gold >= objective.reservedGold ? "MOVE_TO_SHOP" : "ACQUIRE_PURCHASE_FUNDS", "shop-purchase-objective-accepted");
+  return objective;
+}
+function autoPatrolTownSetObjectivePhase(ctx, objective, phase, reason) {
+  if (!objective || objective.phase === phase) return;
+  objective.phaseHistory = [...(objective.phaseHistory || []), { turn: ctx.turnCount, from: objective.phase, to: phase, reason }].slice(-50);
+  objective.phase = phase;
+  if (autoPatrolRuntime.townObjectiveState === "TOWN_OBJECTIVE_EXECUTING") transitionAutoPatrolTownObjective("STEP");
+}
+function autoPatrolEnsureTownObjective(ctx) {
+  if (ctx.currentMapType !== "town") {
+    if (autoPatrolRuntime.activeTownObjective) autoPatrolFailTownObjective(ctx, "left-town-before-completion");
+    return null;
+  }
+  if (autoPatrolRuntime.activeTownObjective) return autoPatrolRuntime.activeTownObjective;
+  if (autoPatrolTownNeedsRest(ctx)) return autoPatrolCreateTownRestObjective(ctx);
+  const shopTarget = autoPatrolTownDesiredShopPurchase(ctx);
+  if (shopTarget && autoPatrolTownAvailablePurchaseGold(ctx) >= shopTarget.value) return autoPatrolCreateTownShopPurchaseObjective(ctx, shopTarget);
+  return null;
+}
+function autoPatrolTownRestObjectiveDecision(ctx, frontendState) {
+  const objective = autoPatrolEnsureTownObjective(ctx);
+  if (!objective || objective.type !== "REST_AT_INN") return null;
+  if (frontendState === "FE_SAVE_RESULT") {
+    autoPatrolTownSetObjectivePhase(ctx, objective, "VERIFY_REST", "save-result-visible");
+    return { kind: "DISPATCH", event: "SELECT", reason: "town-rest-save-ack" };
+  }
+  if (frontendState === "FE_INN_MENU") {
+    if (ctx.player.gold < objective.reservedGold) {
+      autoPatrolFailTownObjective(ctx, "inn-fee-reservation-lost");
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-rest-reservation-lost" };
+    }
+    autoPatrolTownSetObjectivePhase(ctx, objective, "USE_INN", "inn-menu-open");
+    return { kind: "DISPATCH", event: "SELECT", reason: "town-rest-confirm" };
+  }
+  if (frontendState === "FE_HOME_MENU") {
+    if (ctx.player.gold >= objective.reservedGold) {
+      rebuildHomeMenuEntries(ctx);
+      autoPatrolTownSetObjectivePhase(ctx, objective, "LEAVE_HOME_FOR_INN", "inn-fee-acquired");
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-rest-leave-home-with-reserved-gold" };
+    }
+    const shortage = Math.min(objective.reservedGold - ctx.player.gold, ctx.homeStorage?.gold || 0);
+    if (shortage <= 0) {
+      autoPatrolFailTownObjective(ctx, "inn-fee-unavailable");
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-rest-inn-fee-unavailable" };
+    }
+    autoPatrolRuntime.townGoldWithdrawalRequest = shortage;
+    autoPatrolRuntime.townGoldWithdrawalPurpose = "inn";
+    rebuildHomeMenuEntries(ctx);
+    const entryIndex = ctx.homeMenuEntries.findIndex(entry => entry.kind === "withdraw_gold");
+    if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-rest-withdraw-entry-missing" };
+    if (ctx.homeSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-rest-select-withdraw" };
+    if (ctx.homeSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-rest-select-withdraw" };
+    autoPatrolTownSetObjectivePhase(ctx, objective, "ACQUIRE_INN_FEE", "withdraw-inn-fee");
+    return { kind: "DISPATCH", event: "SELECT", reason: "town-rest-withdraw-inn-gold" };
+  }
+  if (frontendState !== "FE_PLAYER_TURN") return { kind: "PAUSE", reason: `town-rest-waiting:${frontendState}` };
+  if (objective.phase === "VERIFY_REST") {
+    const fullHp = ctx.player.hp >= ctx.player.maxHp;
+    const fullHunger = ctx.player.hunger >= BALANCE_CONFIG.fullHunger - 0.01;
+    const leftMidnight = ctx.timePhase < 3;
+    if (fullHp && fullHunger && leftMidnight) {
+      autoPatrolCompleteTownObjective(ctx, "inn-rest-confirmed");
+      return null;
+    }
+    if (autoPatrolRuntime.townObjectiveState === "TOWN_OBJECTIVE_VERIFYING") transitionAutoPatrolTownObjective("CONTINUE");
+    autoPatrolTownSetObjectivePhase(ctx, objective, "MOVE_TO_INN", "rest-verification-incomplete");
+  }
+  if (ctx.player.gold < objective.reservedGold) {
+    autoPatrolTownSetObjectivePhase(ctx, objective, "ACQUIRE_INN_FEE", "reserved-gold-missing");
+    if (!ctx.homePurchased || (ctx.homeStorage?.gold || 0) <= 0) {
+      autoPatrolFailTownObjective(ctx, "inn-fee-unavailable");
+      return null;
+    }
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home") return { kind: "DISPATCH", event: "INTERACT", reason: "town-rest-open-home-for-inn-fee" };
+    const moveHome = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-rest-approach-home-for-inn-fee");
+    return moveHome ? { kind: "DISPATCH", ...moveHome } : { kind: "STOP", reason: "town-rest-home-route-unavailable" };
+  }
+  autoPatrolTownSetObjectivePhase(ctx, objective, "MOVE_TO_INN", "inn-fee-reserved");
+  if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "inn") return { kind: "DISPATCH", event: "INTERACT", reason: "town-rest-open" };
+  const moveInn = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.innPosition], "town-rest-approach");
+  return moveInn ? { kind: "DISPATCH", ...moveInn } : { kind: "STOP", reason: "town-rest-route-unavailable" };
+}
+function autoPatrolTownShopPurchaseObjectiveDecision(ctx, frontendState, objective = autoPatrolEnsureTownObjective(ctx)) {
+  if (!objective || objective.type !== "BUY_SHOP_ITEM") return null;
+  const currentCount = autoPatrolTownShopTargetCount(ctx, objective.targetType);
+  if (currentCount >= objective.targetCountGoal) {
+    autoPatrolTownSetObjectivePhase(ctx, objective, "VERIFY_PURCHASE", "shop-purchase-count-increased");
+    autoPatrolCompleteTownObjective(ctx, "shop-purchase-confirmed");
+    return null;
+  }
+  if (frontendState === "FE_HOME_MENU") {
+    if (ctx.player.gold >= objective.reservedGold) {
+      rebuildHomeMenuEntries(ctx);
+      autoPatrolTownSetObjectivePhase(ctx, objective, "LEAVE_HOME_FOR_SHOP", "shop-purchase-funds-acquired");
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-home-shop-funding-complete" };
+    }
+    const shortage = Math.min(objective.reservedGold - ctx.player.gold, ctx.homeStorage?.gold || 0);
+    if (shortage <= 0) {
+      autoPatrolFailTownObjective(ctx, "shop-purchase-funds-unavailable");
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-shop-purchase-funds-unavailable" };
+    }
+    autoPatrolRuntime.townGoldWithdrawalRequest = shortage;
+    autoPatrolRuntime.townGoldWithdrawalPurpose = objective.targetReason;
+    rebuildHomeMenuEntries(ctx);
+    const entryIndex = ctx.homeMenuEntries.findIndex(entry => entry.kind === "withdraw_gold");
+    if (entryIndex < 0) {
+      autoPatrolFailTownObjective(ctx, "shop-purchase-withdraw-entry-missing");
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-shop-purchase-withdraw-entry-missing" };
+    }
+    if (ctx.homeSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-home-service-select" };
+    if (ctx.homeSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-home-service-select" };
+    autoPatrolTownSetObjectivePhase(ctx, objective, "ACQUIRE_PURCHASE_FUNDS", "withdraw-shop-purchase-funds");
+    return { kind: "DISPATCH", event: "SELECT", reason: "town-home-withdraw-shop-gold" };
+  }
+  if (frontendState === "FE_SHOP_MENU") {
+    if (ctx.player.gold < objective.reservedGold) {
+      autoPatrolFailTownObjective(ctx, "shop-purchase-reservation-lost");
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-shop-purchase-reservation-lost" };
+    }
+    const entryIndex = ctx.shopInventory.findIndex(item => item.type === objective.targetType && item.stock > 0);
+    if (entryIndex < 0) {
+      autoPatrolFailTownObjective(ctx, "shop-purchase-target-missing");
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-shop-purchase-target-missing" };
+    }
+    if (ctx.shopSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: `town-shop-select-${objective.targetReason}` };
+    if (ctx.shopSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: `town-shop-select-${objective.targetReason}` };
+    autoPatrolTownSetObjectivePhase(ctx, objective, "BUY_ITEM", "shop-target-selected");
+    return { kind: "DISPATCH", event: "SELECT", reason: `town-shop-buy-${objective.targetReason}` };
+  }
+  if (frontendState !== "FE_PLAYER_TURN") return { kind: "PAUSE", reason: `town-shop-purchase-waiting:${frontendState}` };
+  if (ctx.player.gold < objective.reservedGold) {
+    autoPatrolTownSetObjectivePhase(ctx, objective, "ACQUIRE_PURCHASE_FUNDS", "reserved-purchase-gold-missing");
+    const availableHomeGold = ctx.homePurchased ? (ctx.homeStorage?.gold || 0) : 0;
+    if (ctx.player.gold + availableHomeGold < objective.reservedGold) {
+      autoPatrolFailTownObjective(ctx, "shop-purchase-funds-unavailable");
+      return null;
+    }
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home") return { kind: "DISPATCH", event: "INTERACT", reason: "town-home-withdraw-shop-open" };
+    const moveHome = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-home-withdraw-shop-approach");
+    return moveHome ? { kind: "DISPATCH", ...moveHome } : { kind: "STOP", reason: "town-shop-purchase-home-route-unavailable" };
+  }
+  autoPatrolTownSetObjectivePhase(ctx, objective, "MOVE_TO_SHOP", "shop-purchase-gold-reserved");
+  if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "shop") return { kind: "DISPATCH", event: "INTERACT", reason: "town-shop-open" };
+  const moveShop = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.shopPosition], "town-shop-approach");
+  return moveShop ? { kind: "DISPATCH", ...moveShop } : { kind: "STOP", reason: "town-shop-purchase-route-unavailable" };
+}
+function autoPatrolTownObjectiveDecision(ctx, frontendState) {
+  const objective = autoPatrolEnsureTownObjective(ctx);
+  if (!objective || objective.status === "SUSPENDED" || autoPatrolRuntime.townObjectiveState === "TOWN_OBJECTIVE_SUSPENDED") return null;
+  const decision = objective.type === "REST_AT_INN"
+    ? autoPatrolTownRestObjectiveDecision(ctx, frontendState)
+    : autoPatrolTownShopPurchaseObjectiveDecision(ctx, frontendState, objective);
+  return decision?.kind === "DISPATCH" ? { ...decision, townObjectiveOwned: true } : decision;
+}
+
 const AUTO_PATROL_TOWN_CONFIG = Object.freeze({
   freeInventorySlots: 3,
   restHpRatio: 0.95,
@@ -8770,7 +9176,8 @@ function autoPatrolTownInventoryNeedsCleanup(ctx) {
   return autoPatrolTownDisposableEntries(ctx).length > 0;
 }
 function autoPatrolTownNeedsGoldDeposit(ctx) {
-  return Boolean(ctx.homePurchased && ctx.player.gold > 0);
+  const depositableGold = Math.max(0, ctx.player.gold - autoPatrolTownReservedGold());
+  return Boolean(ctx.homePurchased && depositableGold > 0);
 }
 function autoPatrolTownNeedsInnWithdrawal(ctx) {
   return Boolean(autoPatrolTownNeedsRest(ctx)
@@ -8852,6 +9259,14 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
   return null;
 }
 function autoPatrolTownDecision(ctx, frontendState) {
+  autoPatrolTownHandoffLegacyObjective(ctx);
+  const activeTownObjectiveBeforeDecision = autoPatrolRuntime.activeTownObjective;
+  const lifecycleDecision = autoPatrolTownObjectiveDecision(ctx, frontendState);
+  if (lifecycleDecision) return lifecycleDecision;
+  if (activeTownObjectiveBeforeDecision && !autoPatrolRuntime.activeTownObjective) {
+    const nextLifecycleDecision = autoPatrolTownObjectiveDecision(ctx, frontendState);
+    if (nextLifecycleDecision) return nextLifecycleDecision;
+  }
   const menuDecision = autoPatrolTownMenuDecision(ctx, frontendState);
   if (menuDecision) return menuDecision;
   if (frontendState !== "FE_PLAYER_TURN") return { kind: "PAUSE", reason: `waiting:${frontendState}` };
@@ -10812,6 +11227,278 @@ function autoPatrolMaybeStartWallBreachPlan(ctx, targetId) {
   return autoPatrolContinueWallBreachPlan(ctx, engine.currentState);
 }
 
+function autoPatrolTownCombatTargets(ctx) {
+  const active = autoPatrolRuntime.activeObjective;
+  const ownedIds = active?.type === "DEFEAT_DETECTED_ENEMIES" ? (active.targetEnemyIds || []) : [];
+  const detectedIds = autoPatrolDetectedCombatEnemies(ctx).map(enemy => enemy.id);
+  return [...new Set([...ownedIds, ...detectedIds])]
+    .map(id => autoPatrolEnemyById(ctx, id))
+    .filter(Boolean)
+    .sort((left, right) => {
+      const adjacent = Number(autoPatrolDistance(left, ctx.player) === 1) - Number(autoPatrolDistance(right, ctx.player) === 1);
+      if (adjacent) return -adjacent;
+      return autoPatrolCombatTargetPriority(ctx, left) - autoPatrolCombatTargetPriority(ctx, right)
+        || autoPatrolDistance(left, ctx.player) - autoPatrolDistance(right, ctx.player)
+        || left.hp - right.hp
+        || left.id - right.id;
+    });
+}
+function autoPatrolTownCombatCandidateEvents(ctx) {
+  const result = [];
+  for (const [x, y] of autoPatrolNeighbors(ctx.player.x, ctx.player.y)) {
+    if (!autoPatrolWalkable(ctx, x, y) && !ctx.enemies.some(enemy => enemy.x === x && enemy.y === y)) continue;
+    const event = autoPatrolDirectionEvent(x - ctx.player.x, y - ctx.player.y);
+    if (event && !result.includes(event)) result.push(event);
+  }
+  result.push("PASS");
+  return result;
+}
+function autoPatrolTownCombatCandidateDistance(ctx, event, target) {
+  const deltas = { MOVE_UP: [0, -1], MOVE_RIGHT: [1, 0], MOVE_DOWN: [0, 1], MOVE_LEFT: [-1, 0], PASS: [0, 0] };
+  const [dx, dy] = deltas[event] || [0, 0];
+  return Math.abs(target.x - (ctx.player.x + dx)) + Math.abs(target.y - (ctx.player.y + dy));
+}
+async function autoPatrolSimulateTownCombatSequence(events) {
+  const contextSnapshot = structuredClone(context);
+  const stateSnapshot = engine.currentState;
+  const runtimeSnapshot = autoPatrolCloneSimulationRuntime();
+  const transaction = beginGameRandomTransaction();
+  const beforeHp = context.player.hp;
+  const beforeEnemyCount = autoPatrolHostiles(context).length;
+  let acceptedTurns = 0;
+  let cumulativeDamage = 0;
+  let previousHp = beforeHp;
+  let maxAdjacent = autoPatrolAdjacentHostiles(context).length;
+  let peakPendingSpells = 0;
+  let minExits = autoPatrolWalkableExitCount(context);
+  let dead = false;
+  const trajectory = [];
+  engine.beginProjectionSuppression();
+  try {
+    const fork = beginGameRandomTransactionFork(transaction);
+    try {
+      for (const event of events) {
+        if (!await engine.transition(event)) break;
+        acceptedTurns += 1;
+        const hostiles = autoPatrolHostiles(context);
+        const detected = hostiles.filter(enemy => enemy.hasDetectedPlayer);
+        const adjacent = autoPatrolAdjacentHostiles(context).length;
+        const pendingSpells = detected.filter(enemy => enemy.pendingSpell).length;
+        const exits = autoPatrolWalkableExitCount(context);
+        const immediateDamage = Math.max(0, previousHp - context.player.hp);
+        previousHp = context.player.hp;
+        cumulativeDamage += immediateDamage;
+        maxAdjacent = Math.max(maxAdjacent, adjacent);
+        peakPendingSpells = Math.max(peakPendingSpells, pendingSpells);
+        minExits = Math.min(minExits, exits);
+        dead = engine.currentState === "FE_DEATH_SUMMARY" || autoPatrolPlayerIsCurrentlyDead(context);
+        trajectory.push({ event, hp: context.player.hp, immediateDamage, adjacent, pendingSpells, exits });
+        if (dead) break;
+      }
+    } finally { endGameRandomSimulationFork(fork); }
+    const hostiles = autoPatrolHostiles(context);
+    const detected = hostiles.filter(enemy => enemy.hasDetectedPlayer);
+    const adjacent = autoPatrolAdjacentHostiles(context).length;
+    const near2 = detected.filter(enemy => autoPatrolDistance(enemy, context.player) <= 2).length;
+    const minDetectedDistance = detected.length
+      ? Math.min(...detected.map(enemy => autoPatrolDistance(enemy, context.player)))
+      : 99;
+    const pendingSpells = detected.filter(enemy => enemy.pendingSpell).length;
+    const kills = Math.max(0, beforeEnemyCount - hostiles.length);
+    const exits = autoPatrolWalkableExitCount(context);
+    const score = (dead ? 1000000000000 : 0)
+      + cumulativeDamage * 10000000
+      + maxAdjacent * 100000000
+      + peakPendingSpells * 1000000
+      + near2 * 100000
+      + (minExits < 1 ? 5000000000 : 0)
+      - minDetectedDistance * 10000
+      - kills * 500000
+      - context.player.hp * 10;
+    return { accepted: acceptedTurns > 0, acceptedTurns, events: events.slice(0, acceptedTurns), trajectory, score, metrics: {
+      dead, detected: detected.length, detectedIds: detected.map(enemy => enemy.id), adjacent, maxAdjacent, near2,
+      minDetectedDistance, pendingSpells, peakPendingSpells, hpLoss: Math.max(0, beforeHp - context.player.hp),
+      cumulativeDamage, playerHp: context.player.hp, kills, exits, minExits,
+      timePhase: context.timePhase, timePhaseElapsedTurns: context.timePhaseElapsedTurns,
+      townHostiles: hostiles.filter(enemy => enemy.isTownEnemy).length
+    } };
+  } catch (_) {
+    return { accepted: false, acceptedTurns, events: events.slice(0, acceptedTurns), trajectory, score: 1000000000000, metrics: {
+      dead: true, detected: 99, detectedIds: [], adjacent: 99, maxAdjacent: 99, near2: 99, minDetectedDistance: 0,
+      pendingSpells: 99, peakPendingSpells: 99, hpLoss: beforeHp, cumulativeDamage: beforeHp, playerHp: 0,
+      kills: 0, exits: 0, minExits: 0, timePhase: context.timePhase,
+      timePhaseElapsedTurns: context.timePhaseElapsedTurns, townHostiles: beforeEnemyCount
+    } };
+  } finally {
+    if (gameRandomRuntime.transactionStack[gameRandomRuntime.transactionStack.length - 1] === transaction) rollbackGameRandomTransaction(transaction);
+    autoPatrolRestoreContext(context, contextSnapshot);
+    engine.currentState = stateSnapshot;
+    autoPatrolRestoreSimulationRuntime(runtimeSnapshot);
+    engine.endProjectionSuppression();
+  }
+}
+async function autoPatrolSimulateTownCombatEvent(event) {
+  return autoPatrolSimulateTownCombatSequence([event]);
+}
+async function autoPatrolCreateTownDawnEvasionPlan(ctx, target) {
+  const events = ["MOVE_UP", "MOVE_RIGHT", "MOVE_DOWN", "MOVE_LEFT", "PASS"];
+  const candidates = [];
+  for (const firstEvent of events) {
+    for (const secondEvent of events) {
+      const result = await autoPatrolSimulateTownCombatSequence([firstEvent, secondEvent]);
+      if (result.acceptedTurns < 2 || result.metrics.dead || result.metrics.minExits < 1 || result.metrics.maxAdjacent > 1) continue;
+      candidates.push(result);
+    }
+  }
+  candidates.sort((left, right) => left.score - right.score || left.events.join("|").localeCompare(right.events.join("|")));
+  const selected = candidates[0] || null;
+  if (!selected) return null;
+  autoPatrolRuntime.townCombatPlan = {
+    targetId: target.id,
+    events: selected.events.slice(),
+    createdTurn: ctx.turnCount,
+    tactic: "EVADE_UNTIL_DAWN",
+    phase: "WAIT_FOR_DAWN",
+    turnsUntilDawn: autoPatrolTownTurnsUntilDawn(ctx),
+    expectedDamage: selected.metrics.cumulativeDamage,
+    expectedRemainingHp: selected.metrics.playerHp,
+    expectedMaxAdjacent: selected.metrics.maxAdjacent,
+    suspendedTownObjectiveId: autoPatrolRuntime.activeTownObjective?.objectiveId || null
+  };
+  return autoPatrolRuntime.townCombatPlan;
+}
+
+function autoPatrolTownTurnsUntilDawn(ctx) {
+  const elapsed = Math.max(0, Math.min(TURNS_PER_TIME_PHASE - 1, Number(ctx.timePhaseElapsedTurns) || 0));
+  if (ctx.timePhase === 4) return TURNS_PER_TIME_PHASE - elapsed;
+  if (ctx.timePhase === 3) return (TURNS_PER_TIME_PHASE - elapsed) + TURNS_PER_TIME_PHASE;
+  return 0;
+}
+function autoPatrolTownShouldEvadeUntilDawn(ctx) {
+  return ctx.currentMapType === "town"
+    && ctx.timePhase === 4
+    && autoPatrolTownTurnsUntilDawn(ctx) > 0
+    && ctx.player.hp <= ctx.player.maxHp * AUTO_PATROL_CONFIG.criticalHpRatio;
+}
+function autoPatrolTownCombatRecoveryReserve(ctx, targets = autoPatrolTownCombatTargets(ctx)) {
+  const strongestImmediateHit = targets.reduce((max, enemy) => Math.max(max, enemyDamageAgainstPlayer(ctx, enemy)), 0);
+  return Math.max(1, ctx.player.maxHp * 0.15, strongestImmediateHit);
+}
+async function autoPatrolTownSafestCombatStep(ctx, target, reason = "town-hostile-separate", options = {}) {
+  const currentAdjacent = autoPatrolAdjacentHostiles(ctx).length;
+  const evadeUntilDawn = Boolean(options.evadeUntilDawn);
+  const candidates = [];
+  for (const event of autoPatrolTownCombatCandidateEvents(ctx)) {
+    const result = await autoPatrolSimulateTownCombatEvent(event);
+    if (!result.accepted || result.metrics.dead || result.metrics.exits < 1) continue;
+    if (result.metrics.adjacent > Math.max(1, currentAdjacent)) continue;
+    if (result.metrics.hpLoss >= ctx.player.maxHp * AUTO_PATROL_SURVIVAL_MODEL.severeHpLossRatio) continue;
+    candidates.push({ event, result, distance: autoPatrolTownCombatCandidateDistance(ctx, event, target) });
+  }
+  if (!candidates.length) return autoPatrolLastStandDecision(ctx) || autoPatrolForcedProgressDecision(ctx, target.id, "town-hostile-forced-progress");
+  if (evadeUntilDawn) {
+    candidates.sort((left, right) => left.result.metrics.hpLoss - right.result.metrics.hpLoss
+      || left.result.metrics.adjacent - right.result.metrics.adjacent
+      || left.result.metrics.pendingSpells - right.result.metrics.pendingSpells
+      || left.result.metrics.near2 - right.result.metrics.near2
+      || right.result.metrics.minDetectedDistance - left.result.metrics.minDetectedDistance
+      || right.result.metrics.kills - left.result.metrics.kills
+      || Number(left.event === "PASS") - Number(right.event === "PASS")
+      || left.event.localeCompare(right.event));
+    return {
+      kind: "DISPATCH", event: candidates[0].event, reason: "town-hostile-dawn-evasion",
+      targetId: target.id, combatOwnershipCommit: true,
+      townCombatPhase: "EVADE_UNTIL_DAWN", turnsUntilDawn: autoPatrolTownTurnsUntilDawn(ctx)
+    };
+  }
+  const zeroPressure = currentAdjacent === 0
+    ? candidates.filter(candidate => candidate.result.metrics.adjacent === 0 && candidate.result.metrics.hpLoss === 0)
+    : [];
+  const pool = zeroPressure.length ? zeroPressure : candidates;
+  pool.sort((left, right) => left.result.score - right.result.score
+    || right.result.metrics.minDetectedDistance - left.result.metrics.minDetectedDistance
+    || left.distance - right.distance
+    || left.event.localeCompare(right.event));
+  return { kind: "DISPATCH", event: pool[0].event, reason, targetId: target.id, combatOwnershipCommit: true };
+}
+async function autoPatrolCreateTownCombatPlan(ctx, target) {
+  const horizon = Math.max(4, Math.min(12, Math.ceil(target.hp / Math.max(1, autoPatrolPlayerAttack(ctx))) + autoPatrolDistance(ctx.player, target)));
+  const selected = await autoPatrolSimulateCommittedMeleeContactRoute(target.id, horizon);
+  const selectedEvents = (selected?.trajectory || []).map(step => step.event).filter(Boolean);
+  const reserve = autoPatrolTownCombatRecoveryReserve(ctx);
+  if (!selected || !selected.targetKilled || !selected.safe || selected.dead || !selectedEvents.length || selected.final.hp <= reserve) return null;
+  autoPatrolRuntime.townCombatPlan = {
+    targetId: target.id,
+    events: selectedEvents,
+    createdTurn: ctx.turnCount,
+    tactic: selected.tactic,
+    phase: "FINISH_VERIFIED_TARGET",
+    expectedDamage: selected.cumulativeDamage,
+    expectedRemainingHp: selected.final.hp,
+    requiredRecoveryReserve: reserve,
+    expectedMaxAdjacent: selected.maxAdjacent,
+    suspendedTownObjectiveId: autoPatrolRuntime.activeTownObjective?.objectiveId || null
+  };
+  return autoPatrolRuntime.townCombatPlan;
+}
+async function autoPatrolTownHostilePreemptionDecision(ctx, frontendState) {
+  if (ctx.currentMapType !== "town" || frontendState !== "FE_PLAYER_TURN") return null;
+  autoPatrolTownHandoffLegacyObjective(ctx);
+  const targets = autoPatrolTownCombatTargets(ctx);
+  if (!targets.length) {
+    const completionReason = ctx.timePhase === 5 ? "town-hostiles-dispersed-at-dawn" : "town-hostiles-cleared";
+    autoPatrolRuntime.townCombatPlan = null;
+    if (autoPatrolRuntime.activeObjective?.type === "DEFEAT_DETECTED_ENEMIES") autoPatrolCompleteObjective(ctx, completionReason);
+    if (autoPatrolRuntime.activeTownObjective?.status === "SUSPENDED") autoPatrolResumeTownObjective(ctx, completionReason);
+    return null;
+  }
+  autoPatrolSuspendTownObjective(ctx, "hostile-interference");
+  const target = targets[0];
+  if (autoPatrolTownShouldEvadeUntilDawn(ctx)) {
+    let evasionPlan = autoPatrolRuntime.townCombatPlan;
+    if (evasionPlan?.tactic !== "EVADE_UNTIL_DAWN" || !evasionPlan.events?.length) {
+      evasionPlan = await autoPatrolCreateTownDawnEvasionPlan(ctx, target);
+    }
+    if (evasionPlan?.events?.length) {
+      const event = evasionPlan.events[0];
+      const result = await autoPatrolSimulateTownCombatEvent(event);
+      if (result.accepted && !result.metrics.dead && result.metrics.exits >= 1 && result.metrics.adjacent <= 1) {
+        const activePlan = autoPatrolRuntime.townCombatPlan;
+        if (activePlan?.tactic === "EVADE_UNTIL_DAWN") {
+          activePlan.events.shift();
+          activePlan.turnsUntilDawn = autoPatrolTownTurnsUntilDawn(ctx);
+        }
+        return {
+          kind: "DISPATCH", event, reason: "town-hostile-dawn-evasion", targetId: target.id,
+          combatOwnershipCommit: true, townCombatPhase: "EVADE_UNTIL_DAWN",
+          turnsUntilDawn: autoPatrolTownTurnsUntilDawn(ctx)
+        };
+      }
+      autoPatrolRuntime.townCombatPlan = null;
+    }
+    return autoPatrolTownSafestCombatStep(ctx, target, "town-hostile-dawn-evasion", { evadeUntilDawn: true });
+  }
+  let plan = autoPatrolRuntime.townCombatPlan;
+  let plannedTarget = plan ? autoPatrolEnemyById(ctx, plan.targetId) : null;
+  if (!plannedTarget || !plan.events?.length || plan.tactic === "EVADE_UNTIL_DAWN") {
+    autoPatrolRuntime.townCombatPlan = null;
+    plannedTarget = target;
+    plan = await autoPatrolCreateTownCombatPlan(ctx, plannedTarget);
+  }
+  if (plan?.events?.length) {
+    const event = plan.events[0];
+    const result = await autoPatrolSimulateTownCombatEvent(event);
+    if (result.accepted && !result.metrics.dead && result.metrics.exits >= 1 && result.metrics.adjacent <= 1
+        && result.metrics.hpLoss < ctx.player.maxHp * AUTO_PATROL_SURVIVAL_MODEL.severeHpLossRatio) {
+      const activePlan = autoPatrolRuntime.townCombatPlan;
+      if (activePlan?.targetId === plannedTarget.id) activePlan.events.shift();
+      return { kind: "DISPATCH", event, reason: "town-hostile-finish-target", targetId: plannedTarget.id, combatOwnershipCommit: true };
+    }
+    autoPatrolRuntime.townCombatPlan = null;
+  }
+  return autoPatrolTownSafestCombatStep(ctx, plannedTarget, "town-hostile-reposition");
+}
+
 async function decideAutoPatrolRuntimeAction(ctx, frontendState, rolloutContext = false) {
   if (frontendState === "FE_DEATH_SUMMARY") {
     return AUTO_PATROL_CONFIG.continueAfterDeath
@@ -10819,6 +11506,10 @@ async function decideAutoPatrolRuntimeAction(ctx, frontendState, rolloutContext 
       : { kind: "PAUSE", reason: "death-summary-awaiting-manual-return" };
   }
   if (!rolloutContext) autoPatrolUpdateFloorHuntStall(ctx);
+  if (!rolloutContext) {
+    const townHostilePreemption = await autoPatrolTownHostilePreemptionDecision(ctx, frontendState);
+    if (townHostilePreemption) return townHostilePreemption;
+  }
   // An already placed player bomb owns the runtime until detonation or explicit terminal projection.
   // Higher-level selectors must not replace its escape/hold trajectory with melee, approach, loot, or floor completion.
   const activeBombTrajectory = autoPatrolContinueBombPlan(ctx);
@@ -11706,6 +12397,7 @@ async function autoPatrolSelectConflictAlternative(ctx, suppressedCategory, deci
 }
 async function autoPatrolBreakTwoCellOscillation(ctx, decision) {
   if (!decision || decision.kind !== "DISPATCH") return decision;
+  if (decision.combatOwnershipCommit) return decision;
   if (String(decision.reason || "").startsWith("horizontal-flow-") && autoPatrolRuntime.horizontalFlowPlan) return decision;
   autoPatrolPruneObjectiveSuppressions(ctx);
   const decisionCategory = autoPatrolObjectiveCategory(decision.reason);
@@ -11787,6 +12479,16 @@ function autoPatrolSingleActiveBombSafetyDecision(ctx, decision) {
 }
 
 
+function autoPatrolTerminateObjectivesForDeath(ctx, reason = "player-dead-during-auto-patrol") {
+  if (autoPatrolRuntime.activeObjective) autoPatrolTerminateObjectiveOnDeath(ctx, reason);
+  if (autoPatrolRuntime.activeTownObjective) autoPatrolFailTownObjective(ctx, reason);
+  autoPatrolRuntime.townCombatPlan = null;
+}
+function autoPatrolTerminateObjectivesForStop(ctx, reason = "auto-patrol-stopped") {
+  if (autoPatrolRuntime.activeObjective) autoPatrolFailObjective(ctx, reason);
+  if (autoPatrolRuntime.activeTownObjective) autoPatrolFailTownObjective(ctx, reason);
+  autoPatrolRuntime.townCombatPlan = null;
+}
 function autoPatrolResetTransientPlansAfterDeathReturn() {
   resetAutoPatrolProductionShadow("death-return");
   autoPatrolRuntime.bombPlan = null;
@@ -11801,6 +12503,7 @@ function autoPatrolResetTransientPlansAfterDeathReturn() {
   autoPatrolRuntime.engagementPlan = null;
   autoPatrolRuntime.horizontalFlowPlan = null;
   autoPatrolRuntime.encirclementBreakPlan = null;
+  autoPatrolRuntime.townCombatPlan = null;
   autoPatrolRuntime.lurePlanState = "LURE_PLAN_NONE";
   autoPatrolRuntime.contactRouteState = "CONTACT_ROUTE_EVALUATE";
   autoPatrolRuntime.initialRouteState = "INITIAL_ROUTE_EVALUATE";
@@ -11863,7 +12566,9 @@ function autoPatrolUiProgressSignature(ctx) {
 function autoPatrolSignature(ctx, decision) { return [ctx.currentMapType, ctx.depth, ctx.player.x, ctx.player.y, ctx.player.hp, ctx.player.hunger, ctx.enemies.length, ctx.items.length, autoPatrolUiProgressSignature(ctx), decision?.event, decision?.reason].join('|'); }
 function clearAutoPatrolTimer() { if (autoPatrolRuntime.timerId !== null) clearTimeout(autoPatrolRuntime.timerId); autoPatrolRuntime.timerId = null; }
 function stopAutoPatrol(reason = "user-toggle", failed = false) {
-  clearAutoPatrolTimer(); resetAutoPatrolProductionShadow(`stop:${reason}`); autoPatrolRuntime.generation += 1; autoPatrolRuntime.stopReason = reason;
+  clearAutoPatrolTimer(); resetAutoPatrolProductionShadow(`stop:${reason}`);
+  autoPatrolTerminateObjectivesForStop(context, `${failed ? "auto-patrol-failed" : "auto-patrol-stopped"}:${reason}`);
+  autoPatrolRuntime.generation += 1; autoPatrolRuntime.stopReason = reason;
   if (failed) transitionAutoPatrol("FAIL");
   else { if (autoPatrolRuntime.state !== "AUTO_PATROL_STOPPING") transitionAutoPatrol("TOGGLE_OFF"); transitionAutoPatrol("STOPPED"); }
 }
@@ -11894,7 +12599,8 @@ async function runAutoPatrolTick(generation) {
     decision = autoPatrolSingleActiveBombSafetyDecision(context, decision);
   }
   if (decision?.kind === "DISPATCH" && !decision.lifecycleOnly) {
-    const objective = autoPatrolEnsureObjectiveForDecision(context, decision);
+    const townObjectiveOwned = Boolean(decision.townObjectiveOwned && context.currentMapType === "town");
+    const objective = townObjectiveOwned ? null : autoPatrolEnsureObjectiveForDecision(context, decision);
     if (!objective && autoPatrolObjectiveTypeFromDecision(decision) === "ESCAPE_LETHAL_TARGET") {
       decision = autoPatrolLastStandDecision(context) || autoPatrolForcedProgressDecision(context, decision.targetId || null, "forced-progress:escape-failure-memory-blocked");
       if (decision.kind === "DISPATCH") autoPatrolEnsureObjectiveForDecision(context, decision);
@@ -11927,6 +12633,9 @@ async function runAutoPatrolTick(generation) {
     const bombPlanBeforeDispatch = { mapType: context.currentMapType, depth: context.depth };
     const movementBefore = { ...autoPatrolObjectiveCanonicalSnapshot(context), depth: context.depth, x: context.player.x, y: context.player.y, enemies: autoPatrolHostiles(context).length, items: context.items.length };
     const beforeBombIds = new Set(context.bombs.map(bomb => bomb.id));
+    if (decision.lifecycleOnly && decision.event === "RETURN_TO_TOWN") {
+      autoPatrolTerminateObjectivesForDeath(context, "player-dead-during-auto-patrol");
+    }
     const accepted = await transitionWithAnalysisTrace(decision.event, "AUTO_PATROL", { reason: decision.reason || null, targetId: decision.targetId || null });
     if (!accepted) throw new Error(`dispatch-rejected:${decision.event}`);
     if (decision.shadowRouteCommit) {
@@ -11973,7 +12682,7 @@ function startAutoPatrol() {
   if (!resumableFrontendState || !["dungeon", "town"].includes(context.currentMapType) || context.player.hp <= 0) { autoPatrolRuntime.stopReason = "start-condition-rejected"; renderAutoPatrolStatus(); return false; }
   autoPatrolRuntime.generation += 1; autoPatrolRuntime.stopReason = ""; autoPatrolRuntime.decision = null; autoPatrolRuntime.repeatCount = 0; autoPatrolRuntime.repeatedSignature = "";
   autoPatrolRuntime.bombPlan = null; autoPatrolRuntime.pendingBombPlan = null; autoPatrolRuntime.bombSetupPlan = null; autoPatrolRuntime.wallBreachPlan = null; autoPatrolRuntime.bombLurePlan = null; autoPatrolRuntime.bombLureEvaluatedDepth = 0; autoPatrolRuntime.meleePlan = null; autoPatrolRuntime.contactRoutePlan = null; autoPatrolRuntime.contactRouteState = "CONTACT_ROUTE_EVALUATE"; autoPatrolRuntime.initialRoutePlan = null; autoPatrolRuntime.initialRouteState = "INITIAL_ROUTE_EVALUATE"; autoPatrolRuntime.foodHuntPlan = null; autoPatrolRuntime.foodHuntState = "FOOD_HUNT_EVALUATE";
-  autoPatrolRuntime.plansStarted = 0; autoPatrolRuntime.plannedBombKills = 0; autoPatrolRuntime.wallBreachPlansStarted = 0; autoPatrolRuntime.wallBreachPlansCompleted = 0; autoPatrolRuntime.wallBreachPlansInvalidated = 0; autoPatrolRuntime.meleePlansCompleted = 0; autoPatrolRuntime.contactRoutePlansStarted = 0; autoPatrolRuntime.contactRoutePlansCompleted = 0; autoPatrolRuntime.initialRoutePlansStarted = 0; autoPatrolRuntime.initialRoutePlansCompleted = 0; autoPatrolRuntime.foodHuntPlansStarted = 0; autoPatrolRuntime.foodHuntTargetsDefeated = 0; autoPatrolRuntime.levelCommitAttacks = 0; autoPatrolRuntime.emergencyPositions = 0; autoPatrolRuntime.multiStrongWallLastEvaluationTurn = -999; autoPatrolRuntime.multiStrongWallLastEvaluationDepth = 0; autoPatrolRuntime.multiStrongWallLastEvaluationSignature = ""; autoPatrolRuntime.multiStrongWallEvaluations = 0; autoPatrolRuntime.multiStrongWallPlansStarted = 0; autoPatrolRuntime.bombEscapePreflightEvaluations = 0; autoPatrolRuntime.bombEscapePreflightRejected = 0; autoPatrolRuntime.bombEscapeSuppressUntilTurn = -1; autoPatrolRuntime.bombEscapeSuppressTargetId = null; autoPatrolRuntime.floorBombPlacementRejectedDepth = 0; autoPatrolRuntime.bombEscapeAlternativePlan = null; autoPatrolRuntime.bombEscapeAlternativePlansStarted = 0; autoPatrolRuntime.bombEscapeAlternativePlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlan = null; autoPatrolRuntime.horizontalFlowDirection = null; autoPatrolRuntime.horizontalFlowDisabled = false; autoPatrolRuntime.horizontalFlowBeamWidth = 0; autoPatrolRuntime.horizontalFlowEvaluations = 0; autoPatrolRuntime.horizontalFlowBudgetDepth = 0; autoPatrolRuntime.horizontalFlowBudgetUsed = 0; autoPatrolRuntime.horizontalFlowPlansStarted = 0; autoPatrolRuntime.horizontalFlowPlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlansInvalidated = 0; autoPatrolRuntime.horizontalFlowLastResult = null; autoPatrolRuntime.horizontalFlowLastSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionTurn = -999; autoPatrolRuntime.horizontalFlowLastRejectionHpRatio = 0; autoPatrolRuntime.movementHistory = []; autoPatrolRuntime.oscillationState = "OBJECTIVE_CONFLICT_EVALUATE"; autoPatrolRuntime.oscillationBreaks = 0; autoPatrolRuntime.oscillationFallbacks = 0; autoPatrolRuntime.objectiveSuppressions = {}; autoPatrolRuntime.objectiveConflictDetections = 0; autoPatrolRuntime.objectiveDemotions = 0; autoPatrolRuntime.objectiveAlternativeCommits = 0; autoPatrolRuntime.objectiveState = "OBJECTIVE_NONE"; autoPatrolRuntime.activeObjective = null; autoPatrolRuntime.objectiveSequence = 0; autoPatrolRuntime.objectiveHistory = []; autoPatrolRuntime.objectiveCreatedCount = 0; autoPatrolRuntime.objectiveCompletedCount = 0; autoPatrolRuntime.objectiveFailedCount = 0; autoPatrolRuntime.objectiveDeathCount = 0; autoPatrolRuntime.lastBombPlanTerminal = null; autoPatrolRuntime.escapeFailureMemory = []; autoPatrolRuntime.huntStallSignature = ""; autoPatrolRuntime.huntStallStartTurn = -1; autoPatrolRuntime.floorHuntAbandonedDepth = 0; autoPatrolRuntime.floorHuntAbandonReason = ""; autoPatrolRuntime.engagementPlan = null; autoPatrolRuntime.engagementPlansStarted = 0; autoPatrolRuntime.engagementPlansEnded = 0; autoPatrolRuntime.engagementLastEndReason = ""; autoPatrolRuntime.huntStallLastHp = null;
+  autoPatrolRuntime.plansStarted = 0; autoPatrolRuntime.plannedBombKills = 0; autoPatrolRuntime.wallBreachPlansStarted = 0; autoPatrolRuntime.wallBreachPlansCompleted = 0; autoPatrolRuntime.wallBreachPlansInvalidated = 0; autoPatrolRuntime.meleePlansCompleted = 0; autoPatrolRuntime.contactRoutePlansStarted = 0; autoPatrolRuntime.contactRoutePlansCompleted = 0; autoPatrolRuntime.initialRoutePlansStarted = 0; autoPatrolRuntime.initialRoutePlansCompleted = 0; autoPatrolRuntime.foodHuntPlansStarted = 0; autoPatrolRuntime.foodHuntTargetsDefeated = 0; autoPatrolRuntime.levelCommitAttacks = 0; autoPatrolRuntime.emergencyPositions = 0; autoPatrolRuntime.multiStrongWallLastEvaluationTurn = -999; autoPatrolRuntime.multiStrongWallLastEvaluationDepth = 0; autoPatrolRuntime.multiStrongWallLastEvaluationSignature = ""; autoPatrolRuntime.multiStrongWallEvaluations = 0; autoPatrolRuntime.multiStrongWallPlansStarted = 0; autoPatrolRuntime.bombEscapePreflightEvaluations = 0; autoPatrolRuntime.bombEscapePreflightRejected = 0; autoPatrolRuntime.bombEscapeSuppressUntilTurn = -1; autoPatrolRuntime.bombEscapeSuppressTargetId = null; autoPatrolRuntime.floorBombPlacementRejectedDepth = 0; autoPatrolRuntime.bombEscapeAlternativePlan = null; autoPatrolRuntime.bombEscapeAlternativePlansStarted = 0; autoPatrolRuntime.bombEscapeAlternativePlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlan = null; autoPatrolRuntime.horizontalFlowDirection = null; autoPatrolRuntime.horizontalFlowDisabled = false; autoPatrolRuntime.horizontalFlowBeamWidth = 0; autoPatrolRuntime.horizontalFlowEvaluations = 0; autoPatrolRuntime.horizontalFlowBudgetDepth = 0; autoPatrolRuntime.horizontalFlowBudgetUsed = 0; autoPatrolRuntime.horizontalFlowPlansStarted = 0; autoPatrolRuntime.horizontalFlowPlansCompleted = 0; autoPatrolRuntime.horizontalFlowPlansInvalidated = 0; autoPatrolRuntime.horizontalFlowLastResult = null; autoPatrolRuntime.horizontalFlowLastSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionSignature = ""; autoPatrolRuntime.horizontalFlowLastRejectionTurn = -999; autoPatrolRuntime.horizontalFlowLastRejectionHpRatio = 0; autoPatrolRuntime.movementHistory = []; autoPatrolRuntime.oscillationState = "OBJECTIVE_CONFLICT_EVALUATE"; autoPatrolRuntime.oscillationBreaks = 0; autoPatrolRuntime.oscillationFallbacks = 0; autoPatrolRuntime.objectiveSuppressions = {}; autoPatrolRuntime.objectiveConflictDetections = 0; autoPatrolRuntime.objectiveDemotions = 0; autoPatrolRuntime.objectiveAlternativeCommits = 0; autoPatrolRuntime.objectiveState = "OBJECTIVE_NONE"; autoPatrolRuntime.activeObjective = null; autoPatrolRuntime.objectiveSequence = 0; autoPatrolRuntime.objectiveHistory = []; autoPatrolRuntime.objectiveCreatedCount = 0; autoPatrolRuntime.objectiveCompletedCount = 0; autoPatrolRuntime.objectiveFailedCount = 0; autoPatrolRuntime.objectiveDeathCount = 0; autoPatrolRuntime.lastBombPlanTerminal = null; autoPatrolRuntime.escapeFailureMemory = []; autoPatrolRuntime.huntStallSignature = ""; autoPatrolRuntime.huntStallStartTurn = -1; autoPatrolRuntime.floorHuntAbandonedDepth = 0; autoPatrolRuntime.floorHuntAbandonReason = ""; autoPatrolRuntime.engagementPlan = null; autoPatrolRuntime.engagementPlansStarted = 0; autoPatrolRuntime.engagementPlansEnded = 0; autoPatrolRuntime.engagementLastEndReason = ""; autoPatrolRuntime.huntStallLastHp = null; autoPatrolRuntime.townObjectiveState = "TOWN_OBJECTIVE_NONE"; autoPatrolRuntime.activeTownObjective = null; autoPatrolRuntime.townObjectiveSequence = 0; autoPatrolRuntime.townObjectiveHistory = []; autoPatrolRuntime.townCombatPlan = null;
   autoPatrolRuntime.encirclementBreakPlan = null; autoPatrolRuntime.encirclementBreakState = "ENCIRCLEMENT_BREAK_EVALUATE"; autoPatrolRuntime.encirclementBreakBudgetDepth = 0; autoPatrolRuntime.encirclementBreakBudgetUsed = 0; autoPatrolRuntime.encirclementBreakLastTriggerSignature = ""; autoPatrolRuntime.encirclementBreakPlansStarted = 0; autoPatrolRuntime.encirclementBreakPlansCompleted = 0; autoPatrolRuntime.encirclementBreakPlansInvalidated = 0; autoPatrolRuntime.encirclementBreakEvaluationBudgetExhausted = 0; autoPatrolRuntime.encirclementBreakLastEvaluationSimulations = 0; autoPatrolRuntime.encirclementBreakLastEvaluationReason = "";
   transitionAutoPatrol("TOGGLE_ON"); scheduleAutoPatrolTick(0); return true;
 }
@@ -12227,6 +12936,7 @@ function restoreDebugAutoPatrolRuntime(snapshot) {
   for (const key of Object.keys(autoPatrolRuntime)) {
     if (key !== "timerId" && Object.prototype.hasOwnProperty.call(snapshot, key)) autoPatrolRuntime[key] = structuredClone(snapshot[key]);
   }
+  if (!Object.prototype.hasOwnProperty.call(snapshot, "townCombatPlan")) autoPatrolRuntime.townCombatPlan = null;
   autoPatrolRuntime.timerId = null;
   autoPatrolRuntime.generation = Number.isSafeInteger(snapshot.generation) ? snapshot.generation + 1 : autoPatrolRuntime.generation + 1;
   debugSnapshotRuntime.capturedAutoPatrolState = snapshot.state || "AUTO_PATROL_OFF";
@@ -12316,6 +13026,9 @@ function createCapturedPointRestorePoint(payload) {
 }
 function normalizeDebugRestoreContext(stagedContext) {
   if (!stagedContext || typeof stagedContext !== "object") return stagedContext;
+  if (!Array.isArray(stagedContext.warpDestinations)) stagedContext.warpDestinations = [];
+  if (!Number.isInteger(stagedContext.warpSelectedIndex)) stagedContext.warpSelectedIndex = 0;
+  if (!["standard", "abyss"].includes(stagedContext.warpDungeonMode)) stagedContext.warpDungeonMode = "standard";
   if (!Array.isArray(stagedContext.homeMenuEntries)) stagedContext.homeMenuEntries = [];
   if (!Number.isInteger(stagedContext.homeSelectedIndex)) stagedContext.homeSelectedIndex = 0;
   if (!Number.isInteger(stagedContext.homeStoredPage)) stagedContext.homeStoredPage = 0;
@@ -12415,7 +13128,7 @@ const SFA_STATE_DESCRIPTIONS = Object.freeze({
     FE_DEATH_RESOLVE: "Apply the persistent death penalty and prepare the death summary.",
     FE_INVENTORY_MENU: "Browse and equip carried equipment. Equipment trade is handled by the Blacksmith.",
     FE_SHOP_MENU: "Browse and purchase currently stocked shop items.",
-    FE_WARP_MENU: "Select a discovered standard-dungeon warp destination.",
+    FE_WARP_MENU: "Select a paged standard-dungeon or Abyss portal destination from canonical progression.",
     FE_INN_MENU: "Confirm an inn rest purchase and recovery.",
     FE_BAR_MENU: "Display the current tavern rumor and return to play.",
     FE_HOME_PURCHASE_MENU: "Confirm purchase of the player home.",
@@ -12434,7 +13147,6 @@ const SFA_STATE_DESCRIPTIONS = Object.freeze({
     FE_BLACKSMITH_MENU: "Alter, sell, or dismantle weapons and armor.",
     FE_BLACKSMITH_KIND_MENU: "Confirm the normal blacksmith Equipment Lv increase.",
     FE_BLACKSMITH_COMPARE: "Accept or reject the generated blacksmith proposal.",
-    FE_ABYSS_ENTRY_MENU: "Confirm entry into the Abyss dungeon mode.",
     FE_DEATH_SUMMARY: "Display the death result and wait for return or exit.",
     FE_VICTORY: "Display victory and wait for restart or title exit."
   }),
@@ -12740,7 +13452,8 @@ function render(state, ctxGame) {
   // 3. メニューオーバレイ制御（projection policyに従って画面を完全ロック）
   const overlay = document.getElementById("overlay");
   const overlayMode = PROJECTION_POLICY[state] ? PROJECTION_POLICY[state].overlay : null;
-  overlay.className = overlayMode === "home" ? "home-overlay" : "";
+  const facilityOverlayModes = new Set(["warp", "blacksmith", "dark-smith", "dark-smith-reroll-target", "dark-smith-change-target", "dark-smith-change-partner", "dark-smith-dismantle"]);
+  overlay.className = overlayMode === "home" ? "home-overlay" : (facilityOverlayModes.has(overlayMode) ? "facility-overlay" : "");
   if (overlayMode === "boot") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<h1>SFA ROGUE</h1><p style='font-size:13px;color:#aabbee;'>Inspecting save slot...</p>`;
@@ -12776,9 +13489,6 @@ function render(state, ctxGame) {
     overlay.style.display = "flex";
     const marker = index => ctxGame.saveUi.exitConfirmSelectedIndex === index ? "▶ " : "　";
     overlay.innerHTML = `<div class="menu-title">RETURN TO TITLE?</div><p style='font-size:12px;color:#ffcc88;'>Progress since the last successful inn save will be lost.</p><div style='line-height:2;text-align:left;'><div>${marker(0)}Continue playing</div><div>${marker(1)}Return without saving</div></div><p style='font-size:10px;color:#888;'>[Esc]: Continue playing</p>`;
-  } else if (overlayMode === "abyss-entry") {
-    overlay.style.display = "flex";
-    overlay.innerHTML = `<div class="menu-title">ABYSS GATE</div><p style="font-size:12px; line-height:1.7;">A separate high-difficulty dungeon begins at A1.<br>The endless Underworld remains available from the normal stairs.<br><span style="color:#ff7777;">Abyss enemies are coordinated and vastly stronger.</span></p><p style="font-size:10px; color:#888;">[Enter]: Enter A1 | [Esc]: Cancel</p>`;
   } else if (overlayMode === "inventory") {
     overlay.style.display = "flex";
     const selected = ctxGame.equipmentInventory[ctxGame.inventorySelectedIndex] || null;
@@ -12811,8 +13521,14 @@ function render(state, ctxGame) {
     overlay.innerHTML = `<div class="menu-title">MERCHANT SHOP</div><div style='width:100%; margin-bottom:20px;'>${menuItemsHtml}</div><p style='font-size:10px; color:#888;'>[↑/↓]: Cursor | [Enter]: Purchase | [Esc]: Exit</p>`;
   } else if (overlayMode === "warp") {
     overlay.style.display = "flex";
-    const destinations = ctxGame.warpDestinations.map((floor, idx) => `<div class="menu-item ${idx === ctxGame.warpSelectedIndex ? 'selected' : ''}">Enter B${floor} (new map)</div>`).join("");
-    overlay.innerHTML = `<div class="menu-title">DISCOVERED WARP GATE</div><div style='width:100%; margin-bottom:20px;'>${destinations}</div><p style='font-size:10px; color:#888;'>[↑/↓]: Destination | [Enter]: Enter | [Esc]: Cancel</p>`;
+    const mode = ctxGame.warpDungeonMode === 'abyss' ? 'abyss' : 'standard';
+    const prefix = mode === 'abyss' ? 'A' : 'B';
+    const page = pagedSelectionWindow(ctxGame.warpDestinations, ctxGame.warpSelectedIndex, PORTAL_MENU_CONFIG.pageSize);
+    const selectedFloor = ctxGame.warpDestinations[page.selectedIndex] || 1;
+    const rows = page.entries.map(({ entry: floor, globalIndex }) => `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-portal-index="${globalIndex}">${prefix}${floor} · Start from this floor</div>`).join('');
+    const title = mode === 'abyss' ? 'ABYSS DUNGEON PORTALS' : 'STANDARD DUNGEON PORTALS';
+    const source = mode === 'abyss' ? 'Defeated Abyss boss floors' : 'Registered boss return portals';
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">${title}</div><div class="facility-summary"><span>${source}: ${ctxGame.warpDestinations.length}</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">START FLOOR</div><div class="facility-list">${rows || '<div class="facility-row">No destination.</div>'}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">SELECTED PORTAL</div><div class="facility-detail"><div class="facility-detail-heading">${prefix}${selectedFloor}</div><div class="facility-card"><div class="facility-card-label">Dungeon</div><div>${mode === 'abyss' ? 'Abyss Dungeon' : 'Underground Dungeon'}</div></div><div class="facility-card"><div class="facility-card-label">Start behavior</div><div>A new map is generated at ${prefix}${selectedFloor}. The floor guardian returns.</div></div><div class="facility-action"><span>Enter selected portal</span><b>[Enter]</b></div></div></section></div><div class="facility-help">[↑/↓] Select floor · [←/→] Change page · [Enter] Enter · [Esc] Cancel</div></div>`;
   } else if (overlayMode === "inn") {
     overlay.style.display = "flex";
     overlay.innerHTML = `<div class="menu-title">TOWN INN</div><p style='font-size:13px; margin-bottom:20px;'>Stay overnight for <span style='color:#ffff00;'>20 gold</span>?<br>(Fully restores HP/Hunger and resets to Morning)</p><div class="menu-item selected">Rest and Sleep</div><p style='font-size:10px; color:#888; margin-top:20px;'>[Enter]: Pay & Stay | [Esc]: Exit</p>`;
@@ -12869,21 +13585,25 @@ function render(state, ctxGame) {
     requestAnimationFrame(() => overlay.querySelector(`[data-home-index="${ctxGame.homeSelectedIndex}"]`)?.scrollIntoView({ block: 'nearest' }));
   } else if (overlayMode === "dark-smith") {
     overlay.style.display = "flex";
-    const rows = ctxGame.darkSmithMenuEntries.length ? ctxGame.darkSmithMenuEntries.map((entry, idx) => {
-      const selectedOptionIndex = idx === ctxGame.darkSmithSelectedIndex ? (ctxGame.darkSmithOptionIndex || 0) : 0;
-      const option = entry.item.options[selectedOptionIndex];
-      const chance = Math.round(darkSmithSuccessRate(option) * 100);
-      const cost = darkSmithMaterialCost(option);
+    const page = pagedSelectionWindow(ctxGame.darkSmithMenuEntries, ctxGame.darkSmithSelectedIndex, FACILITY_LIST_CONFIG.pageSize);
+    const selectedEntry = ctxGame.darkSmithMenuEntries[page.selectedIndex];
+    const selectedOption = selectedEntry?.item?.options?.[ctxGame.darkSmithOptionIndex || 0];
+    const chance = selectedOption ? Math.round(darkSmithSuccessRate(selectedOption) * 100) : 0;
+    const cost = selectedOption ? darkSmithMaterialCost(selectedOption) : 0;
+    const rows = page.entries.map(({ entry, globalIndex }) => {
       const stat = entry.item.type === 'weapon' ? `ATK ${entry.item.atk}` : `DEF ${entry.item.def}`;
-      const optionRows = entry.item.options.map((candidate, optionIndex) => `${optionIndex === selectedOptionIndex && idx === ctxGame.darkSmithSelectedIndex ? '▶' : ''}${optionIndex + 1}. ${rarityLabel(candidate.rarity)} ${candidate.name} ${formatEquipmentOptionValue(candidate)}`).join(' / ');
-      return `<div class="menu-item ${idx === ctxGame.darkSmithSelectedIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)} [${stat}]<br><span style="font-size:9px;">${escapeHtml(optionRows)} / Cost ${cost} shard${cost === 1 ? '' : 's'} / Success ${chance}%</span></div>`;
-    }).join('') : `<div class="menu-item" style="color:#777;">No equipment with an option.</div>`;
-    overlay.innerHTML = `<div class="menu-title">DARK SMITH</div><p style="font-size:11px;color:#c58cff;">Forge Shards: ${ctxGame.forgeShards}. Dismantle Rare or better carried equipment for material.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">First 10 successful upgrades: 100%. Reroll costs 1000g.<br>[↑/↓]: Equipment | [←/→]: Option | [Enter]: Forge selected option | [R]: Reroll one option | [C]: Exchange options | [D]: Dismantle | [Esc]: Exit</p>`;
+      return `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)} · ${stat}</div>`;
+    }).join('') || '<div class="facility-row">No equipment with an option.</div>';
+    const optionList = selectedEntry?.item?.options?.map((option, index) => `<div class="smith-option-row ${index === (ctxGame.darkSmithOptionIndex || 0) ? 'selected' : ''}">${index + 1}. ${rarityLabel(option.rarity)} ${escapeHtml(option.name)} ${escapeHtml(formatEquipmentOptionValue(option))}</div>`).join('') || '<div style="color:#777;">No option.</div>';
+    const detail = selectedEntry ? `<div class="facility-detail-heading">${coloredEquipmentName(selectedEntry.item)}</div><div class="facility-card"><div class="facility-card-label">Options</div><div class="smith-option-list">${optionList}</div></div><div class="facility-card"><div class="facility-action" style="margin-top:0;padding-top:0;border-top:0;"><span>Selected slot</span><b>${(ctxGame.darkSmithOptionIndex || 0) + 1}/${selectedEntry.item.options.length}</b></div><div class="facility-action"><span>Forge chance / cost</span><b>${chance}% / ${cost} shard${cost === 1 ? '' : 's'}</b></div><div class="facility-action"><span>Forge</span><b>[Enter]</b></div><div class="facility-action"><span>Reroll · Exchange · Dismantle</span><b>[R] [C] [D]</b></div></div>` : '<div class="facility-detail-heading">No equipment</div>';
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">DARK SMITH</div><div class="facility-summary"><span>Forge Shards: ${ctxGame.forgeShards}</span><span>Equipment ${ctxGame.darkSmithMenuEntries.length} · Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">OPTION / ACTION</div><div class="facility-detail">${detail}</div></section></div><div class="facility-help">[↑/↓] Equipment · [PgUp/PgDn] Page · [←/→] Option · [Enter] Forge · [R] Reroll · [C] Exchange · [D] Dismantle · [Esc] Exit</div></div>`;
   } else if (overlayMode === "dark-smith-reroll-target") {
     overlay.style.display = "flex";
     const flow = ctxGame.darkSmithReroll;
-    const rows = flow.targetEntries.length ? flow.targetEntries.map((entry, idx) => `<div class="menu-item ${idx === flow.targetIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)}<br><span style="font-size:9px;">${equipmentOptionSummary(entry.item)}</span></div>`).join('') : `<div class="menu-item" style="color:#777;">No equipment with options.</div>`;
-    overlay.innerHTML = `<div class="menu-title">REROLL OPTION — SELECT EQUIPMENT</div><p style="font-size:11px;color:#ffcc66;">One existing option will be selected and regenerated. The number of option slots does not change.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">[↑/↓]: Equipment | [Enter]: Select option | [Esc]: Back</p>`;
+    const page = pagedSelectionWindow(flow.targetEntries, flow.targetIndex, FACILITY_LIST_CONFIG.pageSize);
+    const selected = flow.targetEntries[page.selectedIndex];
+    const rows = page.entries.map(({ entry, globalIndex }) => `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)}</div>`).join('') || '<div class="facility-row">No equipment with options.</div>';
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">REROLL OPTION — SELECT EQUIPMENT</div><div class="facility-summary"><span>Cost: ${DARK_SMITH_CONFIG.optionRerollCost}g</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">CURRENT OPTIONS</div><div class="facility-detail"><div class="facility-detail-heading">${selected ? coloredEquipmentName(selected.item) : 'No equipment'}</div><div class="facility-card">${selected ? equipmentOptionSummary(selected.item) : 'No option.'}</div><div>Only the selected slot is regenerated. Other slots and the option count remain unchanged.</div></div></section></div><div class="facility-help">[↑/↓] Equipment · [PgUp/PgDn] Page · [Enter] Select option · [Esc] Back</div></div>`;
   } else if (overlayMode === "dark-smith-reroll-option") {
     overlay.style.display = "flex";
     const flow = ctxGame.darkSmithReroll;
@@ -12895,13 +13615,17 @@ function render(state, ctxGame) {
   } else if (overlayMode === "dark-smith-change-target") {
     overlay.style.display = "flex";
     const flow = ctxGame.darkSmithChange;
-    const rows = flow.targetEntries.map((entry, idx) => `<div class="menu-item ${idx === flow.targetIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)}<br><span style="font-size:9px;">${equipmentOptionSummary(entry.item)}</span></div>`).join('');
-    overlay.innerHTML = `<div class="menu-title">OPTION CHANGE — SELECT A</div><p style="font-size:11px;color:#ffcc66;">Select the equipment to keep visible as Equipment A.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">[↑/↓]: Equipment A | [Enter]: Fix A and select B | [Esc]: Back</p>`;
+    const page = pagedSelectionWindow(flow.targetEntries, flow.targetIndex, FACILITY_LIST_CONFIG.pageSize);
+    const selected = flow.targetEntries[page.selectedIndex];
+    const rows = page.entries.map(({ entry, globalIndex }) => `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)}</div>`).join('') || '<div class="facility-row">No equipment with options.</div>';
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">OPTION CHANGE — SELECT A</div><div class="facility-summary"><span>Keep this equipment visible as A</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT A</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">CURRENT OPTIONS</div><div class="facility-detail"><div class="facility-detail-heading">${selected ? coloredEquipmentName(selected.item) : 'No equipment'}</div><div class="facility-card">${selected ? equipmentOptionSummary(selected.item) : 'No option.'}</div></div></section></div><div class="facility-help">[↑/↓] Equipment A · [PgUp/PgDn] Page · [Enter] Fix A and select B · [Esc] Back</div></div>`;
   } else if (overlayMode === "dark-smith-change-partner") {
     overlay.style.display = "flex";
     const flow = ctxGame.darkSmithChange;
-    const rows = flow.partnerEntries.length ? flow.partnerEntries.map((entry, idx) => `<div class="menu-item ${idx === flow.partnerIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)}<br><span style="font-size:9px;">${equipmentOptionSummary(entry.item)}</span></div>`).join('') : `<div class="menu-item" style="color:#777;">No compatible Equipment B.</div>`;
-    overlay.innerHTML = `<div class="menu-title">OPTION CHANGE — SELECT B</div><div class="smith-compare-layout">${darkSmithEquipmentCard(flow.target, 'Equipment A')}<div class="smith-change-arrow">←→<br><span>CHANGE</span></div><div class="smith-compare-card"><div style="font-size:12px;color:#ffcc66;"><b>Select Equipment B</b></div><div style="max-height:220px;overflow:hidden;">${rows}</div></div></div><p style="font-size:10px;color:#888;">A remains fixed. Only compatible equipment of the same type is listed.<br>[↑/↓]: Equipment B | [Enter]: Compare options | [Esc]: Select A again</p>`;
+    const page = pagedSelectionWindow(flow.partnerEntries, flow.partnerIndex, FACILITY_LIST_CONFIG.pageSize);
+    const selected = flow.partnerEntries[page.selectedIndex];
+    const rows = page.entries.map(({ entry, globalIndex }) => `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)}</div>`).join('') || '<div class="facility-row">No compatible Equipment B.</div>';
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">OPTION CHANGE — SELECT B</div><div class="facility-summary"><span>A: ${flow.target ? escapeHtml(flow.target.item.name) : 'None'}</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">COMPATIBLE EQUIPMENT B</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">COMPARISON</div><div class="facility-detail">${darkSmithEquipmentCard(flow.target, 'Equipment A')}<div style="height:8px;"></div>${selected ? darkSmithEquipmentCard(selected, 'Equipment B') : '<div>No compatible partner.</div>'}</div></section></div><div class="facility-help">[↑/↓] Equipment B · [PgUp/PgDn] Page · [Enter] Compare options · [Esc] Select A again</div></div>`;
   } else if (overlayMode === "dark-smith-change-options") {
     overlay.style.display = "flex";
     const flow = ctxGame.darkSmithChange;
@@ -12912,11 +13636,14 @@ function render(state, ctxGame) {
     overlay.innerHTML = `<div class="menu-title">CONFIRM OPTION CHANGE</div><div class="smith-compare-layout">${darkSmithEquipmentCard(flow.target, 'Equipment A', flow.optionIndexA)}<div class="smith-change-arrow">←→<br><span>CHANGE</span></div>${darkSmithEquipmentCard(flow.partner, 'Equipment B', flow.optionIndexB)}</div><p style="font-size:12px;line-height:1.7;">${escapeHtml(optionA?.name || '?')} ↔ ${escapeHtml(optionB?.name || '?')}<br>Cost: ${DARK_SMITH_CONFIG.optionRerollCost} Gold / Carried: ${ctxGame.player.gold} Gold</p><p style="font-size:10px;color:#888;">[Enter]: Exchange selected options | [Esc]: Back</p>`;
   } else if (overlayMode === "dark-smith-dismantle") {
     overlay.style.display = "flex";
-    const rows = ctxGame.darkSmithDismantleEntries.length ? ctxGame.darkSmithDismantleEntries.map((entry, idx) => {
+    const page = pagedSelectionWindow(ctxGame.darkSmithDismantleEntries, ctxGame.darkSmithDismantleSelectedIndex, FACILITY_LIST_CONFIG.pageSize);
+    const selected = ctxGame.darkSmithDismantleEntries[page.selectedIndex];
+    const rows = page.entries.map(({ entry, globalIndex }) => {
       const stat = entry.item.type === 'weapon' ? `ATK ${entry.item.atk}` : `DEF ${entry.item.def}`;
-      return `<div class="menu-item ${idx === ctxGame.darkSmithDismantleSelectedIndex ? 'selected' : ''}">${coloredEquipmentName(entry.item)} [${stat}]<br><span style="font-size:9px;">${rarityLabel(entry.item.rarity)} / ${equipmentOptionSummary(entry.item)} / Yield ${entry.yield} shard${entry.yield === 1 ? '' : 's'}</span></div>`;
-    }).join('') : `<div class="menu-item" style="color:#777;">No Rare or better carried equipment.</div>`;
-    overlay.innerHTML = `<div class="menu-title">DISMANTLE EQUIPMENT</div><p style="font-size:11px;color:#ffcc66;">Forge Shards: ${ctxGame.forgeShards}. Equipped gear is never listed.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">Rare: 1 / Very Rare: 3 / Ultra Rare: 8<br>[↑/↓]: Cursor | [Enter]: Select | [Esc]: Back</p>`;
+      return `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${coloredEquipmentName(entry.item)} · ${stat} · ${entry.yield} shard${entry.yield === 1 ? '' : 's'}</div>`;
+    }).join('') || '<div class="facility-row">No carried equipment with material value.</div>';
+    const breakdown = selected ? `<div class="facility-detail-heading">${coloredEquipmentName(selected.item)}</div><div class="facility-card"><div class="facility-card-label">Material breakdown</div><div class="material-breakdown">${escapeHtml(dismantleYieldSummary(selected.item))}</div><div class="facility-action"><span>Total</span><b>${selected.yield} shard${selected.yield === 1 ? '' : 's'}</b></div></div><div class="facility-action"><span>Dismantle selected equipment</span><b>[Enter]</b></div>` : '<div class="facility-detail-heading">No dismantle candidate</div>';
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">DISMANTLE EQUIPMENT</div><div class="facility-summary"><span>Forge Shards: ${ctxGame.forgeShards}</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">CARRIED EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">MATERIAL RESULT</div><div class="facility-detail">${breakdown}</div></section></div><div class="facility-help">Equipment and every option add material: Rare 1 · Very Rare 2 · Ultra Rare 4 · [↑/↓] Select · [PgUp/PgDn] Page · [Enter] Review · [Esc] Back</div></div>`;
   } else if (overlayMode === "dark-smith-dismantle-confirm") {
     overlay.style.display = "flex";
     const entry = ctxGame.darkSmithDismantleEntries[ctxGame.darkSmithDismantleSelectedIndex];
@@ -12925,8 +13652,17 @@ function render(state, ctxGame) {
       : `<div class="menu-title">CONFIRM DISMANTLE</div><p style="color:#777;">The selected equipment is no longer available.</p><p style="font-size:10px;color:#888;">[Esc]: Back</p>`;
   } else if (overlayMode === "blacksmith") {
     overlay.style.display = "flex";
-    const rows = ctxGame.blacksmithEntries.map((entry, idx) => `<div class="menu-item ${idx === ctxGame.blacksmithSelectedIndex ? 'selected' : ''}">${entry.label}: ${coloredEquipmentName(entry.item)}<br><span style="font-size:9px;">${rarityLabel(entry.item.rarity)} / ${equipmentOptionSummary(entry.item)}</span></div>`).join('');
-    overlay.innerHTML = `<div class="menu-title">BLACKSMITH</div><p style="font-size:11px;color:#ffcc66;">Weapons and armor are traded here. Rare gear sells for a premium, while dismantling is recommended for Forge Shards.</p><div style="width:100%;max-height:260px;overflow:hidden;">${rows}</div><p style="font-size:10px;color:#888;">Selected inventory item: Sale ${equipmentSaleValue(ctxGame.blacksmithEntries[ctxGame.blacksmithSelectedIndex]?.item)}g / Dismantle ${dismantleYield(ctxGame.blacksmithEntries[ctxGame.blacksmithSelectedIndex]?.item)} shard(s)<br>[↑/↓]: Equipment | [Enter]: Alter | [S]: Sell | [D]: Dismantle | [Esc]: Leave</p>`;
+    const page = pagedSelectionWindow(ctxGame.blacksmithEntries, ctxGame.blacksmithSelectedIndex, FACILITY_LIST_CONFIG.pageSize);
+    const selected = ctxGame.blacksmithEntries[page.selectedIndex];
+    const rows = page.entries.map(({ entry, globalIndex }) => {
+      const stat = entry.item.type === 'weapon' ? `ATK ${entry.item.atk}` : `DEF ${entry.item.def}`;
+      return `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)} · ${stat}</div>`;
+    }).join('') || '<div class="facility-row">No equipment.</div>';
+    const sale = selected ? equipmentSaleValue(selected.item) : 0;
+    const material = selected ? dismantleYield(selected.item) : 0;
+    const canInventoryAction = selected?.source === 'inventory';
+    const detail = selected ? `<div class="facility-detail-heading">${coloredEquipmentName(selected.item)}</div><div class="facility-card"><div class="facility-card-label">Equipment</div><div>${rarityLabel(selected.item.rarity)} · Equipment Lv.${selected.item.equipmentLevel || 1}</div><div>${selected.item.type === 'weapon' ? `ATK ${selected.item.atk}` : `DEF ${selected.item.def}`}</div><div>${equipmentOptionSummary(selected.item)}</div></div><div class="facility-action"><span>Raise Equipment Lv +1 (${EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost}g)</span><b>[Enter]</b></div><div class="facility-action ${canInventoryAction ? '' : 'disabled'}"><span>Sell ${canInventoryAction ? `${sale}g` : '(equipped item)'}</span><b>[S]</b></div><div class="facility-action ${canInventoryAction && material > 0 ? '' : 'disabled'}"><span>Dismantle ${canInventoryAction ? `${material} shard${material === 1 ? '' : 's'}` : '(equipped item)'}</span><b>[D]</b></div>${canInventoryAction && material > 0 ? `<div class="material-breakdown">${escapeHtml(dismantleYieldSummary(selected.item))}</div>` : ''}` : '<div class="facility-detail-heading">No equipment</div>';
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">BLACKSMITH</div><div class="facility-summary"><span>Gold: ${ctxGame.player.gold.toLocaleString()}g · Shards: ${ctxGame.forgeShards}</span><span>Equipment ${ctxGame.blacksmithEntries.length} · Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">DETAIL / ACTION</div><div class="facility-detail">${detail}</div></section></div><div class="facility-help">[↑/↓] Equipment · [PgUp/PgDn] Page · [Enter] Raise Equipment Lv · [S] Sell · [D] Dismantle · [Esc] Leave</div></div>`;
   } else if (overlayMode === "blacksmith-kind") {
     overlay.style.display = "flex";
     const entry = ctxGame.blacksmithEntries[ctxGame.blacksmithSelectedIndex];
