@@ -136,6 +136,28 @@ Contextは単なるデータ置き場ではない。制御判断に使用する�
 
 Context内のentity identity、version、sequence、checkpointなどのinvariantは、State machine定義とは別にcontractとして定義してよい。
 
+#### 3.4.1 Provenance（出どころ）
+
+制御判断に使用するContext項目は、**その値を誰がどうやって作ったか（provenance）を宣言しなければならない**。
+宣言には少なくとも次を含める。
+
+- **origin**: 値の出どころの種別（観測 / 別の機械の決定 / 外部入力 / 導出計算 / 設定）
+- **producer**: 実際に値を作る箇所（関数、モジュール、機械、外部境界のいずれか）
+- **freshness**: いつの時点の値か（同一Transition内で確定 / 直近の観測 / 周期更新 / 起動時固定）
+
+同じ意味を持つContext項目を、**2箇所以上で独立に計算してはならない**。
+複数の利用者が必要とする場合は、単一のproducerが作った値を渡す。
+
+GuardはPure（§2.4）でなければならないが、**Pureであることは正しさを意味しない**。
+Guardが受け取る値の作り方が誤っていれば、Guardの述語が正しくても判断は誤る。
+したがってGuardの述語と同じ厳密さでprovenanceを扱う。
+
+Guard、Action、Projectionの実装は、**宣言されたproducer以外の経路でContext項目を作ってはならない**。
+判断に使う値を実装内部で新たに導出する必要が生じた場合は、まず定義側にContext項目とprovenanceを追加する。
+
+> 判断の誤りは述語よりも「述語に渡す値の作り方」に現れやすい。provenanceの宣言は、
+> その作り方を検査可能にし、同じ値の二重計算（片方だけを修正する事故の原因）を構造的に禁じる。
+
 ### 3.5 定義群をSSOTとして扱う範囲
 
 SFAにおける信頼できる仕様源は、State JSON単体ではなく、少なくとも次の整合した定義群である。
@@ -152,6 +174,32 @@ SFAにおける信頼できる仕様源は、State JSON単体ではなく、少�
 - Contract testsまたは同等の検証資産
 
 これらの一部がコード内に実装される場合でも、相互参照可能でなければならない。
+
+### 3.6 Guardの契約と妥当範囲
+
+Guard registryの契約（§3.5）は、述語の名前と真偽の意味だけでは足りない。
+Guardが**近似**を含む場合、**その近似を宣言しなければならない**。
+
+近似とは、判断を有限の資源で行うために、対象の一部だけを見る、または単純化した
+モデルで代表させることを指す。例として、先読みの深さの上限、標本抽出、
+キャッシュした値の再利用、上限つきの探索、単一の代表値による集約がある。
+
+宣言には少なくとも次を含める。
+
+- **approximated**: 何を近似したか（本来見るべき対象と、実際に見た範囲）
+- **valid_when**: その近似が妥当である条件
+- **breaks_when**: 近似が破れる条件（**対象の性質として書く**。「稀に」ではない）
+- **on_break**: 破れたときに何が起きるか（誤って通す / 誤って拒む / 判断不能）
+
+近似が破れたときに**誤って通す**側へ倒れる Guard は、安全に関わる判断に使ってはならない。
+安全に関わる判断では、近似は**誤って拒む**側へ倒れるように設計する。
+
+`breaks_when` に書いた条件は、検証で**負の対照として実際に踏まなければならない**（§11.3）。
+
+> 「判断の目的にはこの範囲で十分」という判断そのものが誤り得る。
+> 近似を宣言しないと、その judgement は誰にも検査されないまま残る。
+> 破れる条件を対象の性質として書けば、その条件が実際に成り立つかを
+> 対象のデータに当てて確かめられる。
 
 ---
 
@@ -379,6 +427,67 @@ State machineの正しさは、Transition graphだけでは保証できない。
 
 Invariant違反は、曖昧なActionを継続するより、`REJECTED`または`FAILED`として観測可能にすることを推奨する。
 
+### 10.1 Invariantのscopeと関与者
+
+Invariantは、1つのinstance内で完結するものと、**複数instanceにまたがるもの**に分かれる。
+後者（相互排他、総量制限、順序関係など）は、instance単位の定義には書けない。
+
+複数instanceにまたがるinvariantは、次を宣言しなければならない。
+
+- **scope**: `instance` か `cross_instance` か
+- **participants**: 関与するinstanceの集合をどう決めるか（判定に使う述語または索引）
+- **evaluator**: 誰が検査するか（instanceではなく、集合を見られる主体）
+- **cadence**: いつ検査するか（Transitionごと / 周期 / checkpoint時）
+
+`cross_instance`のinvariant違反を記録するときは、**関与者全員のContextを含めなければならない**。
+検出を起こした1つのinstanceの状態だけでは、違反が資源の重複確保によるものか、
+観測の不整合によるものかを事後に判別できない。
+
+### 10.2 Invariantの診断可能性（forensics）
+
+各invariantは、**それが破れたときに原因を辿るために最低限必要な観測**を宣言しなければならない。
+以下ではこれを**診断可能性の下限**と呼ぶ。
+
+宣言には少なくとも次を含める。
+
+- どのEvent／outcome／Context項目が残っていれば原因を辿れるか
+- それらをどの範囲（時間、instance、資源）ぶん保持する必要があるか
+
+観測量を抑える方針（§12）を持つ実装は、**診断可能性の下限に挙げた観測を削ってはならない**。
+方針と下限は同じ場所に並べて宣言し、**両者が矛盾する場合は定義の誤りとして扱う**。
+
+> 観測量を抑える方針は「書きすぎ」を防ぐ規律であり、「足りなさ」は防がない。
+> invariantを守る責任を持つ判断が、その判断の記録を持たないまま運用に入り得る。
+> 下限を先に宣言しておけば、この矛盾は運用前に検出できる。
+
+診断可能性の下限は、invariantが**実際に破れたときにだけ意味を持つ**。
+したがって平常時の観測量とは独立に決める。
+平常時は集計のみで足りる観測であっても、下限に挙げたものは
+**違反の検出時点で個別に記録できる形**にしておく。
+
+### 10.3 Invariantの成立前提
+
+invariantは、参照するContext項目の意味に依存する。
+その意味が構成（設定、機能スイッチ、動作モード、縮退状態）によって変わる場合、
+**invariantが成立する前提を宣言しなければならない**。
+
+宣言には少なくとも次を含める。
+
+- **holds_when**: そのinvariantが成立する構成の条件
+- **out_of_scope_when**: 成立を主張しない構成（およびその構成で何が代わりに保証されるか）
+
+前提を満たさない構成での違反は、**invariant違反として数えてはならない**。
+「対象外」として区別できるようにする。区別しないと、本物の違反が対象外の件数に埋もれる。
+
+同じ構成依存はGuardの`enforced`（強制するか観測のみか）にも現れる。
+**invariantとGuardで前提の書き方を揃える**ことを推奨する。
+
+> invariantが「壊れているのか、そもそもその構成では成り立たないのか」を
+> 定義から判定できないと、観測された違反の意味が決まらない。
+> Context項目の意味を変える変更（例: 資源の確保範囲を変える）は、
+> それを参照するinvariantの見直しを伴う。前提を書いておけば、
+> どのinvariantを見直すべきかが定義から辿れる。
+
 ---
 
 ## 11. 検証可能性
@@ -395,6 +504,13 @@ Invariant違反は、曖昧なActionを継続するより、`REJECTED`または`
 - Role境界違反
 - 一部のAUTO cycle
 - 優先順位により到達不能なTransition
+- provenanceが宣言されていないContext項目を判断に使っているTransition（§3.4.1）
+- 宣言されたproducer以外がContext項目を作っている箇所（§3.4.1）
+- 同じ意味のContext項目が2箇所以上で計算されていること（§3.4.1）
+- 診断可能性の下限に挙げた観測が、観測量を抑える方針で削られていること（§10.2）
+- `cross_instance`のinvariantにparticipants / evaluator / cadenceの宣言が無いこと（§10.1）
+- 近似を含むGuardに`breaks_when`の宣言が無いこと（§3.6）
+- 構成に依存するContext項目を参照するinvariantに成立前提の宣言が無いこと（§10.3）
 
 ### 11.2 静的解析だけでは保証できないもの
 
@@ -406,8 +522,14 @@ Invariant違反は、曖昧なActionを継続するより、`REJECTED`または`
 - 性能、メモリ、timeout
 - 物理計算、数値計算、AI探索結果
 - 実データに依存するlifecycle問題
+- Guardが含む近似の妥当性（`breaks_when`が実際の対象で成り立つかは、対象のデータに当てて確かめる）
 
 SFAは「あらゆるバグを静的解析だけで保証する」とは定義しない。
+
+エンジンが定義を実行しない場合（定義を設計と検査の基準としてのみ使う場合）、
+**定義に書いたTransitionを検証側が網羅したことは、実装がそのTransitionを行う証拠にはならない**。
+その場合の検査は、Transitionの網羅ではなく
+Guard・invariant・機構との対応（宣言した判断がどこで行われているか）に置く。
 
 ### 11.3 推奨contract test
 
@@ -420,6 +542,13 @@ SFAは「あらゆるバグを静的解析だけで保証する」とは定義�
 - ownership開始・完了・invalidate・preempt
 - checkpoint / restore整合性
 - deterministic replayが可能なシステムでは同一fixture再生
+- **provenanceどおりに値が作られていること**（宣言したproducerを差し替えると判断が変わることを示す）
+- **診断可能性の下限を満たしていること**（invariantを意図的に破り、宣言した観測だけで
+  原因を辿れるかを確かめる。辿れなければ下限の宣言が不足している）
+- **`cross_instance`のinvariant違反の記録に関与者全員のContextが含まれること**
+- **Guardの`breaks_when`を実際に踏むこと**（近似が破れる条件を作り、宣言した`on_break`の
+  向きへ倒れることを確かめる。踏めない場合は`breaks_when`の宣言が誤っている）
+- **invariantの成立前提を満たさない構成で、違反ではなく「対象外」として扱われること**（§10.3）
 
 ---
 
@@ -441,6 +570,14 @@ SFA実装は、Transition traceを出力できることを推奨する。
 失敗時には、State、Event、Guard、Action、Role、ownership、reasonを追跡できることが望ましい。
 
 Traceは仕様の代わりではない。定義と実行結果が一致していることを確認する観測資産である。
+
+観測量を抑える方針（どのEventを個別に記録せず集計のみにするか、何を保持しないか）を持つ場合は、
+その方針を定義側に宣言する。ただし方針は**削ってよいものだけを対象とする**。
+invariantの診断可能性の下限（§10.2）に挙げた観測は方針の対象外であり、
+方針と下限が矛盾する場合は定義の誤りとして扱う。
+
+判断に使ったContextをtraceに載せる場合は、値だけでなく**provenance**（§3.4.1）を辿れることが望ましい。
+値だけでは「判断が誤ったのか、判断に渡した値が誤っていたのか」を区別できない。
 
 ---
 
@@ -477,6 +614,57 @@ Event projectionの例:
 }
 ```
 
+Context項目とprovenance（§3.4.1）の例:
+
+```json
+{
+  "context_item": "pending_chunk_count",
+  "meaning": "未確定のchunk数",
+  "origin": "observation",
+  "producer": "upload_progress_reader.read()",
+  "freshness": "same_transition",
+  "used_by": ["can_finalize"]
+}
+```
+
+Invariantの宣言（§10.1 / §10.2 / §10.3）の例:
+
+```json
+{
+  "invariant_id": "one_writer_per_resource",
+  "statement": "1つのresourceに対して書き込み権を持つinstanceは高々1つ",
+  "scope": "cross_instance",
+  "participants": "同一resource_idを保持する全instance",
+  "evaluator": "resource_registry",
+  "cadence": "periodic",
+  "holds_when": "書き込み権の確保が単一の登録簿を経由する構成",
+  "out_of_scope_when": "各instanceが独立に確保する構成（この構成では重複を検出のみ行う）",
+  "forensics": {
+    "required_records": [
+      "書き込み権を与えたEventと、その相手（誰にいつ）",
+      "違反検出時点の関与者全員のContext"
+    ],
+    "retention": "違反検出の前後で相手を特定できる範囲"
+  }
+}
+```
+
+Guardの契約（§3.6）の例:
+
+```json
+{
+  "guard": "can_finalize",
+  "predicate": "pending_chunk_count == 0",
+  "enforced": { "strict_mode": true, "lenient_mode": "observe_only" },
+  "approximation": {
+    "approximated": "本来は全chunkの確定を見るが、直近の観測時点の集計だけを見る",
+    "valid_when": "観測周期の間にchunkが増えない",
+    "breaks_when": "観測後に新しいchunkが追加され得る構成",
+    "on_break": "誤って通す"
+  }
+}
+```
+
 Ownership policyの例:
 
 ```json
@@ -504,6 +692,10 @@ Ownership policyの例:
 - Pure Guard / Controlled Action
 - 定義されたTransition評価順序
 - 観測可能なEvent outcome
+- 判断に使用するContext項目のprovenance宣言（§3.4.1）
+- Guardが近似を含む場合、その妥当範囲と破れる条件の宣言（§3.6）
+- invariantを定義する場合、その診断可能性の下限の宣言（§10.2）
+- invariantの成立が構成に依存する場合、その前提の宣言（§10.3）
 
 ### 14.2 Distributed SFA
 
@@ -513,6 +705,7 @@ Core SFAに加え、次を満たす。
 - Boundary State
 - Role間Event
 - request identityまたは同等の非同期整合性契約
+- `cross_instance`のinvariantに対するscope / participants / evaluator / cadenceの宣言（§10.1）
 
 ### 14.3 Long-Running SFA
 

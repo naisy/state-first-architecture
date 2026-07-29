@@ -136,6 +136,24 @@ Context is not merely an unstructured data store. Values used for control decisi
 
 Invariants for entity identity, version, sequence, checkpoint, and similar data MAY be specified as contracts separate from the State machine definition.
 
+#### 3.4.1 Provenance
+
+For every Context item used in a control decision, the implementation MUST declare **how the value was produced (its provenance)**.
+
+A provenance declaration contains at least:
+
+- **origin**: the kind of source (observation, a decision made by another machine, external input, derived computation, or configuration)
+- **producer**: the place that actually produces the value (a function, module, machine, or external boundary)
+- **freshness**: the point in time the value represents (determined within the same Transition, the most recent observation, refreshed periodically, or fixed at startup)
+
+Context items that carry the same meaning MUST NOT be computed independently in two or more places. When several consumers need the value, the value produced by the single declared producer is passed to them.
+
+A Guard MUST be pure (Section 2.4), but **purity does not imply correctness**. If the value handed to a Guard is produced incorrectly, the decision is wrong even when the predicate is right. Provenance therefore MUST be treated with the same rigor as the Guard predicate itself.
+
+Guard, Action, and Projection implementations MUST NOT produce a Context item through any path other than its declared producer. When an implementation turns out to need a newly derived value for a decision, the Context item and its provenance are added to the definition first.
+
+> Incorrect decisions appear more often in how the value handed to a predicate was produced than in the predicate itself. Declaring provenance makes that production path verifiable, and structurally forbids computing the same value twice — the situation in which only one of the two copies gets corrected.
+
 ### 3.5 Scope of the Definition Set as the SSOT
 
 In SFA, the trusted specification source is not the State JSON alone. It is an internally consistent definition set containing at least:
@@ -152,6 +170,25 @@ In SFA, the trusted specification source is not the State JSON alone. It is an i
 - Contract tests or equivalent verification assets
 
 Even when some of these elements are implemented directly in code, they MUST be mutually traceable.
+
+### 3.6 Guard Contract and Validity Range
+
+The Guard registry contract (Section 3.5) is not satisfied by the predicate name and the meaning of its truth value alone. When a Guard contains an **approximation**, that approximation MUST be declared.
+
+An approximation is any means of reaching a decision with finite resources by examining only part of the subject, or by representing the subject with a simplified model. Examples include a bounded lookahead depth, sampling, reuse of a cached value, a search with an upper bound, and aggregation into a single representative value.
+
+An approximation declaration contains at least:
+
+- **approximated**: what was approximated (the subject that should be examined, and the part actually examined)
+- **valid_when**: the condition under which the approximation is sound
+- **breaks_when**: the condition under which the approximation fails; this MUST be written **as a property of the subject**, not as a likelihood
+- **on_break**: what happens when it fails (admits incorrectly, refuses incorrectly, or cannot decide)
+
+A Guard whose approximation fails toward **admitting incorrectly** MUST NOT be used for a safety-related decision. For safety-related decisions, an approximation MUST be designed to fail toward **refusing incorrectly**.
+
+The condition declared in `breaks_when` MUST actually be exercised as a negative control during verification (Section 11.3).
+
+> The judgment "this range is sufficient for the purpose of the decision" is itself capable of being wrong. If the approximation is not declared, that judgment is never reviewed by anyone. Once the breaking condition is written as a property of the subject, whether that condition actually holds can be checked against the subject's real data.
 
 ---
 
@@ -379,6 +416,49 @@ An implementation defines the following invariants when necessary:
 
 When an invariant is violated, the implementation SHOULD expose the violation as `REJECTED` or `FAILED` rather than continuing with an ambiguous Action.
 
+### 10.1 Invariant Scope and Participants
+
+Invariants divide into those contained within a single instance and those that **span multiple instances**. The latter — mutual exclusion, aggregate limits, ordering relations — cannot be expressed in a per-instance definition.
+
+An invariant that spans multiple instances MUST declare:
+
+- **scope**: `instance` or `cross_instance`
+- **participants**: how the set of participating instances is determined (the predicate or index used for evaluation)
+- **evaluator**: who performs the check (not an instance, but an actor that can observe the set)
+- **cadence**: when the check runs (per Transition, periodically, or at checkpoints)
+
+When a `cross_instance` invariant violation is recorded, the record MUST include **the Context of every participant**. The state of the single instance that happened to detect the violation is not sufficient to determine afterwards whether the violation came from a resource being held twice or from an inconsistency in observation.
+
+### 10.2 Invariant Diagnosability (Forensic Minimum)
+
+For every invariant, the implementation MUST declare the **minimum set of observations required to trace the cause once that invariant is violated**. This is referred to below as the **forensic minimum**.
+
+The declaration contains at least:
+
+- which Events, outcomes, or Context items must remain in order to trace the cause
+- the extent (time, instances, resources) over which they must be retained
+
+An implementation that adopts a policy for reducing the volume of observation (Section 12) MUST NOT drop observations listed in the forensic minimum. The policy and the minimum MUST be declared side by side, and **a conflict between them MUST be treated as an error in the definition**.
+
+> A policy for reducing observation volume is a discipline against recording too much; it is not a discipline against recording too little. Without the counterpart, a decision that carries responsibility for an invariant can enter operation without carrying any record of that decision. Declaring the minimum in advance makes this conflict detectable before operation.
+
+The forensic minimum is meaningful **only when the invariant is actually violated**, and is therefore decided independently of the volume of observation during normal operation. Even where aggregate counters are sufficient in normal operation, anything listed in the minimum MUST be recordable individually **at the moment a violation is detected**.
+
+### 10.3 Preconditions for Invariant Validity
+
+An invariant depends on the meaning of the Context items it references. When that meaning varies with configuration — settings, feature switches, operating modes, degraded states — the implementation MUST declare **the precondition under which the invariant holds**.
+
+The declaration contains at least:
+
+- **holds_when**: the configuration under which the invariant holds
+- **out_of_scope_when**: the configurations for which validity is not claimed, and what is guaranteed instead in those configurations
+
+A violation observed in a configuration that does not satisfy the precondition MUST NOT be counted as an invariant violation. It MUST be distinguishable as out of scope. Without that distinction, genuine violations are buried in the out-of-scope count.
+
+The same dependency on configuration also appears in a Guard's enforcement mode (enforced versus observed only). Invariants and Guards SHOULD express such preconditions in the same form.
+
+> If the definition does not allow one to decide whether an invariant is broken or simply not claimed for the current configuration, an observed violation has no determinate meaning. A change that alters the meaning of a Context item also requires reviewing the invariants that reference it; recording the precondition makes those invariants traceable from the definition.
+
 ---
 
 ## 11. Verifiability
@@ -395,6 +475,13 @@ When definitions are structured, static analysis can detect:
 - Role boundary violations
 - some AUTO cycles
 - Transitions made unreachable by priority order
+- Transitions that use a Context item in a decision without a declared provenance (Section 3.4.1)
+- places where a Context item is produced by something other than its declared producer (Section 3.4.1)
+- Context items with the same meaning being computed in two or more places (Section 3.4.1)
+- observations listed in a forensic minimum being dropped by a policy for reducing observation volume (Section 10.2)
+- a `cross_instance` invariant that lacks a participants, evaluator, or cadence declaration (Section 10.1)
+- a Guard that contains an approximation but lacks a `breaks_when` declaration (Section 3.6)
+- an invariant that references configuration-dependent Context items but lacks a validity precondition (Section 10.3)
 
 ### 11.2 What Static Analysis Alone Cannot Guarantee
 
@@ -406,8 +493,11 @@ The following require runtime tests, contract tests, property tests, simulation,
 - performance, memory, and timeouts
 - physical calculations, numerical calculations, and AI search results
 - lifecycle defects that depend on real data
+- the soundness of an approximation contained in a Guard (whether its `breaks_when` condition actually holds is checked against the real data of the subject)
 
 SFA does not claim that every bug can be guaranteed away through static analysis alone.
+
+When no engine executes the definitions — that is, when the definitions are used only as a design and verification baseline — **the fact that verification has covered every declared Transition is not evidence that the implementation performs those Transitions**. In that case, verification is placed not on Transition coverage but on the correspondence between Guards, invariants, and the mechanism (where each declared decision is actually made).
 
 ### 11.3 Recommended Contract Tests
 
@@ -420,6 +510,11 @@ SFA does not claim that every bug can be guaranteed away through static analysis
 - ownership start, completion, invalidation, and preemption
 - checkpoint and restore consistency
 - replay of the same fixture in systems that support deterministic replay
+- **that values are produced as declared by their provenance** (replacing the declared producer changes the decision)
+- **that the forensic minimum is satisfied** (violate an invariant deliberately and confirm that the cause can be traced using only the declared observations; if it cannot, the declared minimum is incomplete)
+- **that a `cross_instance` invariant violation record contains the Context of every participant**
+- **that a Guard's `breaks_when` condition is actually exercised** (create the condition under which the approximation fails and confirm that it fails in the declared `on_break` direction; if the condition cannot be created, the `breaks_when` declaration is wrong)
+- **that a violation in a configuration which does not satisfy an invariant's precondition is treated as out of scope rather than as a violation** (Section 10.3)
 
 ---
 
@@ -441,6 +536,10 @@ An SFA implementation SHOULD be able to output a Transition trace.
 On failure, it is desirable to trace the State, Event, Guard, Action, Role, ownership, and reason.
 
 A Trace is not a substitute for the specification. It is an observability asset used to verify that definitions and execution results agree.
+
+An implementation that adopts a policy for reducing the volume of observation — which Events are aggregated instead of recorded individually, and what is not retained — declares that policy in the definitions. The policy MUST cover **only what may be dropped**. Observations listed in an invariant's forensic minimum (Section 10.2) are outside the scope of the policy, and a conflict between the policy and the minimum MUST be treated as an error in the definition.
+
+When Context used in a decision is included in a Trace, it is desirable that the **provenance** (Section 3.4.1) be traceable as well as the value. The value alone does not distinguish a wrong decision from a decision made on a wrongly produced value.
 
 ---
 
@@ -477,6 +576,57 @@ Example of Event projection:
 }
 ```
 
+Example of a Context item and its provenance (Section 3.4.1):
+
+```json
+{
+  "context_item": "pending_chunk_count",
+  "meaning": "Number of chunks not yet confirmed",
+  "origin": "observation",
+  "producer": "upload_progress_reader.read()",
+  "freshness": "same_transition",
+  "used_by": ["can_finalize"]
+}
+```
+
+Example of an invariant declaration (Sections 10.1, 10.2, and 10.3):
+
+```json
+{
+  "invariant_id": "one_writer_per_resource",
+  "statement": "At most one instance holds the write right for a given resource",
+  "scope": "cross_instance",
+  "participants": "All instances holding the same resource_id",
+  "evaluator": "resource_registry",
+  "cadence": "periodic",
+  "holds_when": "Configurations in which the write right is acquired through a single registry",
+  "out_of_scope_when": "Configurations in which each instance acquires independently (duplication is only detected there)",
+  "forensics": {
+    "required_records": [
+      "The Event that granted the write right, and to whom and when",
+      "The Context of every participant at the moment of detection"
+    ],
+    "retention": "Wide enough to identify the counterpart around the moment of detection"
+  }
+}
+```
+
+Example of a Guard contract (Section 3.6):
+
+```json
+{
+  "guard": "can_finalize",
+  "predicate": "pending_chunk_count == 0",
+  "enforced": { "strict_mode": true, "lenient_mode": "observe_only" },
+  "approximation": {
+    "approximated": "The full set of chunks should be examined, but only the aggregate at the last observation is examined",
+    "valid_when": "No chunk is added during the observation interval",
+    "breaks_when": "Configurations in which a new chunk can be added after the observation",
+    "on_break": "admits incorrectly"
+  }
+}
+```
+
 Example of an ownership policy:
 
 ```json
@@ -504,6 +654,10 @@ An implementation conforms to Core SFA when it provides:
 - Pure Guard / Controlled Action
 - a defined Transition evaluation order
 - observable Event outcomes
+- a declared provenance for every Context item used in a decision (Section 3.4.1)
+- a declared validity range and breaking condition for every Guard that contains an approximation (Section 3.6)
+- a declared forensic minimum for every invariant it defines (Section 10.2)
+- a declared precondition wherever the validity of an invariant depends on configuration (Section 10.3)
 
 ### 14.2 Distributed SFA
 
@@ -513,6 +667,7 @@ In addition to Core SFA, a Distributed SFA implementation provides:
 - Boundary States
 - inter-Role Events
 - request identity or an equivalent asynchronous consistency contract
+- a declared scope, participants, evaluator, and cadence for every `cross_instance` invariant (Section 10.1)
 
 ### 14.3 Long-Running SFA
 

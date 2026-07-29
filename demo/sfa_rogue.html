@@ -58,6 +58,7 @@
         .enemy, .boss { font-weight: bold; }
         .boss { text-shadow: 0 0 10px currentColor; }
         .item { color: #33ff33; font-weight: bold; }
+        .rarity-common { color: #ced4da; text-shadow: none; }
         .rarity-rare { color: #55aaff; text-shadow: 0 0 5px #3388ff; }
         .rarity-very-rare { color: #d46bff; text-shadow: 0 0 7px #b000ff; }
         .rarity-ultra-rare { color: #ffd84d; text-shadow: 0 0 9px #ff9900; }
@@ -222,6 +223,49 @@
     #overlay.facility-overlay .facility-action { margin-top:3px; padding-top:3px; }
     #overlay.facility-overlay .smith-option-list { margin-top:4px; }
     #overlay.facility-overlay .smith-option-row { padding:3px 5px; margin-top:2px; }
+
+    /* Stage 154D: rarity-owned selection projection. Equipment rows use the
+       equipment rarity; option rows use each option's own rarity. */
+    .selection-rarity-common {
+        --selection-rarity-color:#e6edf3;
+        --selection-rarity-border:#8b949e;
+        --selection-rarity-bg:rgba(139,148,158,.17);
+        --selection-rarity-glow:rgba(230,237,243,.25);
+    }
+    .selection-rarity-rare {
+        --selection-rarity-color:#55aaff;
+        --selection-rarity-border:#3388ff;
+        --selection-rarity-bg:rgba(51,136,255,.18);
+        --selection-rarity-glow:rgba(51,136,255,.42);
+    }
+    .selection-rarity-very-rare {
+        --selection-rarity-color:#d46bff;
+        --selection-rarity-border:#b000ff;
+        --selection-rarity-bg:rgba(176,0,255,.18);
+        --selection-rarity-glow:rgba(176,0,255,.42);
+    }
+    .selection-rarity-ultra-rare {
+        --selection-rarity-color:#ffd84d;
+        --selection-rarity-border:#ff9900;
+        --selection-rarity-bg:rgba(255,153,0,.18);
+        --selection-rarity-glow:rgba(255,153,0,.46);
+    }
+    .rarity-selectable { border-color:transparent; }
+    .rarity-selectable.selected {
+        color:var(--selection-rarity-color);
+        border-color:var(--selection-rarity-border);
+        background:var(--selection-rarity-bg);
+        box-shadow:inset 3px 0 0 var(--selection-rarity-color), 0 0 9px var(--selection-rarity-glow);
+        text-shadow:0 0 6px var(--selection-rarity-glow);
+    }
+    .rarity-selectable.selected::before { color:var(--selection-rarity-color); }
+    .smith-option-row.option-rarity-selectable.selected {
+        box-shadow:inset 2px 0 0 var(--selection-rarity-color), 0 0 7px var(--selection-rarity-glow);
+    }
+    .smith-compare-card.rarity-selectable.selected {
+        border-color:var(--selection-rarity-border);
+        box-shadow:inset 3px 0 0 var(--selection-rarity-color), 0 0 10px var(--selection-rarity-glow);
+    }
     @media (max-width:560px) {
         #overlay.facility-overlay { width:calc(100vw - 12px); padding:10px; }
         .facility-main { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,.82fr); }
@@ -257,7 +301,7 @@
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage154b-portal-smith-paging-and-material-yield-20260724";
+const SFA_ROGUE_BUILD_ID = "stage154i-dark-smith-auto-forge-progress-20260729";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -508,6 +552,8 @@ const SFA_DEFINITIONS = {
       { event: "MENU_DOWN", action: "home_cursor_down", target_state: "FE_HOME_MENU" },
       { event: "MOVE_LEFT", action: "home_page_previous", target_state: "FE_HOME_MENU" },
       { event: "MOVE_RIGHT", action: "home_page_next", target_state: "FE_HOME_MENU" },
+      { event: "EQUIP_RECOMMENDED", guard: "home_has_recommended_equipment", action: "equip_recommended_home_equipment", target_state: "FE_HOME_MENU" },
+      { event: "WITHDRAW_REQUESTED_GOLD", guard: "home_has_requested_gold_transfer", action: "withdraw_requested_home_gold", target_state: "FE_PLAYER_TURN" },
       { event: "SELECT", guard: "home_selected_carried_equipment", action: "deposit_home_equipment", target_state: "FE_HOME_MENU" },
       { event: "SELECT", guard: "home_selected_stored_equipment", action: "withdraw_home_equipment", target_state: "FE_HOME_MENU" },
       { event: "SELECT", guard: "home_selected_deposit_gold", action: "deposit_home_gold", target_state: "FE_HOME_MENU" },
@@ -525,9 +571,11 @@ const SFA_DEFINITIONS = {
       { event: "MOVE_LEFT", action: "dark_smith_option_left", target_state: "FE_DARK_SMITH_MENU" },
       { event: "MOVE_RIGHT", action: "dark_smith_option_right", target_state: "FE_DARK_SMITH_MENU" },
       { event: "SELECT", guard: "can_attempt_dark_smith_upgrade", action: "attempt_dark_smith_upgrade", target_state: "FE_DARK_SMITH_MENU" },
+      { event: "SELECT", action: "report_dark_smith_ineligible_upgrade", target_state: "FE_DARK_SMITH_MENU" },
       { event: "OPEN_OPTION_REROLL", guard: "has_dark_smith_reroll_candidates", action: "prepare_dark_smith_reroll_target", target_state: "FE_DARK_SMITH_REROLL_TARGET" },
       { event: "OPEN_OPTION_CHANGE", guard: "has_dark_smith_change_candidates", action: "prepare_dark_smith_change_target", target_state: "FE_DARK_SMITH_CHANGE_TARGET" },
       { event: "OPEN_DISMANTLE", action: "prepare_dark_smith_dismantle_menu", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
+      { event: "DISMANTLE_RECOMMENDED_BATCH", guard: "has_recommended_dark_smith_dismantle_batch", action: "dismantle_recommended_dark_smith_batch", target_state: "FE_DARK_SMITH_MENU" },
       { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
     ]
   },
@@ -638,6 +686,7 @@ const SFA_DEFINITIONS = {
       { event: "MENU_DOWN", action: "blacksmith_kind_down", target_state: "FE_BLACKSMITH_KIND_MENU" },
       { event: "SELECT", guard: "blacksmith_level_training_at_cap", action: "report_blacksmith_level_cap", target_state: "FE_BLACKSMITH_KIND_MENU" },
       { event: "SELECT", guard: "can_afford_blacksmith", action: "roll_blacksmith_proposal", target_state: "FE_BLACKSMITH_COMPARE" },
+      { event: "SELECT", action: "report_blacksmith_ineligible_upgrade", target_state: "FE_BLACKSMITH_KIND_MENU" },
       { event: "ESCAPE", target_state: "FE_BLACKSMITH_MENU" }
     ]
   },
@@ -721,9 +770,9 @@ const INPUT_EVENT_BY_MODE = {
   "list-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
   "paged-list-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", PageUp: "PAGE_UP", PageDown: "PAGE_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
   "portal-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", Escape: "ESCAPE" },
-  "home-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", Escape: "ESCAPE" },
+  "home-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", e: "EQUIP_RECOMMENDED", E: "EQUIP_RECOMMENDED", Escape: "ESCAPE" },
   "blacksmith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", PageUp: "PAGE_UP", PageDown: "PAGE_DOWN", Enter: "SELECT", s: "SELL", S: "SELL", d: "DISMANTLE", D: "DISMANTLE", Escape: "ESCAPE" },
-  "dark-smith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", PageUp: "PAGE_UP", PageDown: "PAGE_DOWN", Enter: "SELECT", r: "OPEN_OPTION_REROLL", R: "OPEN_OPTION_REROLL", c: "OPEN_OPTION_CHANGE", C: "OPEN_OPTION_CHANGE", d: "OPEN_DISMANTLE", D: "OPEN_DISMANTLE", Escape: "ESCAPE" },
+  "dark-smith-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", PageUp: "PAGE_UP", PageDown: "PAGE_DOWN", Enter: "SELECT", r: "OPEN_OPTION_REROLL", R: "OPEN_OPTION_REROLL", c: "OPEN_OPTION_CHANGE", C: "OPEN_OPTION_CHANGE", d: "OPEN_DISMANTLE", D: "OPEN_DISMANTLE", b: "DISMANTLE_RECOMMENDED_BATCH", B: "DISMANTLE_RECOMMENDED_BATCH", Escape: "ESCAPE" },
   "dark-smith-change-options": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", Escape: "ESCAPE" },
   "confirm-menu": { Enter: "SELECT", Escape: "ESCAPE" },
   "death-summary": { Enter: "RETURN_TO_TOWN", Escape: "ESCAPE" },
@@ -1760,18 +1809,125 @@ const RARITY_DEFINITIONS = {
 const RARITY_ORDER = ['common', 'rare', 'very_rare', 'ultra_rare'];
 const RARITY_RANK = Object.fromEntries(RARITY_ORDER.map((rarity, index) => [rarity, index]));
 
+const REWARD_RARITY_PROGRESSION_CONFIG = Object.freeze({
+  standard: Object.freeze({
+    depthStepFloors: 5,
+    depthStepBonus: 0.001,
+    depthBonusCap: 0.30,
+    enemyRarityBonus: Object.freeze({ common: 0.00, rare: 0.05, very_rare: 0.10, ultra_rare: 0.15 }),
+    bossBonus: 0.05,
+    enemyBonusCap: 0.20,
+    totalBonusCap: 0.50
+  }),
+  abyss: Object.freeze({
+    depthStepFloors: 1,
+    depthStepBonus: 0.01,
+    depthBonusCap: 0.50,
+    enemyRarityBonus: Object.freeze({ common: 0.00, rare: 0.10, very_rare: 0.20, ultra_rare: 0.30 }),
+    bossBonus: 0.20,
+    enemyBonusCap: 0.50,
+    totalBonusCap: 1.00
+  })
+});
+
+function normalizeRarityProbabilities(probabilities = {}) {
+  const normalized = Object.fromEntries(RARITY_ORDER.map(rarity => [rarity, Math.max(0, Number(probabilities[rarity]) || 0)]));
+  const total = RARITY_ORDER.reduce((sum, rarity) => sum + normalized[rarity], 0);
+  if (total <= 0) return { common: 1, rare: 0, very_rare: 0, ultra_rare: 0 };
+  for (const rarity of RARITY_ORDER) normalized[rarity] /= total;
+  return normalized;
+}
+
+function applySingleRarityPromotionPass(probabilities, promotionChance) {
+  const source = normalizeRarityProbabilities(probabilities);
+  const chance = Math.min(1, Math.max(0, Number(promotionChance) || 0));
+  const next = { common: 0, rare: 0, very_rare: 0, ultra_rare: source.ultra_rare };
+  for (let index = 0; index < RARITY_ORDER.length - 1; index++) {
+    const rarity = RARITY_ORDER[index];
+    const promoted = RARITY_ORDER[index + 1];
+    next[rarity] += source[rarity] * (1 - chance);
+    next[promoted] += source[rarity] * chance;
+  }
+  return normalizeRarityProbabilities(next);
+}
+
+function applyRarityPromotionPasses(probabilities, promotionChance, passCount = 3) {
+  let result = normalizeRarityProbabilities(probabilities);
+  for (let pass = 0; pass < passCount; pass++) result = applySingleRarityPromotionPass(result, promotionChance);
+  return result;
+}
+
+const REWARD_RARITY_PROBABILITY_CACHE = new Map();
+
+function addUltraRareProbabilityBonus(probabilities, ultraRareBonus = 0) {
+  const base = normalizeRarityProbabilities(probabilities);
+  const bonus = Math.max(0, Number(ultraRareBonus) || 0);
+  const cacheKey = `${RARITY_ORDER.map(rarity => base[rarity].toFixed(9)).join('|')}|${bonus.toFixed(9)}`;
+  const cached = REWARD_RARITY_PROBABILITY_CACHE.get(cacheKey);
+  if (cached) return cached;
+  const targetUltraRare = Math.min(1, base.ultra_rare + bonus);
+  let result = base;
+  if (targetUltraRare >= 1 - 1e-12) {
+    result = { common: 0, rare: 0, very_rare: 0, ultra_rare: 1 };
+  } else if (targetUltraRare > base.ultra_rare + 1e-12) {
+    let low = 0;
+    let high = 1;
+    for (let iteration = 0; iteration < 40; iteration++) {
+      const middle = (low + high) / 2;
+      const candidate = applyRarityPromotionPasses(base, middle, 3);
+      if (candidate.ultra_rare < targetUltraRare) low = middle;
+      else high = middle;
+    }
+    result = applyRarityPromotionPasses(base, (low + high) / 2, 3);
+    const correction = targetUltraRare - result.ultra_rare;
+    result.ultra_rare = targetUltraRare;
+    result.common = Math.max(0, result.common - correction);
+    result = normalizeRarityProbabilities(result);
+  }
+  result = Object.freeze(result);
+  REWARD_RARITY_PROBABILITY_CACHE.set(cacheKey, result);
+  return result;
+}
+
+function rollRarityFromProbabilities(probabilities, roll = gameRandom()) {
+  const normalized = normalizeRarityProbabilities(probabilities);
+  let cumulative = 0;
+  for (const rarity of RARITY_ORDER) {
+    cumulative += normalized[rarity];
+    if (roll < cumulative) return rarity;
+  }
+  return 'ultra_rare';
+}
+
+function rewardRarityProgressionProfile(ctx, enemy = null) {
+  const mode = ctx?.dungeonMode === 'abyss' ? 'abyss' : 'standard';
+  const config = REWARD_RARITY_PROGRESSION_CONFIG[mode];
+  const depth = Math.max(1, Number(ctx?.depth) || 1);
+  const depthSteps = Math.floor(depth / config.depthStepFloors);
+  const depthBonus = Math.min(config.depthBonusCap, depthSteps * config.depthStepBonus);
+  const enemyRarity = RARITY_ORDER.includes(enemy?.rarity) ? enemy.rarity : 'common';
+  const rarityBonus = config.enemyRarityBonus[enemyRarity] || 0;
+  const bossBonus = enemy && (enemy.isBoss || enemy.isAbyssBoss) ? config.bossBonus : 0;
+  const enemyBonus = Math.min(config.enemyBonusCap, rarityBonus + bossBonus);
+  const ultraRareBonus = Math.min(config.totalBonusCap, depthBonus + enemyBonus);
+  return Object.freeze({ mode, depth, depthBonus, enemyRarity, rarityBonus, bossBonus, enemyBonus, ultraRareBonus });
+}
+
 const EQUIPMENT_OPTION_DEFINITIONS = {
   weapon: [
     { id: 'edge', name: 'Keen Edge', effect: 'primary_stat' },
     { id: 'slayer', name: 'Slayer Mark', effect: 'primary_stat' },
     { id: 'ruin', name: 'Ruin Engraving', effect: 'primary_stat' },
-    { id: 'vital_recovery_weapon', name: 'Vital Recovery', effect: 'hp_recovery_bonus' }
+    { id: 'vital_recovery_weapon', name: 'Vital Recovery', effect: 'hp_recovery_bonus' },
+    { id: 'blood_leech', name: 'Blood Leech', effect: 'hp_leech' },
+    { id: 'hunger_leech', name: 'Hunger Leech', effect: 'hunger_leech' }
   ],
   armor: [
     { id: 'ward', name: 'Warding', effect: 'primary_stat' },
     { id: 'fortitude', name: 'Fortitude', effect: 'primary_stat' },
     { id: 'bastion', name: 'Bastion Seal', effect: 'primary_stat' },
-    { id: 'vital_recovery_armor', name: 'Vital Recovery', effect: 'hp_recovery_bonus' }
+    { id: 'vital_recovery_armor', name: 'Vital Recovery', effect: 'hp_recovery_bonus' },
+    { id: 'piercing_guard', name: 'Piercing Guard', effect: 'armor_piercing_resistance' }
   ]
 };
 
@@ -1781,6 +1937,22 @@ const HP_RECOVERY_OPTION_RANGE_TENTHS = Object.freeze({
   very_rare: Object.freeze([13, 17]),
   ultra_rare: Object.freeze([16, 20])
 });
+const HP_LEECH_OPTION_RANGE_TENTHS_PERCENT = Object.freeze({
+  common: Object.freeze([10, 18]), rare: Object.freeze([18, 28]),
+  very_rare: Object.freeze([28, 40]), ultra_rare: Object.freeze([40, 55])
+});
+const HUNGER_LEECH_OPTION_RANGE_TENTHS = Object.freeze({
+  common: Object.freeze([2, 4]), rare: Object.freeze([4, 7]),
+  very_rare: Object.freeze([7, 11]), ultra_rare: Object.freeze([12, 18])
+});
+const PIERCING_GUARD_OPTION_RANGE_TENTHS_PERCENT = Object.freeze({
+  common: Object.freeze([50, 100]), rare: Object.freeze([100, 180]),
+  very_rare: Object.freeze([180, 280]), ultra_rare: Object.freeze([280, 400])
+});
+function rollIntegerRange(range, roll = gameRandom()) {
+  const [minimum, maximum] = range;
+  return minimum + Math.floor(Math.min(0.999999999, Math.max(0, roll)) * (maximum - minimum + 1));
+}
 
 function equipmentOptionEffect(option) {
   return option?.effect || 'primary_stat';
@@ -1796,9 +1968,18 @@ function rollHpRecoveryBonusTenths(rarity = 'common', roll = gameRandom()) {
 }
 
 function createEquipmentOptionFromDefinition(definition, totalPower, itemRarity, rolls = {}) {
-  const rarity = rollEquipmentOptionRarity(itemRarity, rolls.rarity ?? gameRandom());
+  const rarity = rolls.forcedRarity || rollEquipmentOptionRarity(itemRarity, rolls.rarity ?? gameRandom(), rolls.rewardProfile || null);
   if (definition.effect === 'hp_recovery_bonus') {
     return { id: definition.id, name: definition.name, rarity, effect: definition.effect, value: rollHpRecoveryBonusTenths(rarity, rolls.value ?? gameRandom()), enhancementSuccesses: 0 };
+  }
+  if (definition.effect === 'hp_leech') {
+    return { id: definition.id, name: definition.name, rarity, effect: definition.effect, value: rollIntegerRange(HP_LEECH_OPTION_RANGE_TENTHS_PERCENT[rarity], rolls.value ?? gameRandom()), enhancementSuccesses: 0 };
+  }
+  if (definition.effect === 'hunger_leech') {
+    return { id: definition.id, name: definition.name, rarity, effect: definition.effect, value: rollIntegerRange(HUNGER_LEECH_OPTION_RANGE_TENTHS[rarity], rolls.value ?? gameRandom()), enhancementSuccesses: 0 };
+  }
+  if (definition.effect === 'armor_piercing_resistance') {
+    return { id: definition.id, name: definition.name, rarity, effect: definition.effect, value: rollIntegerRange(PIERCING_GUARD_OPTION_RANGE_TENTHS_PERCENT[rarity], rolls.value ?? gameRandom()), enhancementSuccesses: 0 };
   }
   const rarityMultiplier = { common: 0.08, rare: 0.12, very_rare: 0.17, ultra_rare: 0.23 }[rarity];
   const value = Math.max(1, Math.min(Math.max(1, totalPower - 1), Math.round(totalPower * rarityMultiplier)));
@@ -1806,27 +1987,25 @@ function createEquipmentOptionFromDefinition(definition, totalPower, itemRarity,
 }
 
 function formatEquipmentOptionValue(option) {
-  return equipmentOptionEffect(option) === 'hp_recovery_bonus'
-    ? `HP recovery +${((Number(option?.value) || 0) / 10).toFixed(1)}x`
-    : `+${Number(option?.value) || 0}`;
+  const value = Number(option?.value) || 0;
+  if (equipmentOptionEffect(option) === 'hp_recovery_bonus') return `HP recovery +${(value / 10).toFixed(1)}x`;
+  if (equipmentOptionEffect(option) === 'hp_leech') return `HP leech ${(value / 10).toFixed(1)}%`;
+  if (equipmentOptionEffect(option) === 'hunger_leech') return `Hunger leech +${(value / 10).toFixed(1)}`;
+  if (equipmentOptionEffect(option) === 'armor_piercing_resistance') return `Piercing guard ${(value / 10).toFixed(1)}%`;
+  return `+${value}`;
 }
 
-function optionRarityProbabilities(itemRarity = 'common') {
+function optionRarityProbabilities(itemRarity = 'common', rewardProfile = null) {
   const itemRank = RARITY_RANK[itemRarity] || 0;
   const rare = 0.16 + itemRank * 0.055;
   const veryRare = 0.035 + itemRank * 0.025;
   const ultraRare = 0.005 + itemRank * 0.008;
-  return { common: 1 - rare - veryRare - ultraRare, rare, very_rare: veryRare, ultra_rare: ultraRare };
+  const base = { common: 1 - rare - veryRare - ultraRare, rare, very_rare: veryRare, ultra_rare: ultraRare };
+  return rewardProfile ? addUltraRareProbabilityBonus(base, rewardProfile.ultraRareBonus) : base;
 }
 
-function rollEquipmentOptionRarity(itemRarity = 'common', roll = gameRandom()) {
-  const probabilities = optionRarityProbabilities(itemRarity);
-  let cumulative = 0;
-  for (const rarity of RARITY_ORDER) {
-    cumulative += probabilities[rarity];
-    if (roll < cumulative) return rarity;
-  }
-  return 'common';
+function rollEquipmentOptionRarity(itemRarity = 'common', roll = gameRandom(), rewardProfile = null) {
+  return rollRarityFromProbabilities(optionRarityProbabilities(itemRarity, rewardProfile), roll);
 }
 
 const EQUIPMENT_OPTION_COUNT_DISTRIBUTIONS = Object.freeze({
@@ -1835,6 +2014,74 @@ const EQUIPMENT_OPTION_COUNT_DISTRIBUTIONS = Object.freeze({
   very_rare: Object.freeze([0.00, 0.40, 0.60, 0.00]),
   ultra_rare: Object.freeze([0.00, 0.00, 0.70, 0.30])
 });
+
+
+const ABYSS_BOSS_REWARD_CONFIG = Object.freeze({
+  equipmentRarity: 'ultra_rare',
+  optionCount: 3,
+  ultraRareOptionChance: 0.30,
+  fallbackOptionRarity: 'very_rare',
+  qualityBias: RARITY_DEFINITIONS.ultra_rare.dropQuality,
+  optionWeights: Object.freeze({
+    weapon: Object.freeze({
+      blood_leech: 6,
+      hunger_leech: 5,
+      vital_recovery_weapon: 5,
+      edge: 1,
+      slayer: 1,
+      ruin: 1
+    }),
+    armor: Object.freeze({
+      piercing_guard: 6,
+      vital_recovery_armor: 5,
+      ward: 1,
+      fortitude: 1,
+      bastion: 1
+    })
+  })
+});
+
+function abyssBossOptionRarityProbabilities(rewardProfile = null) {
+  const ultraRare = Math.min(1, ABYSS_BOSS_REWARD_CONFIG.ultraRareOptionChance + Math.max(0, Number(rewardProfile?.ultraRareBonus) || 0));
+  return Object.freeze({ common: 0, rare: 0, very_rare: 1 - ultraRare, ultra_rare: ultraRare });
+}
+
+function rollAbyssBossOptionRarity(roll = gameRandom(), rewardProfile = null) {
+  const probabilities = abyssBossOptionRarityProbabilities(rewardProfile);
+  return roll < probabilities.ultra_rare ? 'ultra_rare' : ABYSS_BOSS_REWARD_CONFIG.fallbackOptionRarity;
+}
+
+function chooseWeightedEquipmentOptionDefinition(type, available, roll = gameRandom()) {
+  if (!Array.isArray(available) || available.length === 0) return null;
+  const weights = ABYSS_BOSS_REWARD_CONFIG.optionWeights[type] || {};
+  const totalWeight = available.reduce((sum, definition) => sum + Math.max(0, Number(weights[definition.id]) || 1), 0);
+  let cursor = Math.min(0.999999999, Math.max(0, roll)) * totalWeight;
+  for (let index = 0; index < available.length; index++) {
+    cursor -= Math.max(0, Number(weights[available[index].id]) || 1);
+    if (cursor < 0) return { definition: available[index], index };
+  }
+  return { definition: available[available.length - 1], index: available.length - 1 };
+}
+
+function createAbyssBossEquipmentOptions(type, totalPower, rolls = {}, rewardProfile = null) {
+  const definitions = (EQUIPMENT_OPTION_DEFINITIONS[type] || []).slice();
+  const count = Math.min(ABYSS_BOSS_REWARD_CONFIG.optionCount, definitions.length);
+  const options = [];
+  for (let index = 0; index < count; index++) {
+    const optionRolls = rolls.options?.[index] || {};
+    const selected = chooseWeightedEquipmentOptionDefinition(type, definitions, optionRolls.kind ?? gameRandom());
+    if (!selected) break;
+    definitions.splice(selected.index, 1);
+    const forcedRarity = rollAbyssBossOptionRarity(optionRolls.rarity ?? gameRandom(), rewardProfile);
+    options.push(createEquipmentOptionFromDefinition(
+      selected.definition,
+      totalPower,
+      ABYSS_BOSS_REWARD_CONFIG.equipmentRarity,
+      { ...optionRolls, forcedRarity }
+    ));
+  }
+  return options;
+}
 
 function rollEquipmentOptionCount(itemRarity = 'common', roll = gameRandom()) {
   const distribution = EQUIPMENT_OPTION_COUNT_DISTRIBUTIONS[itemRarity] || EQUIPMENT_OPTION_COUNT_DISTRIBUTIONS.common;
@@ -1874,7 +2121,7 @@ function createEquipmentOption(type, totalPower, itemRarity = 'common', rolls = 
   return createEquipmentOptionFromDefinition(definition, totalPower, itemRarity, rolls);
 }
 
-function createEquipmentOptions(type, totalPower, itemRarity = 'common', rolls = {}) {
+function createEquipmentOptions(type, totalPower, itemRarity = 'common', rolls = {}, rewardProfile = null) {
   const definitions = EQUIPMENT_OPTION_DEFINITIONS[type] || [];
   if (definitions.length === 0) return [];
   const requestedCount = rollEquipmentOptionCount(itemRarity, rolls.count ?? gameRandom());
@@ -1886,7 +2133,7 @@ function createEquipmentOptions(type, totalPower, itemRarity = 'common', rolls =
     const kindRoll = optionRolls.kind ?? gameRandom();
     const definitionIndex = Math.floor(kindRoll * available.length) % available.length;
     const [definition] = available.splice(definitionIndex, 1);
-    options.push(createEquipmentOptionFromDefinition(definition, totalPower, itemRarity, optionRolls));
+    options.push(createEquipmentOptionFromDefinition(definition, totalPower, itemRarity, { ...optionRolls, rewardProfile }));
   }
   return options;
 }
@@ -1898,6 +2145,256 @@ function equipmentOptionSummary(item) {
     const enhanced = option.enhancementSuccesses || 0;
     return `${escapeHtml(rarityLabel(option.rarity))} ${escapeHtml(option.name)} ${escapeHtml(formatEquipmentOptionValue(option))}${enhanced > 0 ? ` (Forge +${enhanced})` : ''}`;
   }).join(', ');
+}
+
+function coloredEquipmentOptionSummary(item) {
+  const options = item?.options || [];
+  if (options.length === 0) return '<span class="rarity-common">Common · No option</span>';
+  return options.map(option => {
+    const enhanced = option.enhancementSuccesses || 0;
+    const text = `${rarityLabel(option.rarity)} ${option.name} ${formatEquipmentOptionValue(option)}${enhanced > 0 ? ` (Forge +${enhanced})` : ''}`;
+    return `<span class="${rarityClassName(option.rarity)}">${escapeHtml(text)}</span>`;
+  }).join('<br>');
+}
+
+function coloredEquipmentOptionInlineSummary(item) {
+  const options = item?.options || [];
+  if (options.length === 0) return '<span class="rarity-common">Common · No option</span>';
+  return options.map(option => {
+    const enhanced = option.enhancementSuccesses || 0;
+    const text = `${rarityLabel(option.rarity)} ${option.name} ${formatEquipmentOptionValue(option)}${enhanced > 0 ? ` (Forge +${enhanced})` : ''}`;
+    return `<span class="${rarityClassName(option.rarity)}">${escapeHtml(text)}</span>`;
+  }).join(', ');
+}
+
+const EQUIPMENT_SELECTION_CONFIG = Object.freeze({
+  referenceMasteryLevel: 50,
+  crossoverMasteryLimit: 60,
+  higherRarityCrossoverMasteryLimit: 100,
+  maximumImmediateLossRatio: 0.35,
+  minimumEqualMasteryGainRatio: 0.05,
+  dismantleBatchSize: 256,
+  autoForgeShardReserve: 100,
+  autoForgeSuccessCap: 100,
+  requiredPerfectOptionCount: 3,
+  eliteOptionMinimumRarity: 'ultra_rare',
+  eliteVitalMinimumRarity: 'ultra_rare',
+  eliteOptionRarityScoreMinimum: 300,
+  recoveryReferenceStatWeightPerX: 0.12,
+  optionRarityReferenceStatWeight: 0.001,
+  optionSlotReferenceStatWeight: 0.01
+});
+
+function equipmentRecoveryBonus(item) {
+  return (item?.options || [])
+    .filter(option => equipmentOptionEffect(option) === 'hp_recovery_bonus')
+    .reduce((sum, option) => sum + Math.max(0, Number(option?.value) || 0) / 10, 0);
+}
+
+function equipmentOptionRarityScore(item) {
+  return (item?.options || []).reduce((sum, option) => {
+    const rank = RARITY_RANK[option?.rarity] || 0;
+    return sum + rank * rank * 10 + rank;
+  }, 0);
+}
+
+function equipmentHasPerfectUltraOptions(item) {
+  const options = item?.options || [];
+  return item?.rarity === 'ultra_rare'
+    && options.length === EQUIPMENT_SELECTION_CONFIG.requiredPerfectOptionCount
+    && options.every(option => option?.rarity === 'ultra_rare');
+}
+function equipmentUltraOptionCount(item) {
+  return (item?.options || []).filter(option => option?.rarity === 'ultra_rare').length;
+}
+function equipmentMinimumOptionRarityRank(item) {
+  const options = item?.options || [];
+  if (options.length < EQUIPMENT_SELECTION_CONFIG.requiredPerfectOptionCount) return -1;
+  return Math.min(...options.map(option => RARITY_RANK[option?.rarity] || 0));
+}
+const EQUIPMENT_OPTION_TYPE_PRIORITY = Object.freeze({
+  weapon: Object.freeze({ hp_leech: 500, hunger_leech: 400, hp_recovery_bonus: 300, primary_stat: 100 }),
+  armor: Object.freeze({ armor_piercing_resistance: 600, hp_recovery_bonus: 400, primary_stat: 100 })
+});
+function equipmentOptionEffectPriority(type, effect) {
+  return (EQUIPMENT_OPTION_TYPE_PRIORITY[type] || {})[effect] || 0;
+}
+function equipmentOptionTypePriority(item) {
+  return (item?.options || []).reduce((sum, option) => sum + equipmentOptionEffectPriority(item?.type, equipmentOptionEffect(option)), 0);
+}
+function compareEquipmentOptionQuality(leftItem, rightItem) {
+  const perfect = Number(equipmentHasPerfectUltraOptions(leftItem)) - Number(equipmentHasPerfectUltraOptions(rightItem));
+  if (perfect) return perfect;
+  const minimum = equipmentMinimumOptionRarityRank(leftItem) - equipmentMinimumOptionRarityRank(rightItem);
+  if (minimum) return minimum;
+  const ultraCount = equipmentUltraOptionCount(leftItem) - equipmentUltraOptionCount(rightItem);
+  if (ultraCount) return ultraCount;
+  const slotCount = Math.min(3, leftItem?.options?.length || 0) - Math.min(3, rightItem?.options?.length || 0);
+  if (slotCount) return slotCount;
+  const typePriority = equipmentOptionTypePriority(leftItem) - equipmentOptionTypePriority(rightItem);
+  if (typePriority) return typePriority;
+  return equipmentOptionRarityScore(leftItem) - equipmentOptionRarityScore(rightItem);
+}
+function equipmentEligibleForStrengthening(item) {
+  return equipmentHasPerfectUltraOptions(item);
+}
+
+function equipmentStatAtMastery(item, masteryLevel) {
+  if (!item) return 0;
+  const basePower = equipmentBasePower(item);
+  const primaryOptionPower = (item.options || []).reduce((sum, option) => sum + equipmentOptionPrimaryPower(option), 0);
+  const mastery = Math.max(0, Math.floor(Number(masteryLevel) || 0));
+  return Math.max(1, basePower + Math.floor(basePower * mastery * EQUIPMENT_GROWTH_CONFIG.masteryPercentPerLevel) + primaryOptionPower);
+}
+
+function equipmentCrossoverMastery(candidate, current, additionalMasteryLimit = 500) {
+  if (!candidate || !current || candidate.type !== current.type) return Infinity;
+  const targetStat = equipmentPrimaryStat(current);
+  const start = Math.max(0, Math.floor(Number(candidate.masteryLevel) || 0));
+  if (equipmentStatAtMastery(candidate, start) >= targetStat) return start;
+  const basePower = equipmentBasePower(candidate);
+  const primaryOptionPower = (candidate.options || []).reduce((sum, option) => sum + equipmentOptionPrimaryPower(option), 0);
+  const requiredMasteryPower = targetStat - basePower - primaryOptionPower;
+  const growthPerMastery = basePower * EQUIPMENT_GROWTH_CONFIG.masteryPercentPerLevel;
+  if (requiredMasteryPower <= 0) return start;
+  if (!(growthPerMastery > 0)) return Infinity;
+  const crossoverMastery = Math.max(start, Math.ceil(requiredMasteryPower / growthPerMastery));
+  return crossoverMastery <= start + Math.max(0, Number(additionalMasteryLimit) || 0) ? crossoverMastery : Infinity;
+}
+
+function equipmentProgressionProjection(candidate, current) {
+  if (!candidate || !current || candidate.type !== current.type) return null;
+  const candidateCurrentStat = equipmentPrimaryStat(candidate);
+  const currentStat = equipmentPrimaryStat(current);
+  const equalMasteryLevel = Math.max(0, Number(current.masteryLevel) || 0);
+  const crossoverMastery = equipmentCrossoverMastery(candidate, current);
+  return {
+    candidateCurrentStat,
+    currentStat,
+    immediateLossRatio: Math.max(0, currentStat - candidateCurrentStat) / Math.max(1, currentStat),
+    referenceMasteryLevel: EQUIPMENT_SELECTION_CONFIG.referenceMasteryLevel,
+    referenceMasteryStat: equipmentStatAtMastery(candidate, EQUIPMENT_SELECTION_CONFIG.referenceMasteryLevel),
+    currentReferenceMasteryStat: equipmentStatAtMastery(current, EQUIPMENT_SELECTION_CONFIG.referenceMasteryLevel),
+    equalMasteryLevel,
+    equalMasteryStat: equipmentStatAtMastery(candidate, equalMasteryLevel),
+    currentEqualMasteryStat: equipmentStatAtMastery(current, equalMasteryLevel),
+    crossoverMastery,
+    crossoverMasteryGain: Number.isFinite(crossoverMastery) ? Math.max(0, crossoverMastery - Math.max(0, Number(candidate.masteryLevel) || 0)) : Infinity,
+    recoveryBonus: equipmentRecoveryBonus(candidate),
+    currentRecoveryBonus: equipmentRecoveryBonus(current),
+    optionRarityScore: equipmentOptionRarityScore(candidate),
+    recommendationScore: equipmentRecommendationScore(candidate),
+    currentRecommendationScore: equipmentRecommendationScore(current)
+  };
+}
+
+function equipmentRecommendationScore(item) {
+  const referenceStat = equipmentStatAtMastery(item, EQUIPMENT_SELECTION_CONFIG.referenceMasteryLevel);
+  const recoveryFactor = 1 + Math.min(2, equipmentRecoveryBonus(item)) * EQUIPMENT_SELECTION_CONFIG.recoveryReferenceStatWeightPerX;
+  const optionRarityFactor = 1 + equipmentOptionRarityScore(item) * EQUIPMENT_SELECTION_CONFIG.optionRarityReferenceStatWeight;
+  const optionSlotFactor = 1 + Math.min(3, item?.options?.length || 0) * EQUIPMENT_SELECTION_CONFIG.optionSlotReferenceStatWeight;
+  return referenceStat * recoveryFactor * optionRarityFactor * optionSlotFactor;
+}
+
+function compareEquipmentRecommendationCandidates(left, right) {
+  const rarityDifference = (RARITY_RANK[left.item?.rarity] || 0) - (RARITY_RANK[right.item?.rarity] || 0);
+  if (rarityDifference) return rarityDifference;
+  const optionQualityDifference = compareEquipmentOptionQuality(left.item, right.item);
+  if (optionQualityDifference) return optionQualityDifference;
+  const recommendationDifference = equipmentRecommendationScore(left.item) - equipmentRecommendationScore(right.item);
+  if (recommendationDifference) return recommendationDifference;
+  const referenceDifference = equipmentStatAtMastery(left.item, EQUIPMENT_SELECTION_CONFIG.referenceMasteryLevel)
+    - equipmentStatAtMastery(right.item, EQUIPMENT_SELECTION_CONFIG.referenceMasteryLevel);
+  if (referenceDifference) return referenceDifference;
+  const recoveryDifference = equipmentRecoveryBonus(left.item) - equipmentRecoveryBonus(right.item);
+  if (recoveryDifference) return recoveryDifference;
+  const optionDifference = equipmentOptionRarityScore(left.item) - equipmentOptionRarityScore(right.item);
+  if (optionDifference) return optionDifference;
+  const levelDifference = (left.item?.equipmentLevel || 1) - (right.item?.equipmentLevel || 1);
+  if (levelDifference) return levelDifference;
+  const qualityDifference = (left.item?.qualityRate || 1) - (right.item?.qualityRate || 1);
+  if (qualityDifference) return qualityDifference;
+  return String(right.item?.instanceId || '').localeCompare(String(left.item?.instanceId || ''));
+}
+
+function equipmentUpgradeIsWorthwhile(candidate, current) {
+  const projection = equipmentProgressionProjection(candidate, current);
+  if (!projection) return false;
+  const candidateRarity = RARITY_RANK[candidate.rarity] || 0;
+  const currentRarity = RARITY_RANK[current.rarity] || 0;
+  if (candidateRarity < currentRarity) return false;
+  const optionQualityGain = compareEquipmentOptionQuality(candidate, current);
+  if (candidateRarity === currentRarity && optionQualityGain < 0) return false;
+  const crossoverLimit = candidateRarity > currentRarity
+    ? EQUIPMENT_SELECTION_CONFIG.higherRarityCrossoverMasteryLimit
+    : EQUIPMENT_SELECTION_CONFIG.crossoverMasteryLimit;
+  if (optionQualityGain <= 0 && projection.crossoverMasteryGain > crossoverLimit) return false;
+  if (optionQualityGain <= 0 && projection.immediateLossRatio > EQUIPMENT_SELECTION_CONFIG.maximumImmediateLossRatio) return false;
+  const equalMasteryGain = projection.equalMasteryStat / Math.max(1, projection.currentEqualMasteryStat) - 1;
+  const recoveryImprovement = projection.recoveryBonus - projection.currentRecoveryBonus;
+  const recommendationGain = projection.recommendationScore / Math.max(1, projection.currentRecommendationScore) - 1;
+  if (candidateRarity === currentRarity && optionQualityGain <= 0 && recommendationGain <= 0) return false;
+  return candidateRarity > currentRarity
+    || optionQualityGain > 0
+    || (recommendationGain > 0 && equalMasteryGain >= EQUIPMENT_SELECTION_CONFIG.minimumEqualMasteryGainRatio)
+    || (recommendationGain > 0 && recoveryImprovement >= 0.5 && equalMasteryGain >= -0.05);
+}
+
+function equipmentRecommendationForType(ctx, type) {
+  const current = ctx?.player?.[type];
+  if (!current) return null;
+  let best = null;
+  for (const entry of allOwnedEquipmentEntries(ctx)) {
+    if (entry.item?.type !== type || entry.item === current || entry.item?.instanceId === current.instanceId) continue;
+    if (!equipmentUpgradeIsWorthwhile(entry.item, current)) continue;
+    if (!best || compareEquipmentRecommendationCandidates(entry, best) > 0) best = entry;
+  }
+  if (!best) return null;
+  return { ...best, candidate: best.item, current, projection: equipmentProgressionProjection(best.item, current) };
+}
+
+function equipmentRecommendations(ctx) {
+  return ['weapon', 'armor'].map(type => equipmentRecommendationForType(ctx, type)).filter(Boolean)
+    .sort((left, right) => {
+      const rarityDifference = (RARITY_RANK[right.candidate.rarity] || 0) - (RARITY_RANK[left.candidate.rarity] || 0);
+      if (rarityDifference) return rarityDifference;
+      const typePriority = { weapon: 0, armor: 1 };
+      const typeDifference = (typePriority[left.candidate.type] ?? 2) - (typePriority[right.candidate.type] ?? 2);
+      if (typeDifference) return typeDifference;
+      const gainLeft = left.projection.equalMasteryStat / Math.max(1, left.projection.currentEqualMasteryStat);
+      const gainRight = right.projection.equalMasteryStat / Math.max(1, right.projection.currentEqualMasteryStat);
+      return gainRight - gainLeft;
+    });
+}
+
+function equipmentIsEliteForgeCombination(item) {
+  return equipmentEligibleForStrengthening(item);
+}
+
+function autoPatrolEliteOptionUpgradeTarget(ctx) {
+  if ((ctx?.forgeShards || 0) <= EQUIPMENT_SELECTION_CONFIG.autoForgeShardReserve) return null;
+  const entries = [
+    { source: 'weapon', item: ctx.player?.weapon, label: 'Equipped weapon' },
+    { source: 'armor', item: ctx.player?.armor, label: 'Equipped armor' }
+  ].filter(entry => equipmentIsEliteForgeCombination(entry.item));
+  const candidates = entries.flatMap(entry => (entry.item.options || []).map((option, optionIndex) => ({ entry, option, optionIndex })))
+    .filter(candidate => (candidate.option.enhancementSuccesses || 0) < EQUIPMENT_SELECTION_CONFIG.autoForgeSuccessCap)
+    .filter(candidate => ctx.forgeShards >= EQUIPMENT_SELECTION_CONFIG.autoForgeShardReserve + darkSmithMaterialCost(candidate.option))
+    .sort((left, right) => (left.option.enhancementSuccesses || 0) - (right.option.enhancementSuccesses || 0)
+      || equipmentOptionEffectPriority(right.entry.item.type, equipmentOptionEffect(right.option)) - equipmentOptionEffectPriority(left.entry.item.type, equipmentOptionEffect(left.option))
+      || right.option.value - left.option.value);
+  return candidates[0] || null;
+}
+
+function autoPatrolEliteLevelUpgradeTarget(ctx) {
+  if ((ctx?.player?.gold || 0) < EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost) return null;
+  const cap = equipmentLevelCap(ctx);
+  return [
+    { source: 'weapon', item: ctx.player?.weapon, label: 'Equipped weapon' },
+    { source: 'armor', item: ctx.player?.armor, label: 'Equipped armor' }
+  ].filter(entry => equipmentEligibleForStrengthening(entry.item) && (entry.item.equipmentLevel || 1) < cap)
+    .sort((left, right) => (left.item.equipmentLevel || 1) - (right.item.equipmentLevel || 1)
+      || (left.item.type === 'weapon' ? -1 : 1))[0] || null;
 }
 
 const HOME_CONFIG = { purchasePrice: 10000, storagePageSize: 10, goldTransferPresets: [100, 1000, 10000, 100000, Infinity] };
@@ -1962,7 +2459,14 @@ const EQUIPMENT_GROWTH_CONFIG = {
 };
 
 function equipmentLevelCap(ctx) {
-  return Math.max(1, Number.isInteger(ctx.maxReachedDepth) ? ctx.maxReachedDepth : 1);
+  return Math.max(1, Number.isInteger(ctx?.player?.level) ? ctx.player.level : 1);
+}
+function inventoryCapacityForLevel(level) {
+  return 8 + Math.floor(Math.max(1, Number(level) || 1) / 100);
+}
+function synchronizeInventoryCapacity(ctx) {
+  ctx.inventoryCapacity = inventoryCapacityForLevel(ctx?.player?.level);
+  return ctx.inventoryCapacity;
 }
 
 function equipmentMasteryExpToNextRank(rank) {
@@ -2036,7 +2540,7 @@ const ABYSS_CONFIG = {
   startDepth: 1,
   enemyBudgetMultiplier: 2.35,
   effectiveDepthBase: 100,
-  effectiveDepthPerFloor: 5,
+  effectiveDepthPerFloor: 8,
   maxRegularEnemies: 14,
   bossInterval: 10,
   returnWarpInterval: 5
@@ -2082,9 +2586,73 @@ function dismantleYieldSummary(item) {
 }
 
 function darkSmithDismantleEntries(ctx) {
-  return ctx.equipmentInventory
-    .map((item, index) => ({ index, item, yield: dismantleYield(item), breakdown: dismantleYieldBreakdown(item) }))
-    .filter(entry => entry.yield > 0);
+  return [
+    ...(ctx.equipmentInventory || []).map((item, index) => ({ source: 'inventory', index, item })),
+    ...(ctx.homeStorage?.equipment || []).map((item, index) => ({ source: 'home', index, item }))
+  ].filter(entry => Boolean(entry.item))
+    .map(entry => ({ ...entry, yield: dismantleYield(entry.item), breakdown: dismantleYieldBreakdown(entry.item) }));
+}
+
+function isCurrentDarkSmithDismantleEntry(ctx, entry) {
+  if (!entry?.item || !['inventory', 'home'].includes(entry.source)) return false;
+  return isCurrentEquipmentEntry(ctx, { source: entry.source, index: entry.index, item: entry.item });
+}
+
+function equipmentFutureDominatedBy(item, current) {
+  if (!item || !current || item.type !== current.type) return false;
+  const itemRarity = RARITY_RANK[item.rarity] || 0;
+  const currentRarity = RARITY_RANK[current.rarity] || 0;
+  if (itemRarity >= currentRarity) return false;
+  if (current.rarity === 'ultra_rare') return true;
+  const projection = equipmentProgressionProjection(item, current);
+  if (!projection) return false;
+  const equalRatio = projection.equalMasteryStat / Math.max(1, projection.currentEqualMasteryStat);
+  return equalRatio < 0.90
+    && projection.crossoverMasteryGain > EQUIPMENT_SELECTION_CONFIG.crossoverMasteryLimit
+    && projection.recoveryBonus <= projection.currentRecoveryBonus;
+}
+
+function autoPatrolShouldDismantleEquipment(ctx, item, protectedIds = new Set()) {
+  if (!item || protectedIds.has(item.instanceId)) return false;
+  const current = ctx.player?.[item.type];
+  if (!current || item.instanceId === current.instanceId) return false;
+  if (current.rarity === 'ultra_rare' && item.rarity !== 'ultra_rare') return true;
+  if (equipmentHasPerfectUltraOptions(current)
+    && item.rarity === 'ultra_rare'
+    && !equipmentHasPerfectUltraOptions(item)) return true;
+  return equipmentFutureDominatedBy(item, current);
+}
+
+function autoPatrolDismantleProtectedIds(ctx) {
+  return new Set(equipmentRecommendations(ctx).map(recommendation => recommendation.candidate.instanceId));
+}
+
+function autoPatrolRecommendedDismantleCount(ctx) {
+  const protectedIds = autoPatrolDismantleProtectedIds(ctx);
+  let count = 0;
+  for (const item of ctx.equipmentInventory || []) {
+    if (autoPatrolShouldDismantleEquipment(ctx, item, protectedIds)) count += 1;
+  }
+  for (const item of ctx.homeStorage?.equipment || []) {
+    if (autoPatrolShouldDismantleEquipment(ctx, item, protectedIds)) count += 1;
+  }
+  return count;
+}
+
+function autoPatrolRecommendedDismantleEntries(ctx) {
+  const protectedIds = autoPatrolDismantleProtectedIds(ctx);
+  return darkSmithDismantleEntries(ctx)
+    .filter(entry => autoPatrolShouldDismantleEquipment(ctx, entry.item, protectedIds))
+    .sort((left, right) => {
+      const rarityDifference = (RARITY_RANK[left.item.rarity] || 0) - (RARITY_RANK[right.item.rarity] || 0);
+      if (rarityDifference) return rarityDifference;
+      const optionDifference = equipmentOptionRarityScore(left.item) - equipmentOptionRarityScore(right.item);
+      if (optionDifference) return optionDifference;
+      const statDifference = equipmentStatAtMastery(left.item, EQUIPMENT_SELECTION_CONFIG.referenceMasteryLevel)
+        - equipmentStatAtMastery(right.item, EQUIPMENT_SELECTION_CONFIG.referenceMasteryLevel);
+      if (statDifference) return statDifference;
+      return String(left.item.instanceId || '').localeCompare(String(right.item.instanceId || ''));
+    });
 }
 
 function strengthenEquipmentOption(item, option) {
@@ -2149,8 +2717,9 @@ function darkSmithEquipmentCard(entry, title, selectedOptionIndex = -1, focused 
   if (!entry?.item) return `<div class="smith-compare-card"><b>${title}</b><p style="color:#777;">Not selected</p></div>`;
   const item = entry.item;
   const stat = item.type === 'weapon' ? `ATK ${item.atk}` : `DEF ${item.def}`;
-  const options = (item.options || []).map((option, index) => `<div class="smith-option-row ${index === selectedOptionIndex ? 'selected' : ''}">${index + 1}. ${escapeHtml(rarityLabel(option.rarity))} ${escapeHtml(option.name)} ${escapeHtml(formatEquipmentOptionValue(option))}</div>`).join('') || `<div class="smith-option-row" style="color:#777;">No option</div>`;
-  return `<div class="smith-compare-card ${focused ? 'focused' : ''}"><div style="font-size:12px;color:#ffcc66;"><b>${title}</b></div><div>${coloredEquipmentName(item)}</div><div style="font-size:9px;color:#aaa;">${rarityLabel(item.rarity)} / Equipment Lv.${item.equipmentLevel || 1} / Quality ${(item.qualityRate || 1).toFixed(4)} / ${stat}</div><div class="smith-option-list">${options}</div></div>`;
+  const options = (item.options || []).map((option, index) => `<div class="smith-option-row ${optionSelectionClasses(option, index === selectedOptionIndex)}">${index + 1}. ${escapeHtml(rarityLabel(option.rarity))} ${escapeHtml(option.name)} ${escapeHtml(formatEquipmentOptionValue(option))}</div>`).join('') || `<div class="smith-option-row" style="color:#777;">No option</div>`;
+  const focusClasses = focused ? `focused ${raritySelectionClasses(item.rarity, true)}` : '';
+  return `<div class="smith-compare-card ${focusClasses}"><div style="font-size:12px;color:#ffcc66;"><b>${title}</b></div><div>${coloredEquipmentName(item)}</div><div style="font-size:9px;color:#aaa;">${rarityLabel(item.rarity)} / Equipment Lv.${item.equipmentLevel || 1} / Quality ${(item.qualityRate || 1).toFixed(4)} / ${stat}</div><div class="smith-option-list">${options}</div></div>`;
 }
 
 function blacksmithCandidateEntries(ctx) {
@@ -2344,7 +2913,8 @@ function createDarkSmithActionStagingContext(ctx) {
   return {
     ...ctx,
     player: { ...ctx.player },
-    equipmentInventory: stableClone(ctx.equipmentInventory),
+    equipmentInventory: [...(ctx.equipmentInventory || [])],
+    homeStorage: { equipment: [...(ctx.homeStorage?.equipment || [])], gold: ctx.homeStorage?.gold || 0 },
     forgeShards: ctx.forgeShards,
     logs: ctx.logs.slice(),
     darkSmithMenuEntries: [],
@@ -2356,9 +2926,9 @@ function createDarkSmithActionStagingContext(ctx) {
 }
 
 function commitDarkSmithActionStagingContext(ctx, staged) {
-  const currentById = new Map(ctx.equipmentInventory.map(item => [item.instanceId, item]));
-  // Dismantle removes one selected item but must not rewrite any surviving equipment or option identity.
-  ctx.equipmentInventory = staged.equipmentInventory.map(stagedItem => currentById.get(stagedItem.instanceId) || stagedItem);
+  // Dismantle only removes equipment references. Every surviving equipment and option object keeps its identity.
+  ctx.equipmentInventory = staged.equipmentInventory;
+  ctx.homeStorage = staged.homeStorage;
   ctx.forgeShards = staged.forgeShards;
   ctx.logs = staged.logs;
   ctx.darkSmithDismantleEntries = darkSmithDismantleEntries(ctx);
@@ -2416,6 +2986,8 @@ function createHomeStorageStagingContext(ctx) {
 
 function commitHomeStorageStagingContext(ctx, staged) {
   ctx.player.gold = staged.player.gold;
+  ctx.player.weapon = staged.player.weapon;
+  ctx.player.armor = staged.player.armor;
   ctx.equipmentInventory = staged.equipmentInventory;
   ctx.homeStorage = staged.homeStorage;
   ctx.logs = staged.logs;
@@ -2539,6 +3111,22 @@ function rarityClassName(rarity) {
   return `rarity-${canonicalRarity.replace('_', '-')}`;
 }
 
+function selectionRarityClassName(rarity) {
+  const canonicalRarity = RARITY_ORDER.includes(rarity) ? rarity : 'common';
+  return `selection-rarity-${canonicalRarity.replace('_', '-')}`;
+}
+
+function raritySelectionClasses(rarity, selected = false, colorText = false) {
+  const classes = ['rarity-selectable', selectionRarityClassName(rarity)];
+  if (colorText) classes.push(rarityClassName(rarity));
+  if (selected) classes.push('selected');
+  return classes.join(' ');
+}
+
+function optionSelectionClasses(option, selected = false) {
+  return `option-rarity-selectable ${raritySelectionClasses(option?.rarity, selected, true)}`;
+}
+
 function coloredEquipmentName(item) {
   if (!item) return '';
   return `<span class="${rarityClassName(item.rarity)}">${escapeHtml(item.name)}</span>`;
@@ -2659,7 +3247,43 @@ const ABYSS_ENEMY_ARCHETYPES = [
 ];
 
 function abyssEffectiveDepth(abyssDepth) {
-  return ABYSS_CONFIG.effectiveDepthBase + Math.max(1, abyssDepth) * ABYSS_CONFIG.effectiveDepthPerFloor;
+  return ABYSS_CONFIG.effectiveDepthBase + Math.max(0, Math.max(1, abyssDepth) - 1) * ABYSS_CONFIG.effectiveDepthPerFloor;
+}
+
+function dungeonRewardDepth(ctx, bonus = 0) {
+  const baseDepth = ctx?.currentMapType === 'dungeon' && ctx?.dungeonMode === 'abyss'
+    ? abyssEffectiveDepth(ctx.depth)
+    : Math.max(1, Number(ctx?.depth) || 1);
+  return Math.max(1, Math.floor(baseDepth + bonus));
+}
+
+function abyssRarityProbabilities(ctx, abyssDepth, isBoss = false) {
+  const effectiveDepth = abyssEffectiveDepth(abyssDepth);
+  const base = rarityProbabilities(ctx, effectiveDepth, isBoss);
+  if (isBoss) return base;
+  const progression = Math.max(0, Math.max(1, abyssDepth) - 1);
+  let rare = Math.max(base.rare, 0.28 + Math.min(0.08, progression * 0.002));
+  let veryRare = Math.max(base.very_rare, 0.10 + Math.min(0.06, progression * 0.0015));
+  let ultraRare = Math.max(base.ultra_rare, 0.02 + Math.min(0.03, progression * 0.00075));
+  const maximumNonCommon = 0.72;
+  const total = rare + veryRare + ultraRare;
+  if (total > maximumNonCommon) {
+    const scale = maximumNonCommon / total;
+    rare *= scale;
+    veryRare *= scale;
+    ultraRare *= scale;
+  }
+  return { common: 1 - rare - veryRare - ultraRare, rare, very_rare: veryRare, ultra_rare: ultraRare };
+}
+
+function rollAbyssRarity(ctx, abyssDepth, isBoss = false, roll = gameRandom()) {
+  const probabilities = abyssRarityProbabilities(ctx, abyssDepth, isBoss);
+  let cumulative = 0;
+  for (const rarity of RARITY_ORDER) {
+    cumulative += probabilities[rarity];
+    if (roll < cumulative) return rarity;
+  }
+  return 'common';
 }
 
 function chooseAbyssArchetype(counts = {}, roll = gameRandom(), abyssDepth = 1) {
@@ -2701,7 +3325,7 @@ function createAbyssEnemy(ctx, abyssDepth, id, archetype) {
     isAbyssEnemy: true,
     armorPiercing: 0.55
   };
-  return applyEnemyRarity(enemy, rollRarity(ctx, effectiveDepth, false));
+  return applyEnemyRarity(enemy, rollAbyssRarity(ctx, abyssDepth, false));
 }
 
 function createAbyssBoss(ctx, abyssDepth) {
@@ -2714,7 +3338,7 @@ function createAbyssBoss(ctx, abyssDepth) {
       ? { name: 'The Hunger', symbol: '飢', hpFactor: 10.4, atkFactor: 1.72, role: 'hunger', magicType: 'area', magicEvery: 3, piercing: 0.68, rarity: 'very_rare' }
       : abyssDepth === 30
         ? { name: 'The Mirror', symbol: '鏡', hpFactor: 11.2, atkFactor: 1.58, role: 'mirror', magicType: 'line', magicEvery: 4, piercing: 0.64, rarity: 'ultra_rare' }
-        : { name: `Abyss Sovereign ${abyssDepth}`, symbol: '王', hpFactor: 10.0, atkFactor: 1.70, role: 'sovereign', magicType: 'area', magicEvery: 3, piercing: 0.68, rarity: rollRarity(ctx, effectiveDepth, true) };
+        : { name: `Abyss Sovereign ${abyssDepth}`, symbol: '王', hpFactor: 10.0, atkFactor: 1.70, role: 'sovereign', magicType: 'area', magicEvery: 3, piercing: 0.68, rarity: rollAbyssRarity(ctx, abyssDepth, true) };
   return applyEnemyRarity({
     id: 800000 + abyssDepth,
     name: `${bossDefinition.name} [A${abyssDepth} BOSS]`,
@@ -3015,14 +3639,14 @@ function allocateEquipmentInstanceId(ctx, type) {
   return instanceId;
 }
 
-function generateRandomEquipment(depth, type, qualityBias = 1, rarity = 'common', identityContext = context) {
+function generateRandomEquipment(depth, type, qualityBias = 1, rarity = 'common', identityContext = context, rewardProfile = null) {
   const prefixes = ["Bronze", "Iron", "Steel", "Chitin", "Mithril", "Demonic", "Astral", "Chrono", "Eternal"];
   const ranks = EQUIPMENT_RANKS;
   const tier = Math.min(prefixes.length - 1, Math.floor(Math.log2(Math.max(1, depth))));
   const quality = Math.max(0.9, qualityBias * (0.94 + gameRandom() * 0.18));
   const power = equipmentPowerForDepth(depth, type, quality);
   const enhancement = Math.max(0, Math.floor((quality - 0.9) * 20));
-  const options = createEquipmentOptions(type, power, rarity, deterministicEquipmentOptionRolls(depth, type, quality, rarity));
+  const options = createEquipmentOptions(type, power, rarity, deterministicEquipmentOptionRolls(depth, type, quality, rarity), rewardProfile);
   const optionPower = options.reduce((sum, current) => sum + equipmentOptionPrimaryPower(current), 0);
   const basePower = Math.max(1, power - optionPower);
   const primaryStat = basePower + optionPower;
@@ -3037,6 +3661,47 @@ function generateRandomEquipment(depth, type, qualityBias = 1, rarity = 'common'
   return type === 'weapon'
     ? { ...common, atk: primaryStat }
     : { ...common, def: primaryStat };
+}
+
+function generateAbyssBossEquipment(depth, type, identityContext = context, rolls = {}, rewardProfile = null) {
+  const prefixes = ["Bronze", "Iron", "Steel", "Chitin", "Mithril", "Demonic", "Astral", "Chrono", "Eternal"];
+  const ranks = EQUIPMENT_RANKS;
+  const tier = Math.min(prefixes.length - 1, Math.floor(Math.log2(Math.max(1, depth))));
+  const quality = Math.max(0.9, ABYSS_BOSS_REWARD_CONFIG.qualityBias * (0.94 + (rolls.quality ?? gameRandom()) * 0.18));
+  const power = equipmentPowerForDepth(depth, type, quality);
+  const enhancement = Math.max(0, Math.floor((quality - 0.9) * 20));
+  const options = createAbyssBossEquipmentOptions(type, power, rolls, rewardProfile);
+  const optionPower = options.reduce((sum, current) => sum + equipmentOptionPrimaryPower(current), 0);
+  const basePower = Math.max(1, power - optionPower);
+  const primaryStat = basePower + optionPower;
+  const optionValue = options.reduce((sum, current) => sum + current.value * (1 + RARITY_RANK[current.rarity]), 0);
+  const value = Math.floor(18 + primaryStat * (type === 'weapon' ? 7 : 8) + optionValue * 3);
+  const name = `${prefixes[tier]} ${type === 'weapon' ? 'Blade' : 'Aegis'} +${enhancement}`;
+  const common = {
+    instanceId: allocateEquipmentInstanceId(identityContext, type),
+    definitionId: `generated.${type}`,
+    name,
+    type,
+    rank: ranks[tier],
+    value,
+    rarity: ABYSS_BOSS_REWARD_CONFIG.equipmentRarity,
+    options,
+    basePower,
+    equipmentLevel: Math.max(1, depth),
+    masteryLevel: 0,
+    masteryExp: 0,
+    qualityRate: quality
+  };
+  return type === 'weapon'
+    ? { ...common, atk: primaryStat }
+    : { ...common, def: primaryStat };
+}
+
+function createAbyssBossEquipmentDrop(ctx, enemy, rolls = {}) {
+  const rewardDepth = dungeonRewardDepth(ctx, 5);
+  const type = (rolls.type ?? gameRandom()) < 0.5 ? 'weapon' : 'armor';
+  const rewardProfile = rewardRarityProgressionProfile(ctx, enemy);
+  return generateAbyssBossEquipment(rewardDepth, type, ctx, rolls, rewardProfile);
 }
 
 function generateConsumable(depth, rarity = 'common') {
@@ -3056,6 +3721,7 @@ function applyLevelUps(ctx) {
     recomputePlayerMaxHp(ctx);
     ctx.player.hp = ctx.player.maxHp;
     ctx.player.nextExp = expToNextLevel(ctx.player.level);
+    synchronizeInventoryCapacity(ctx);
     leveled = true;
   }
   if (leveled) addLog(ctx, `LEVEL UP! Reached Level ${ctx.player.level}!`);
@@ -3167,16 +3833,17 @@ const TREASURE_CONFIG = {
 };
 
 function generateTreasureChestReward(ctx, roll = gameRandom()) {
+  const rewardDepth = dungeonRewardDepth(ctx);
   if (roll < TREASURE_CONFIG.capacityUpgradeChance && ctx.player.bombCapacity < BOMB_CONFIG.maxCapacity) {
     return withItemRarity({ name: "Infinite Chamber Core", type: "bomb_capacity" }, "ultra_rare");
   }
   if (roll < TREASURE_CONFIG.capacityUpgradeChance + TREASURE_CONFIG.rangeUpgradeChance && ctx.player.bombRange < BOMB_CONFIG.maxRange) {
     return withItemRarity({ name: "Blast Radius Crystal", type: "bomb_range" }, "very_rare");
   }
-  if (roll < 0.28) return withItemRarity({ name: "Treasure Gold", type: "gold", amount: 80 + ctx.depth * 12 }, "common");
-  if (roll < 0.62) return generateConsumable(ctx.depth);
+  if (roll < 0.28) return withItemRarity({ name: "Treasure Gold", type: "gold", amount: 80 + rewardDepth * 12 }, "common");
+  if (roll < 0.62) return generateConsumable(rewardDepth);
   const eqType = gameRandom() > 0.5 ? "weapon" : "armor";
-  return generateRandomEquipment(ctx.depth + 3, eqType, 1.14, 'common', ctx);
+  return generateRandomEquipment(rewardDepth + 3, eqType, 1.14, 'common', ctx);
 }
 
 function equipmentPrimaryStat(item) {
@@ -3494,24 +4161,31 @@ const ENEMY_DROP_CONFIG = {
   }
 };
 
-function rollEnemyDropRarity(enemy, roll = gameRandom()) {
-  const rarity = enemy.rarity || 'common';
-  let cumulative = 0;
-  const row = ENEMY_DROP_CONFIG.itemRarityDistribution[rarity];
-  for (let index = 0; index < row.length; index++) {
-    cumulative += row[index];
-    if (roll < cumulative) return RARITY_ORDER[index];
-  }
-  return 'common';
+function baseEnemyDropRarityProbabilities(enemy) {
+  const enemyRarity = RARITY_ORDER.includes(enemy?.rarity) ? enemy.rarity : 'common';
+  const row = ENEMY_DROP_CONFIG.itemRarityDistribution[enemyRarity] || ENEMY_DROP_CONFIG.itemRarityDistribution.common;
+  return Object.fromEntries(RARITY_ORDER.map((rarity, index) => [rarity, Number(row[index]) || 0]));
+}
+
+function enemyDropRarityProbabilities(ctx, enemy) {
+  const rewardProfile = rewardRarityProgressionProfile(ctx, enemy);
+  return addUltraRareProbabilityBonus(baseEnemyDropRarityProbabilities(enemy), rewardProfile.ultraRareBonus);
+}
+
+function rollEnemyDropRarity(ctx, enemy, roll = gameRandom()) {
+  return rollRarityFromProbabilities(enemyDropRarityProbabilities(ctx, enemy), roll);
 }
 
 function createEnemyDrop(ctx, enemy) {
+  if (enemy?.isAbyssBoss) return createAbyssBossEquipmentDrop(ctx, enemy);
   const enemyRarity = enemy.rarity || 'common';
+  const rewardDepth = dungeonRewardDepth(ctx, enemy.isBoss ? 5 : 0);
   if (gameRandom() >= ENEMY_DROP_CONFIG.dropChance[enemyRarity]) return null;
-  const rarity = rollEnemyDropRarity(enemy);
+  const rewardProfile = rewardRarityProgressionProfile(ctx, enemy);
+  const rarity = rollEnemyDropRarity(ctx, enemy);
   const quality = RARITY_DEFINITIONS[rarity].dropQuality;
-  if (gameRandom() >= ENEMY_DROP_CONFIG.equipmentChance[enemyRarity]) return generateConsumable(ctx.depth, rarity);
-  return generateRandomEquipment(ctx.depth + (enemy.isBoss ? 5 : 0), gameRandom() < 0.5 ? 'weapon' : 'armor', quality, rarity, ctx);
+  if (gameRandom() >= ENEMY_DROP_CONFIG.equipmentChance[enemyRarity]) return generateConsumable(rewardDepth, rarity);
+  return generateRandomEquipment(rewardDepth, gameRandom() < 0.5 ? 'weapon' : 'armor', quality, rarity, ctx, rewardProfile);
 }
 
 function enemyGoldReward(depth, roll = gameRandom()) {
@@ -3651,7 +4325,7 @@ function defeatEnemy(ctx, target, source = 'combat') {
   if (!target || !Array.isArray(ctx.enemies) || !ctx.enemies.includes(target)) return false;
   const staged = createEnemyDefeatStagingContext(ctx);
   addLog(staged, `${target.name} was defeated by ${source}! Gained +${target.exp} EXP.`);
-  staged.player.gold += enemyGoldReward(staged.depth);
+  staged.player.gold += enemyGoldReward(dungeonRewardDepth(staged));
   staged.player.exp += target.exp;
   staged.enemies = staged.enemies.filter(enemy => enemy !== target);
   if (target.isFoodEnemy && target.foodDrop) {
@@ -3661,7 +4335,12 @@ function defeatEnemy(ctx, target, source = 'combat') {
   const rarityDrop = target.isFoodEnemy ? null : createEnemyDrop(staged, target);
   if (rarityDrop) {
     staged.items.push({ x: target.x, y: target.y, ...rarityDrop });
-    addLog(staged, `${rarityLabel(rarityDrop.rarity)} drop: ${rarityDrop.name}.`);
+    if (target.isAbyssBoss && Array.isArray(rarityDrop.options)) {
+      const ultraOptionCount = rarityDrop.options.filter(option => option.rarity === 'ultra_rare').length;
+      addLog(staged, `Abyss boss reward: Ultra Rare ${rarityDrop.name} with ${ultraOptionCount}/3 Ultra Rare options.`);
+    } else {
+      addLog(staged, `${rarityLabel(rarityDrop.rarity)} drop: ${rarityDrop.name}.`);
+    }
   }
   if (target.isAbyssBoss) {
     if (!staged.defeatedAbyssBossFloors.includes(target.abyssBossFloor)) staged.defeatedAbyssBossFloors.push(target.abyssBossFloor);
@@ -4160,8 +4839,14 @@ function playerAttackPower(ctx) {
   return Math.max(1, Math.floor(ctx.player.level * BALANCE_CONFIG.playerLevelAttack + ctx.player.weapon.atk));
 }
 
+function equippedOptionValue(ctx, effect) {
+  return [ctx?.player?.weapon, ctx?.player?.armor].flatMap(item => item?.options || [])
+    .filter(option => equipmentOptionEffect(option) === effect)
+    .reduce((sum, option) => sum + Math.max(0, Number(option?.value) || 0), 0);
+}
 function enemyDamageAgainstPlayer(ctx, enemy) {
-  const piercing = Math.max(0, Math.min(0.9, enemy.armorPiercing || 0));
+  const piercingGuard = Math.min(0.8, equippedOptionValue(ctx, 'armor_piercing_resistance') / 1000);
+  const piercing = Math.max(0, Math.min(0.9, (enemy.armorPiercing || 0) * (1 - piercingGuard)));
   const effectiveDefense = Math.floor(ctx.player.armor.def * (1 - piercing));
   return Math.max(1, enemy.atk - effectiveDefense);
 }
@@ -5325,7 +6010,7 @@ function buildSaveSnapshot(ctx, savedAt = new Date().toISOString()) {
         weapon: serializeEquipment(ctx.player.weapon), armor: serializeEquipment(ctx.player.armor)
       },
       equipmentInventory: ctx.equipmentInventory.map(item => serializeEquipment(item)),
-      inventoryCapacity: ctx.inventoryCapacity, homePurchased: Boolean(ctx.homePurchased),
+      inventoryCapacity: inventoryCapacityForLevel(ctx.player.level), homePurchased: Boolean(ctx.homePurchased),
       homeStorage: { equipment: (ctx.homeStorage?.equipment || []).map(item => serializeEquipment(item)), gold: ctx.homeStorage?.gold || 0 },
       forgeShards: ctx.forgeShards || 0, maxReachedDepth: ctx.maxReachedDepth || 0,
       maxReachedAbyssDepth: ctx.maxReachedAbyssDepth || 0,
@@ -5401,7 +6086,8 @@ function validateSaveSnapshot(save) {
   validateEquipment(player?.weapon, "payload.player.weapon", errors);
   validateEquipment(player?.armor, "payload.player.armor", errors);
   if (!Array.isArray(payload?.equipmentInventory) || payload.equipmentInventory.length > SAVE_NUMERIC_LIMITS.maxEquipmentEntries) errors.push("payload.equipmentInventory"); else payload.equipmentInventory.forEach((item, index) => validateEquipment(item, `payload.equipmentInventory[${index}]`, errors));
-  if (!validateSafePositiveInteger(payload?.inventoryCapacity) || payload.inventoryCapacity > SAVE_NUMERIC_LIMITS.maxEquipmentEntries || (payload.equipmentInventory?.length || 0) > payload.inventoryCapacity) errors.push("payload.inventoryCapacity");
+  const expectedInventoryCapacity = validateSafePositiveInteger(player?.level) ? inventoryCapacityForLevel(player.level) : null;
+  if (!validateSafePositiveInteger(payload?.inventoryCapacity) || payload.inventoryCapacity > SAVE_NUMERIC_LIMITS.maxEquipmentEntries || (payload.equipmentInventory?.length || 0) > expectedInventoryCapacity || (expectedInventoryCapacity != null && payload.inventoryCapacity > expectedInventoryCapacity)) errors.push("payload.inventoryCapacity");
   if (typeof payload?.homePurchased !== "boolean") errors.push("payload.homePurchased");
   if (!Array.isArray(payload?.homeStorage?.equipment) || payload.homeStorage.equipment.length > SAVE_NUMERIC_LIMITS.maxEquipmentEntries) errors.push("payload.homeStorage.equipment"); else payload.homeStorage.equipment.forEach((item, index) => validateEquipment(item, `payload.homeStorage.equipment[${index}]`, errors));
   const allEquipment = [player?.weapon, player?.armor, ...(payload?.equipmentInventory || []), ...(payload?.homeStorage?.equipment || [])].filter(Boolean);
@@ -5491,7 +6177,7 @@ function applyPersistentPayload(ctx, payload) {
   ctx.player.hunger = BALANCE_CONFIG.fullHunger; ctx.player.weapon = deserializeEquipment(player.weapon); ctx.player.armor = deserializeEquipment(player.armor);
   ctx.player.bombCapacity = player.bombCapacity; ctx.player.bombRange = player.bombRange;
   ctx.player.bombRangeShopPurchases = player.bombRangeShopPurchases; ctx.player.bombCapacityShopPurchases = player.bombCapacityShopPurchases; ctx.player.returnScrolls = player.returnScrolls;
-  ctx.equipmentInventory = payload.equipmentInventory.map(deserializeEquipment); ctx.inventoryCapacity = payload.inventoryCapacity;
+  ctx.equipmentInventory = payload.equipmentInventory.map(deserializeEquipment); synchronizeInventoryCapacity(ctx);
   ctx.homePurchased = payload.homePurchased; ctx.homeStorage = { equipment: payload.homeStorage.equipment.map(deserializeEquipment), gold: payload.homeStorage.gold };
   ctx.forgeShards = payload.forgeShards; ctx.maxReachedDepth = payload.maxReachedDepth; ctx.maxReachedAbyssDepth = payload.maxReachedAbyssDepth;
   ctx.defeatedBossFloors = [...payload.defeatedBossFloors]; ctx.defeatedAbyssBossFloors = [...payload.defeatedAbyssBossFloors];
@@ -5579,6 +6265,9 @@ const guards = {
   can_afford_home_purchase: (ctx) => !ctx.homePurchased && ctx.player.gold >= HOME_CONFIG.purchasePrice,
   has_selected_warp_destination: (ctx) => ctx.warpDestinations.length > 0,
   has_selected_inventory_equipment: (ctx) => Boolean(ctx.equipmentInventory[ctx.inventorySelectedIndex]),
+  home_has_recommended_equipment: (ctx) => equipmentRecommendations(ctx).length > 0,
+  home_has_requested_gold_transfer: (ctx) => Math.max(0, Math.floor(autoPatrolRuntime.townGoldWithdrawalRequest || 0)) > 0
+    && (ctx.homeStorage?.gold || 0) > 0,
   home_selected_carried_equipment: (ctx) => isCurrentHomeMenuEntry(ctx, ctx.homeMenuEntries[ctx.homeSelectedIndex]) && ctx.homeMenuEntries[ctx.homeSelectedIndex].kind === 'carried',
   home_selected_stored_equipment: (ctx) => isCurrentHomeMenuEntry(ctx, ctx.homeMenuEntries[ctx.homeSelectedIndex]) && ctx.homeMenuEntries[ctx.homeSelectedIndex].kind === 'stored' && ctx.equipmentInventory.length < ctx.inventoryCapacity,
   home_selected_deposit_gold: (ctx) => ctx.homeMenuEntries[ctx.homeSelectedIndex]?.kind === 'deposit_gold' && ctx.player.gold > 0,
@@ -5608,9 +6297,10 @@ const guards = {
   can_attempt_dark_smith_upgrade: (ctx) => {
     const entry = ctx.darkSmithMenuEntries[ctx.darkSmithSelectedIndex];
     const option = entry?.item?.options?.[ctx.darkSmithOptionIndex || 0];
-    return Boolean(isCurrentEquipmentEntry(ctx, entry) && option && ctx.forgeShards >= darkSmithMaterialCost(option));
+    return Boolean(isCurrentEquipmentEntry(ctx, entry) && equipmentEligibleForStrengthening(entry.item) && option && ctx.forgeShards >= darkSmithMaterialCost(option));
   },
-  has_selected_dark_smith_dismantle_item: (ctx) => { const entry = ctx.darkSmithDismantleEntries[ctx.darkSmithDismantleSelectedIndex]; return Boolean(entry && isCurrentEquipmentEntry(ctx, { source: 'inventory', index: entry.index, item: entry.item }) && entry.yield > 0); },
+  has_recommended_dark_smith_dismantle_batch: (ctx) => autoPatrolRecommendedDismantleEntries(ctx).length > 0,
+  has_selected_dark_smith_dismantle_item: (ctx) => { const entry = ctx.darkSmithDismantleEntries[ctx.darkSmithDismantleSelectedIndex]; return Boolean(entry && isCurrentDarkSmithDismantleEntry(ctx, entry)); },
   has_selected_blacksmith_item: (ctx) => isCurrentEquipmentEntry(ctx, ctx.blacksmithEntries[ctx.blacksmithSelectedIndex]),
   blacksmith_selected_inventory_item: (ctx) => {
     const entry = ctx.blacksmithEntries[ctx.blacksmithSelectedIndex];
@@ -5620,7 +6310,10 @@ const guards = {
     const entry = ctx.blacksmithEntries[ctx.blacksmithSelectedIndex];
     return Boolean(entry?.source === 'inventory' && isCurrentEquipmentEntry(ctx, entry) && dismantleYield(entry.item) > 0);
   },
-  can_afford_blacksmith: (ctx) => isCurrentEquipmentEntry(ctx, ctx.blacksmithEntries[ctx.blacksmithSelectedIndex]) && ctx.player.gold >= EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost,
+  can_afford_blacksmith: (ctx) => {
+    const entry = ctx.blacksmithEntries[ctx.blacksmithSelectedIndex];
+    return isCurrentEquipmentEntry(ctx, entry) && equipmentEligibleForStrengthening(entry.item) && ctx.player.gold >= EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost;
+  },
   blacksmith_level_training_at_cap: (ctx) => {
     const entry = ctx.blacksmithEntries[ctx.blacksmithSelectedIndex];
     return isCurrentEquipmentEntry(ctx, entry) && ctx.blacksmithKindIndex === 0 && (entry.item?.equipmentLevel || 1) >= equipmentLevelCap(ctx);
@@ -6107,6 +6800,21 @@ const actions = {
     const firstStored = ctx.homeMenuEntries.findIndex(entry => entry.kind === 'stored');
     ctx.homeSelectedIndex = firstStored >= 0 ? firstStored : 0;
   },
+  equip_recommended_home_equipment: (ctx) => {
+    const recommendation = equipmentRecommendations(ctx)[0];
+    if (!recommendation || !['inventory', 'home'].includes(recommendation.source)) return;
+    const staged = createHomeStorageStagingContext(ctx);
+    const collection = recommendation.source === 'inventory' ? staged.equipmentInventory : staged.homeStorage.equipment;
+    const candidate = collection[recommendation.index];
+    const current = staged.player[recommendation.candidate.type];
+    if (!candidate || candidate.instanceId !== recommendation.candidate.instanceId || !current || current.type !== candidate.type) return;
+    const verified = equipmentProgressionProjection(candidate, current);
+    if (!verified || !equipmentUpgradeIsWorthwhile(candidate, current)) return;
+    staged.player[candidate.type] = candidate;
+    collection[recommendation.index] = current;
+    addLog(staged, `Equipped recommended ${candidate.name}. ${current.name} returned to ${recommendation.source === 'home' ? 'home storage' : 'the bag'}; projected crossover Mastery ${verified.crossoverMastery}.`);
+    commitHomeStorageStagingContext(ctx, staged);
+  },
   deposit_home_equipment: (ctx) => {
     const entry = ctx.homeMenuEntries[ctx.homeSelectedIndex];
     if (!entry || entry.kind !== 'carried' || !isCurrentHomeMenuEntry(ctx, entry)) return;
@@ -6152,6 +6860,22 @@ const actions = {
     addLog(staged, purpose ? `Withdrew ${amount} gold from home for ${purpose}.` : `Withdrew ${amount} gold from home.`);
     autoPatrolRuntime.townGoldWithdrawalRequest = 0;
     autoPatrolRuntime.townGoldWithdrawalPurpose = null;
+    staged.homeGoldTransferPresetIndex = 0;
+    rebuildHomeMenuEntries(staged);
+    commitHomeStorageStagingContext(ctx, staged);
+  },
+  withdraw_requested_home_gold: (ctx) => {
+    const staged = createHomeStorageStagingContext(ctx);
+    const requested = Math.max(0, Math.floor(autoPatrolRuntime.townGoldWithdrawalRequest || 0));
+    const amount = Math.min(requested, staged.homeStorage.gold);
+    if (amount <= 0) return;
+    staged.homeStorage.gold -= amount;
+    staged.player.gold += amount;
+    const purpose = autoPatrolRuntime.townGoldWithdrawalPurpose;
+    addLog(staged, purpose ? `Withdrew ${amount} gold from home for ${purpose}.` : `Withdrew ${amount} gold from home.`);
+    autoPatrolRuntime.townGoldWithdrawalRequest = 0;
+    autoPatrolRuntime.townGoldWithdrawalPurpose = null;
+    staged.homeGoldTransferPresetIndex = 0;
     rebuildHomeMenuEntries(staged);
     commitHomeStorageStagingContext(ctx, staged);
   },
@@ -6282,13 +7006,32 @@ const actions = {
   dark_smith_dismantle_page_down: (ctx) => { ctx.darkSmithDismantleSelectedIndex = movePagedSelection(ctx.darkSmithDismantleSelectedIndex, ctx.darkSmithDismantleEntries.length, FACILITY_LIST_CONFIG.pageSize, 1); },
   dismantle_selected_dark_smith_item: (ctx) => {
     const entry = ctx.darkSmithDismantleEntries[ctx.darkSmithDismantleSelectedIndex];
-    if (!entry || entry.yield <= 0 || !isCurrentEquipmentEntry(ctx, { source: 'inventory', index: entry.index, item: entry.item })) return;
+    if (!entry || !isCurrentDarkSmithDismantleEntry(ctx, entry)) return;
     const staged = createDarkSmithActionStagingContext(ctx);
-    const stagedEntry = darkSmithDismantleEntries(staged).find(candidate => candidate.item.instanceId === entry.item.instanceId);
-    if (!stagedEntry || stagedEntry.yield <= 0 || !isCurrentEquipmentEntry(staged, { source: 'inventory', index: stagedEntry.index, item: stagedEntry.item })) return;
-    staged.equipmentInventory.splice(stagedEntry.index, 1);
+    const stagedEntry = darkSmithDismantleEntries(staged).find(candidate => candidate.source === entry.source && candidate.item.instanceId === entry.item.instanceId);
+    if (!stagedEntry || !isCurrentDarkSmithDismantleEntry(staged, stagedEntry)) return;
+    const collection = stagedEntry.source === 'home' ? staged.homeStorage.equipment : staged.equipmentInventory;
+    collection.splice(stagedEntry.index, 1);
     staged.forgeShards += stagedEntry.yield;
-    addLog(staged, `Dismantled ${stagedEntry.item.name} into ${stagedEntry.yield} Forge Shard${stagedEntry.yield === 1 ? '' : 's'}.`);
+    addLog(staged, `Dismantled ${stagedEntry.item.name} from ${stagedEntry.source === 'home' ? 'home storage' : 'the bag'} into ${stagedEntry.yield} Forge Shard${stagedEntry.yield === 1 ? '' : 's'}.`);
+    commitDarkSmithActionStagingContext(ctx, staged);
+  },
+  dismantle_recommended_dark_smith_batch: (ctx) => {
+    const recommendations = autoPatrolRecommendedDismantleEntries(ctx).slice(0, EQUIPMENT_SELECTION_CONFIG.dismantleBatchSize);
+    if (!recommendations.length) return;
+    const staged = createDarkSmithActionStagingContext(ctx);
+    const inventoryIds = new Set(recommendations.filter(entry => entry.source === 'inventory').map(entry => entry.item.instanceId));
+    const homeIds = new Set(recommendations.filter(entry => entry.source === 'home').map(entry => entry.item.instanceId));
+    const removed = [
+      ...staged.equipmentInventory.filter(item => inventoryIds.has(item.instanceId)),
+      ...staged.homeStorage.equipment.filter(item => homeIds.has(item.instanceId))
+    ];
+    if (!removed.length) return;
+    staged.equipmentInventory = staged.equipmentInventory.filter(item => !inventoryIds.has(item.instanceId));
+    staged.homeStorage.equipment = staged.homeStorage.equipment.filter(item => !homeIds.has(item.instanceId));
+    const shardYield = removed.reduce((sum, item) => sum + dismantleYield(item), 0);
+    staged.forgeShards += shardYield;
+    addLog(staged, `Dark Smith batch-dismantled ${removed.length} dominated equipment item${removed.length === 1 ? '' : 's'} for ${shardYield} Forge Shard${shardYield === 1 ? '' : 's'}.`);
     commitDarkSmithActionStagingContext(ctx, staged);
   },
   attempt_dark_smith_upgrade: (ctx) => {
@@ -6363,10 +7106,18 @@ const actions = {
     addLog(staged, `The Blacksmith consumed ${EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost} gold and revealed a candidate alteration.`);
     commitBlacksmithProposalStagingContext(ctx, staged);
   },
+  report_dark_smith_ineligible_upgrade: (ctx) => {
+    ctx.barMessage = '"Forge requires Ultra Rare equipment with three Ultra Rare options."';
+    addLog(ctx, 'Dark Smith: Only Ultra Rare equipment with three Ultra Rare options can be strengthened.');
+  },
+  report_blacksmith_ineligible_upgrade: (ctx) => {
+    ctx.barMessage = '"Level training requires Ultra Rare equipment with three Ultra Rare options."';
+    addLog(ctx, 'Blacksmith: Only Ultra Rare equipment with three Ultra Rare options can receive level training.');
+  },
   report_blacksmith_level_cap: (ctx) => {
     const cap = equipmentLevelCap(ctx);
-    ctx.barMessage = `"Can't raise it any further right now. Reach B${cap + 1} before raising this equipment again."`;
-    addLog(ctx, `Blacksmith: This equipment is already at the current reached-depth cap, Equipment Lv.${cap}.`);
+    ctx.barMessage = `"Can't raise it any further right now. Your character level cap is Equipment Lv.${cap}."`;
+    addLog(ctx, `Blacksmith: This equipment is already at your character-level cap, Equipment Lv.${cap}.`);
   },
   accept_blacksmith_proposal: (ctx) => {
     const staged = createBlacksmithProposalStagingContext(ctx);
@@ -6935,9 +7686,16 @@ const playerActionActions = {
     const playerAtk = playerAttackPower(staged);
     stagedTarget.provoked = true;
     stagedTarget.hasDetectedPlayer = true;
+    const hpBeforeAttack = stagedTarget.hp;
     stagedTarget.hp -= playerAtk;
+    const dealtDamage = Math.max(0, Math.min(hpBeforeAttack, playerAtk));
+    const hpLeechTenthsPercent = equippedOptionValue(staged, 'hp_leech');
+    const hpLeech = Math.min(staged.player.maxHp - staged.player.hp, Math.floor(dealtDamage * hpLeechTenthsPercent / 1000));
+    if (hpLeech > 0) staged.player.hp += hpLeech;
+    const hungerLeech = Math.min(BALANCE_CONFIG.fullHunger - staged.player.hunger, equippedOptionValue(staged, 'hunger_leech') / 10);
+    if (hungerLeech > 0) staged.player.hunger += hungerLeech;
     grantEquipmentMasteryExperience(staged, staged.player.weapon, equipmentAttackExperience(stagedTarget), "combat");
-    addLog(staged, `You slash ${stagedTarget.name} for ${playerAtk} damage!`);
+    addLog(staged, `You slash ${stagedTarget.name} for ${playerAtk} damage!${hpLeech > 0 ? ` Blood Leech restored ${hpLeech} HP.` : ''}${hungerLeech > 0 ? ` Hunger Leech restored ${hungerLeech.toFixed(1)} Hunger.` : ''}`);
     if (stagedTarget.hp <= 0) defeatEnemy(staged, stagedTarget, 'your blade');
     if (staged.enemies.includes(stagedTarget)) {
       Object.assign(target, stagedTarget);
@@ -7489,6 +8247,7 @@ function autoPatrolObjectiveTypeFromDecision(decision) {
   if (reason.startsWith("town-rest-")) return "REST_AT_INN";
   if (reason.startsWith("town-home-purchase-")) return "PURCHASE_HOME";
   if (reason.startsWith("town-home-storage-") || reason === "town-home-service-select" || reason === "town-home-storage-deposit") return "STORE_RARE_EQUIPMENT";
+  if (reason.startsWith("town-dark-smith-")) return "PROCESS_EQUIPMENT_AT_DARK_SMITH";
   if (reason.startsWith("town-smith-")) return "PROCESS_EQUIPMENT_AT_BLACKSMITH";
   if (reason.startsWith("town-sell-")) return "SELL_UNNEEDED_EQUIPMENT";
   if (reason.startsWith("town-shop-")) return "BUY_REQUIRED_RETURN_SCROLL";
@@ -7519,6 +8278,9 @@ function autoPatrolObjectiveCanonicalSnapshot(ctx) {
     homePurchased: Boolean(ctx.homePurchased),
     townStorageEquipmentCount: ctx.currentMapType === "town" ? autoPatrolTownStorageCandidates(ctx).length : 0,
     townDisposableEquipmentCount: ctx.currentMapType === "town" ? autoPatrolTownDisposableEntries(ctx).length : 0,
+    townDarkSmithDismantleCount: ctx.currentMapType === "town" ? autoPatrolRecommendedDismantleCount(ctx) : 0,
+    townEliteUpgradePending: ctx.currentMapType === "town" ? Boolean(autoPatrolEliteOptionUpgradeTarget(ctx)) : false,
+    forgeShards: ctx.forgeShards || 0,
     playerX: ctx.player.x, playerY: ctx.player.y, hostileCount: hostiles.length,
     detectedCount: detected.length, dangerousCount: hostiles.filter(enemy => enemyThreatBand(ctx, enemy) === "dangerous").length,
     deadlyCount: hostiles.filter(enemy => enemyThreatBand(ctx, enemy) === "deadly").length,
@@ -7556,6 +8318,7 @@ function autoPatrolObjectiveDefinition(ctx, decision) {
     PURCHASE_HOME: "the town home is purchased",
     STORE_RARE_EQUIPMENT: "all carried Rare-or-higher equipment and equipment with Rare-or-higher options is stored at home",
     PROCESS_EQUIPMENT_AT_BLACKSMITH: "every Common equipment item without Rare-or-higher options is sold",
+    PROCESS_EQUIPMENT_AT_DARK_SMITH: "dominated equipment is dismantled and only complete elite option combinations receive bounded forging",
     SELL_UNNEEDED_EQUIPMENT: "every Common equipment item without Rare-or-higher options is removed from carried equipment",
     BUY_REQUIRED_RETURN_SCROLL: "at least one Return to Town Scroll is carried",
     RESUME_DUNGEON: "the player enters the deepest registered standard-dungeon warp",
@@ -7782,7 +8545,7 @@ function autoPatrolRecordObjectiveProjection(before, decision, accepted) {
   }
   if (decision.reason === "bomb-plan-trapped") objective.bombPlanTrappedCount += 1;
   if (after.adjacentHostileCount >= 2) objective.multiAdjacentTurns += 1;
-  const townObjective = ["REST_AT_INN", "PURCHASE_HOME", "STORE_RARE_EQUIPMENT", "PROCESS_EQUIPMENT_AT_BLACKSMITH", "SELL_UNNEEDED_EQUIPMENT", "BUY_REQUIRED_RETURN_SCROLL", "RESUME_DUNGEON"].includes(objective.type);
+  const townObjective = ["REST_AT_INN", "RECOVER_SAVE_CAPACITY", "PURCHASE_HOME", "STORE_RARE_EQUIPMENT", "PROCESS_EQUIPMENT_AT_BLACKSMITH", "PROCESS_EQUIPMENT_AT_DARK_SMITH", "SELL_UNNEEDED_EQUIPMENT", "BUY_REQUIRED_RETURN_SCROLL", "RESUME_DUNGEON"].includes(objective.type);
   const objectiveTarget = objective.target?.enemyId == null ? null : autoPatrolEnemyById(context, objective.target.enemyId);
   const targetDistance = objectiveTarget ? autoPatrolDistance(objectiveTarget, context.player) : 999;
   if (objective.type === "ESCAPE_LETHAL_TARGET" && objectiveTarget) {
@@ -7796,6 +8559,9 @@ function autoPatrolRecordObjectiveProjection(before, decision, accepted) {
     || after.inventoryCount < before.inventoryCount || after.gold > before.gold
     || after.returnScrollCount > before.returnScrollCount
     || after.townDisposableEquipmentCount < before.townDisposableEquipmentCount
+    || after.townDarkSmithDismantleCount < before.townDarkSmithDismantleCount
+    || after.forgeShards !== before.forgeShards
+    || (before.townEliteUpgradePending && !after.townEliteUpgradePending)
     || after.adjacentHostileCount < before.adjacentHostileCount
     || (objective.type === "ESCAPE_LETHAL_TARGET" && targetDistance > previousTargetDistance)
     || (townObjective && (after.playerX !== before.playerX || after.playerY !== before.playerY));
@@ -7820,6 +8586,7 @@ function autoPatrolRecordObjectiveProjection(before, decision, accepted) {
     || (objective.type === "PURCHASE_HOME" && after.homePurchased)
     || (objective.type === "STORE_RARE_EQUIPMENT" && after.townStorageEquipmentCount === 0)
     || (["PROCESS_EQUIPMENT_AT_BLACKSMITH", "SELL_UNNEEDED_EQUIPMENT"].includes(objective.type) && after.townDisposableEquipmentCount === 0)
+    || (objective.type === "PROCESS_EQUIPMENT_AT_DARK_SMITH" && after.townDarkSmithDismantleCount === 0 && !after.townEliteUpgradePending)
     || (objective.type === "BUY_REQUIRED_RETURN_SCROLL" && after.returnScrollCount >= 1)
     || (objective.type === "RESUME_DUNGEON" && after.mapType === "dungeon")
     || (objective.type === "HOLD_SAFE_POSITION" && after.adjacentHostileCount <= 1);
@@ -8947,13 +9714,83 @@ function autoPatrolTownSetObjectivePhase(ctx, objective, phase, reason) {
   objective.phase = phase;
   if (autoPatrolRuntime.townObjectiveState === "TOWN_OBJECTIVE_EXECUTING") transitionAutoPatrolTownObjective("STEP");
 }
+function autoPatrolTownLastSaveFailure(ctx) {
+  const result = ctx.saveUi?.lastSaveResult;
+  return result && result.ok === false ? result : null;
+}
+function autoPatrolTownSaveFailureIsCapacityRelated(ctx) {
+  const message = String(autoPatrolTownLastSaveFailure(ctx)?.message || "");
+  return message.includes("payload.homeStorage.equipment") || message.includes("Save data exceeds the supported size limit");
+}
+function autoPatrolTownSaveCapacityStatus(ctx) {
+  const storedEquipmentCount = ctx.homeStorage?.equipment?.length || 0;
+  const equipmentCountWithinLimit = storedEquipmentCount <= SAVE_NUMERIC_LIMITS.maxEquipmentEntries;
+  let serializedChars = Number.POSITIVE_INFINITY;
+  let serializedWithinLimit = false;
+  if (equipmentCountWithinLimit) {
+    try {
+      serializedChars = JSON.stringify(buildSaveSnapshot(ctx)).length;
+      serializedWithinLimit = serializedChars <= SAVE_NUMERIC_LIMITS.maxSerializedChars;
+    } catch (error) {
+      serializedChars = Number.POSITIVE_INFINITY;
+      serializedWithinLimit = false;
+    }
+  }
+  return {
+    storedEquipmentCount,
+    equipmentCountWithinLimit,
+    serializedChars,
+    serializedWithinLimit,
+    ready: equipmentCountWithinLimit && serializedWithinLimit
+  };
+}
+function autoPatrolTownNeedsEmergencySaveCapacityCleanup(ctx) {
+  if (ctx.currentMapType !== 'town' || !ctx.homePurchased || !hasClearedBlacksmithMilestone(ctx)) return false;
+  const storedCount = ctx.homeStorage?.equipment?.length || 0;
+  const countOverflow = storedCount > SAVE_NUMERIC_LIMITS.maxEquipmentEntries;
+  const capacityFailureStillUnresolved = autoPatrolTownSaveFailureIsCapacityRelated(ctx)
+    && !autoPatrolTownSaveCapacityStatus(ctx).ready;
+  if (!countOverflow && !capacityFailureStillUnresolved) return false;
+  return equipmentRecommendations(ctx).length > 0 || autoPatrolRecommendedDismantleCount(ctx) > 0;
+}
+function autoPatrolTownNeedsSaveRetry(ctx) {
+  if (ctx.currentMapType !== 'town' || !autoPatrolTownSaveFailureIsCapacityRelated(ctx)) return false;
+  return autoPatrolTownSaveCapacityStatus(ctx).ready;
+}
+function autoPatrolCreateTownSaveCapacityObjective(ctx) {
+  if (autoPatrolRuntime.activeTownObjective) return autoPatrolRuntime.activeTownObjective;
+  transitionAutoPatrolTownObjective("CREATE");
+  const storedCount = ctx.homeStorage?.equipment?.length || 0;
+  const objective = {
+    objectiveId: `town-objective-${ctx.turnCount}-${++autoPatrolRuntime.townObjectiveSequence}`,
+    type: "RECOVER_SAVE_CAPACITY",
+    status: "ACTIVE",
+    phase: equipmentRecommendations(ctx).length > 0 ? "EQUIP_RECOMMENDED" : "MOVE_TO_DARK_SMITH",
+    reservedGold: 0,
+    createdTurn: ctx.turnCount,
+    startGold: ctx.player.gold,
+    startHomeGold: ctx.homeStorage?.gold || 0,
+    startStoredEquipmentCount: storedCount,
+    targetStoredEquipmentCount: SAVE_NUMERIC_LIMITS.maxEquipmentEntries,
+    targetSerializedChars: SAVE_NUMERIC_LIMITS.maxSerializedChars,
+    completionCondition: `Home equipment count is at most ${SAVE_NUMERIC_LIMITS.maxEquipmentEntries} and the serialized save is at most ${SAVE_NUMERIC_LIMITS.maxSerializedChars} characters before the Inn save is retried.`,
+    failureConditions: ["no safe dismantle candidates remain above the save limit", "home or Dark Smith route becomes unavailable"],
+    phaseHistory: []
+  };
+  autoPatrolRuntime.activeTownObjective = objective;
+  transitionAutoPatrolTownObjective("ACCEPT");
+  transitionAutoPatrolTownObjective("EXECUTE");
+  return objective;
+}
+
 function autoPatrolEnsureTownObjective(ctx) {
   if (ctx.currentMapType !== "town") {
     if (autoPatrolRuntime.activeTownObjective) autoPatrolFailTownObjective(ctx, "left-town-before-completion");
     return null;
   }
   if (autoPatrolRuntime.activeTownObjective) return autoPatrolRuntime.activeTownObjective;
-  if (autoPatrolTownNeedsRest(ctx)) return autoPatrolCreateTownRestObjective(ctx);
+  if (autoPatrolTownNeedsEmergencySaveCapacityCleanup(ctx)) return autoPatrolCreateTownSaveCapacityObjective(ctx);
+  if (autoPatrolTownNeedsRest(ctx) || autoPatrolTownNeedsSaveRetry(ctx)) return autoPatrolCreateTownRestObjective(ctx);
   const shopTarget = autoPatrolTownDesiredShopPurchase(ctx);
   if (shopTarget && autoPatrolTownAvailablePurchaseGold(ctx) >= shopTarget.value) return autoPatrolCreateTownShopPurchaseObjective(ctx, shopTarget);
   return null;
@@ -8962,6 +9799,12 @@ function autoPatrolTownRestObjectiveDecision(ctx, frontendState) {
   const objective = autoPatrolEnsureTownObjective(ctx);
   if (!objective || objective.type !== "REST_AT_INN") return null;
   if (frontendState === "FE_SAVE_RESULT") {
+    const saveFailure = autoPatrolTownLastSaveFailure(ctx);
+    if (saveFailure) {
+      autoPatrolTownSetObjectivePhase(ctx, objective, "SAVE_FAILED", `save-failed:${saveFailure.message || "unknown"}`);
+      autoPatrolFailTownObjective(ctx, `inn-save-failed:${saveFailure.message || "unknown"}`);
+      return { kind: "DISPATCH", event: "SELECT", reason: "town-rest-save-failure-ack" };
+    }
     autoPatrolTownSetObjectivePhase(ctx, objective, "VERIFY_REST", "save-result-visible");
     return { kind: "DISPATCH", event: "SELECT", reason: "town-rest-save-ack" };
   }
@@ -8986,20 +9829,16 @@ function autoPatrolTownRestObjectiveDecision(ctx, frontendState) {
     }
     autoPatrolRuntime.townGoldWithdrawalRequest = shortage;
     autoPatrolRuntime.townGoldWithdrawalPurpose = "inn";
-    rebuildHomeMenuEntries(ctx);
-    const entryIndex = ctx.homeMenuEntries.findIndex(entry => entry.kind === "withdraw_gold");
-    if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-rest-withdraw-entry-missing" };
-    if (ctx.homeSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-rest-select-withdraw" };
-    if (ctx.homeSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-rest-select-withdraw" };
     autoPatrolTownSetObjectivePhase(ctx, objective, "ACQUIRE_INN_FEE", "withdraw-inn-fee");
-    return { kind: "DISPATCH", event: "SELECT", reason: "town-rest-withdraw-inn-gold" };
+    return { kind: "DISPATCH", event: "WITHDRAW_REQUESTED_GOLD", reason: "town-rest-withdraw-inn-gold" };
   }
   if (frontendState !== "FE_PLAYER_TURN") return { kind: "PAUSE", reason: `town-rest-waiting:${frontendState}` };
   if (objective.phase === "VERIFY_REST") {
     const fullHp = ctx.player.hp >= ctx.player.maxHp;
     const fullHunger = ctx.player.hunger >= BALANCE_CONFIG.fullHunger - 0.01;
     const leftMidnight = ctx.timePhase < 3;
-    if (fullHp && fullHunger && leftMidnight) {
+    const saveConfirmed = ctx.saveUi?.lastSaveResult?.ok === true;
+    if (fullHp && fullHunger && leftMidnight && saveConfirmed) {
       autoPatrolCompleteTownObjective(ctx, "inn-rest-confirmed");
       return null;
     }
@@ -9042,16 +9881,8 @@ function autoPatrolTownShopPurchaseObjectiveDecision(ctx, frontendState, objecti
     }
     autoPatrolRuntime.townGoldWithdrawalRequest = shortage;
     autoPatrolRuntime.townGoldWithdrawalPurpose = objective.targetReason;
-    rebuildHomeMenuEntries(ctx);
-    const entryIndex = ctx.homeMenuEntries.findIndex(entry => entry.kind === "withdraw_gold");
-    if (entryIndex < 0) {
-      autoPatrolFailTownObjective(ctx, "shop-purchase-withdraw-entry-missing");
-      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-shop-purchase-withdraw-entry-missing" };
-    }
-    if (ctx.homeSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-home-service-select" };
-    if (ctx.homeSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-home-service-select" };
     autoPatrolTownSetObjectivePhase(ctx, objective, "ACQUIRE_PURCHASE_FUNDS", "withdraw-shop-purchase-funds");
-    return { kind: "DISPATCH", event: "SELECT", reason: "town-home-withdraw-shop-gold" };
+    return { kind: "DISPATCH", event: "WITHDRAW_REQUESTED_GOLD", reason: "town-home-withdraw-shop-gold" };
   }
   if (frontendState === "FE_SHOP_MENU") {
     if (ctx.player.gold < objective.reservedGold) {
@@ -9085,12 +9916,57 @@ function autoPatrolTownShopPurchaseObjectiveDecision(ctx, frontendState, objecti
   const moveShop = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.shopPosition], "town-shop-approach");
   return moveShop ? { kind: "DISPATCH", ...moveShop } : { kind: "STOP", reason: "town-shop-purchase-route-unavailable" };
 }
+function autoPatrolTownSaveCapacityObjectiveDecision(ctx, frontendState, objective) {
+  const capacity = autoPatrolTownSaveCapacityStatus(ctx);
+  objective.lastStoredEquipmentCount = capacity.storedEquipmentCount;
+  objective.lastSerializedChars = capacity.serializedChars;
+  if (capacity.ready) {
+    autoPatrolCompleteTownObjective(ctx, "save-capacity-recovered");
+    if (frontendState === "FE_HOME_MENU" || frontendState === "FE_DARK_SMITH_MENU") {
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-save-capacity-recovered-exit" };
+    }
+    return null;
+  }
+  if (frontendState === "FE_HOME_MENU") {
+    if (equipmentRecommendations(ctx).length > 0) {
+      autoPatrolTownSetObjectivePhase(ctx, objective, "EQUIP_RECOMMENDED", "recommended-equipment-remains");
+      return { kind: "DISPATCH", event: "EQUIP_RECOMMENDED", reason: "town-save-capacity-equip-recommended" };
+    }
+    autoPatrolTownSetObjectivePhase(ctx, objective, "MOVE_TO_DARK_SMITH", "home-recommendations-finished");
+    return { kind: "DISPATCH", event: "ESCAPE", reason: "town-save-capacity-leave-home" };
+  }
+  if (frontendState === "FE_DARK_SMITH_MENU") {
+    if (autoPatrolRecommendedDismantleCount(ctx) > 0) {
+      autoPatrolTownSetObjectivePhase(ctx, objective, "DISMANTLE_BATCH", "save-capacity-dismantle-batch");
+      return { kind: "DISPATCH", event: "DISMANTLE_RECOMMENDED_BATCH", reason: "town-save-capacity-dismantle-batch" };
+    }
+    autoPatrolFailTownObjective(ctx, "save-capacity-no-dismantle-candidates");
+    return { kind: "STOP", reason: "town-save-capacity-no-dismantle-candidates" };
+  }
+  if (frontendState !== "FE_PLAYER_TURN") return { kind: "PAUSE", reason: `town-save-capacity-waiting:${frontendState}` };
+  if (equipmentRecommendations(ctx).length > 0) {
+    autoPatrolTownSetObjectivePhase(ctx, objective, "EQUIP_RECOMMENDED", "recommended-equipment-available");
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home") return { kind: "DISPATCH", event: "INTERACT", reason: "town-save-capacity-open-home" };
+    const moveHome = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-save-capacity-home-approach");
+    return moveHome ? { kind: "DISPATCH", ...moveHome } : { kind: "STOP", reason: "town-save-capacity-home-route-unavailable" };
+  }
+  if (autoPatrolRecommendedDismantleCount(ctx) > 0) {
+    autoPatrolTownSetObjectivePhase(ctx, objective, "MOVE_TO_DARK_SMITH", "dismantle-candidates-available");
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "dark_smith") return { kind: "DISPATCH", event: "INTERACT", reason: "town-save-capacity-open-dark-smith" };
+    const moveDarkSmith = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.darkSmithPosition], "town-save-capacity-dark-smith-approach");
+    return moveDarkSmith ? { kind: "DISPATCH", ...moveDarkSmith } : { kind: "STOP", reason: "town-save-capacity-dark-smith-route-unavailable" };
+  }
+  autoPatrolFailTownObjective(ctx, "save-capacity-unrecoverable");
+  return { kind: "STOP", reason: "town-save-capacity-unrecoverable" };
+}
 function autoPatrolTownObjectiveDecision(ctx, frontendState) {
   const objective = autoPatrolEnsureTownObjective(ctx);
   if (!objective || objective.status === "SUSPENDED" || autoPatrolRuntime.townObjectiveState === "TOWN_OBJECTIVE_SUSPENDED") return null;
   const decision = objective.type === "REST_AT_INN"
     ? autoPatrolTownRestObjectiveDecision(ctx, frontendState)
-    : autoPatrolTownShopPurchaseObjectiveDecision(ctx, frontendState, objective);
+    : objective.type === "RECOVER_SAVE_CAPACITY"
+      ? autoPatrolTownSaveCapacityObjectiveDecision(ctx, frontendState, objective)
+      : autoPatrolTownShopPurchaseObjectiveDecision(ctx, frontendState, objective);
   return decision?.kind === "DISPATCH" ? { ...decision, townObjectiveOwned: true } : decision;
 }
 
@@ -9103,19 +9979,24 @@ const AUTO_PATROL_TOWN_CONFIG = Object.freeze({
   blacksmithPosition: Object.freeze({ x: 7, y: 11 }),
   shopPosition: Object.freeze({ x: 11, y: 3 }),
   homePosition: Object.freeze({ x: 7, y: 3 }),
-  stairsPosition: Object.freeze({ x: 11, y: 11 })
+  stairsPosition: Object.freeze({ x: 11, y: 11 }),
+  darkSmithPosition: Object.freeze({ x: 3, y: 7 })
 });
 
 function autoPatrolHasRareEquipmentOption(item) {
   return (item?.options || []).some(option => (RARITY_RANK[option?.rarity] || 0) >= RARITY_RANK.rare);
 }
-function autoPatrolTownShouldStoreEquipment(item) {
-  return Boolean(item) && ((RARITY_RANK[item.rarity] || 0) >= RARITY_RANK.rare || autoPatrolHasRareEquipmentOption(item));
+function autoPatrolTownShouldStoreEquipment(ctx, item) {
+  if (!item) return false;
+  const protectedIds = new Set(equipmentRecommendations(ctx).map(recommendation => recommendation.candidate.instanceId));
+  if (protectedIds.has(item.instanceId)) return true;
+  if (autoPatrolShouldDismantleEquipment(ctx, item, protectedIds)) return false;
+  return (RARITY_RANK[item.rarity] || 0) >= RARITY_RANK.rare || autoPatrolHasRareEquipmentOption(item);
 }
 function autoPatrolTownStorageCandidates(ctx) {
   if (!ctx.homePurchased) return [];
   return ctx.equipmentInventory.map((item, index) => ({ item, index }))
-    .filter(({ item }) => autoPatrolTownShouldStoreEquipment(item));
+    .filter(({ item }) => autoPatrolTownShouldStoreEquipment(ctx, item));
 }
 function autoPatrolHasUltraRareEquipmentOption(item) {
   return (item?.options || []).some(option => (RARITY_RANK[option?.rarity] || 0) >= RARITY_RANK.ultra_rare);
@@ -9126,7 +10007,7 @@ function autoPatrolTownShouldKeepWithoutHome(item) {
 function autoPatrolTownDisposableEntries(ctx) {
   return ctx.equipmentInventory.map((item, index) => ({ item, index }))
     .filter(({ item }) => ctx.homePurchased
-      ? !autoPatrolTownShouldStoreEquipment(item)
+      ? !autoPatrolTownShouldStoreEquipment(ctx, item)
       : !autoPatrolTownShouldKeepWithoutHome(item))
     .sort(compareEquipmentForInventoryEviction);
 }
@@ -9173,7 +10054,15 @@ function autoPatrolTownNeedsRest(ctx) {
     || ctx.player.hunger < BALANCE_CONFIG.fullHunger * AUTO_PATROL_TOWN_CONFIG.restHungerRatio;
 }
 function autoPatrolTownInventoryNeedsCleanup(ctx) {
-  return autoPatrolTownDisposableEntries(ctx).length > 0;
+  return (!hasClearedBlacksmithMilestone(ctx) && autoPatrolTownDisposableEntries(ctx).length > 0)
+    || Boolean(autoPatrolEliteLevelUpgradeTarget(ctx));
+}
+function autoPatrolTownNeedsEquipmentRecommendation(ctx) {
+  return Boolean(ctx.homePurchased && equipmentRecommendations(ctx).length > 0);
+}
+function autoPatrolTownNeedsDarkSmithProcessing(ctx) {
+  return Boolean(hasClearedBlacksmithMilestone(ctx)
+    && (autoPatrolRecommendedDismantleCount(ctx) > 0 || autoPatrolEliteOptionUpgradeTarget(ctx)));
 }
 function autoPatrolTownNeedsGoldDeposit(ctx) {
   const depositableGold = Math.max(0, ctx.player.gold - autoPatrolTownReservedGold());
@@ -9201,6 +10090,11 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
   if (frontendState === "FE_WARP_MENU") return { kind: "DISPATCH", event: "SELECT", reason: "town-resume-select-warp" };
   if (frontendState === "FE_HOME_PURCHASE_MENU") return { kind: "DISPATCH", event: autoPatrolTownNeedsHomePurchase(ctx) ? "SELECT" : "ESCAPE", reason: autoPatrolTownNeedsHomePurchase(ctx) ? "town-home-purchase-confirm" : "town-home-purchase-unaffordable" };
   if (frontendState === "FE_HOME_MENU") {
+    if (autoPatrolTownNeedsEmergencySaveCapacityCleanup(ctx)) {
+      if (equipmentRecommendations(ctx).length > 0) return { kind: "DISPATCH", event: "EQUIP_RECOMMENDED", reason: "town-save-capacity-equip-recommended" };
+      return { kind: "DISPATCH", event: "ESCAPE", reason: "town-save-capacity-leave-home" };
+    }
+    if (equipmentRecommendations(ctx).length > 0) return { kind: "DISPATCH", event: "EQUIP_RECOMMENDED", reason: "town-home-equip-recommended" };
     // Debug/save snapshots created before storage paging may still contain the
     // entire warehouse in homeMenuEntries. Re-project the current page before
     // deciding so manual resume and auto patrol share the same bounded menu.
@@ -9235,7 +10129,7 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
     if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-home-service-entry-missing" };
     if (ctx.homeSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-home-service-select" };
     if (ctx.homeSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-home-service-select" };
-    return { kind: "DISPATCH", event: "SELECT", reason };
+    return { kind: "DISPATCH", event: reason.startsWith("town-home-withdraw-") ? "WITHDRAW_REQUESTED_GOLD" : "SELECT", reason };
   }
   if (frontendState === "FE_SHOP_MENU") {
     const target = autoPatrolTownDesiredShopPurchase(ctx);
@@ -9246,8 +10140,28 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
     if (ctx.shopSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: `town-shop-select-${target.reason}` };
     return { kind: "DISPATCH", event: "SELECT", reason: `town-shop-buy-${target.reason}` };
   }
+  if (frontendState === "FE_DARK_SMITH_MENU") {
+    if (autoPatrolRecommendedDismantleEntries(ctx).length > 0) return { kind: "DISPATCH", event: "DISMANTLE_RECOMMENDED_BATCH", reason: "town-dark-smith-dismantle-dominated-batch" };
+    const upgrade = autoPatrolEliteOptionUpgradeTarget(ctx);
+    if (!upgrade) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-dark-smith-finished" };
+    const entryIndex = ctx.darkSmithMenuEntries.findIndex(entry => entry.source === upgrade.entry.source && entry.item?.instanceId === upgrade.entry.item.instanceId);
+    if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-dark-smith-upgrade-entry-missing" };
+    if (ctx.darkSmithSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-dark-smith-select-elite" };
+    if (ctx.darkSmithSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-dark-smith-select-elite" };
+    if ((ctx.darkSmithOptionIndex || 0) < upgrade.optionIndex) return { kind: "DISPATCH", event: "MOVE_RIGHT", reason: "town-dark-smith-select-option" };
+    if ((ctx.darkSmithOptionIndex || 0) > upgrade.optionIndex) return { kind: "DISPATCH", event: "MOVE_LEFT", reason: "town-dark-smith-select-option" };
+    return { kind: "DISPATCH", event: "SELECT", reason: "town-dark-smith-forge-elite-option" };
+  }
   if (frontendState === "FE_BLACKSMITH_MENU") {
     if (!autoPatrolTownInventoryNeedsCleanup(ctx)) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-smith-finished" };
+    const levelTarget = autoPatrolEliteLevelUpgradeTarget(ctx);
+    if (levelTarget) {
+      const entryIndex = ctx.blacksmithEntries.findIndex(entry => entry.source === levelTarget.source && entry.item?.instanceId === levelTarget.item.instanceId);
+      if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-smith-level-entry-missing" };
+      if (ctx.blacksmithSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-smith-select-level-target" };
+      if (ctx.blacksmithSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-smith-select-level-target" };
+      return { kind: "DISPATCH", event: "SELECT", reason: "town-smith-open-level-training" };
+    }
     const target = autoPatrolTownBlacksmithTarget(ctx);
     if (!target) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-smith-no-disposable-item" };
     const entryIndex = ctx.blacksmithEntries.findIndex(entry => entry.source === 'inventory' && entry.item.instanceId === target.item.instanceId);
@@ -9256,6 +10170,8 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
     if (ctx.blacksmithSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-smith-select" };
     return { kind: "DISPATCH", event: target.operation, reason: target.operation === 'DISMANTLE' ? "town-smith-dismantle-rare" : "town-smith-sell-for-gold" };
   }
+  if (frontendState === "FE_BLACKSMITH_KIND_MENU") return { kind: "DISPATCH", event: "SELECT", reason: "town-smith-level-train" };
+  if (frontendState === "FE_BLACKSMITH_COMPARE") return { kind: "DISPATCH", event: "SELECT", reason: "town-smith-level-accept" };
   return null;
 }
 function autoPatrolTownDecision(ctx, frontendState) {
@@ -9270,6 +10186,15 @@ function autoPatrolTownDecision(ctx, frontendState) {
   const menuDecision = autoPatrolTownMenuDecision(ctx, frontendState);
   if (menuDecision) return menuDecision;
   if (frontendState !== "FE_PLAYER_TURN") return { kind: "PAUSE", reason: `waiting:${frontendState}` };
+  const saveFailure = autoPatrolTownLastSaveFailure(ctx);
+  if (saveFailure && !autoPatrolTownSaveFailureIsCapacityRelated(ctx)) {
+    return { kind: "STOP", reason: `town-save-failed:${saveFailure.message || "unknown"}` };
+  }
+  if (autoPatrolTownSaveFailureIsCapacityRelated(ctx)
+    && !autoPatrolTownSaveCapacityStatus(ctx).ready
+    && !autoPatrolTownNeedsEmergencySaveCapacityCleanup(ctx)) {
+    return { kind: "STOP", reason: "town-save-capacity-unrecoverable" };
+  }
   const plannedMelee = autoPatrolContinueMeleePlan(ctx);
   if (plannedMelee) return plannedMelee;
   const adjacent = autoPatrolAdjacentHostiles(ctx);
@@ -9277,6 +10202,19 @@ function autoPatrolTownDecision(ctx, frontendState) {
     const selected = autoPatrolSelectAdjacent(ctx, adjacent);
     autoPatrolStartMeleePlan(selected.enemy, "town-night-melee");
     return autoPatrolAttackDecision(ctx, selected.enemy, "town-night-melee");
+  }
+  if (autoPatrolTownNeedsEmergencySaveCapacityCleanup(ctx)) {
+    if (autoPatrolTownNeedsEquipmentRecommendation(ctx)) {
+      if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home") return { kind: "DISPATCH", event: "INTERACT", reason: "town-home-equipment-recommendation-open" };
+      const moveHome = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-home-equipment-recommendation-approach");
+      if (moveHome) return { kind: "DISPATCH", ...moveHome };
+    }
+    if (autoPatrolTownNeedsDarkSmithProcessing(ctx)) {
+      if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "dark_smith") return { kind: "DISPATCH", event: "INTERACT", reason: "town-dark-smith-save-capacity-open" };
+      const moveDarkSmith = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.darkSmithPosition], "town-dark-smith-save-capacity-approach");
+      if (moveDarkSmith) return { kind: "DISPATCH", ...moveDarkSmith };
+    }
+    return { kind: "STOP", reason: "town-save-capacity-cleanup-route-unavailable" };
   }
   const needsRest = autoPatrolTownNeedsRest(ctx);
   if (autoPatrolTownNeedsInnWithdrawal(ctx)) {
@@ -9307,9 +10245,19 @@ function autoPatrolTownDecision(ctx, frontendState) {
     const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.shopPosition], "town-shop-approach");
     if (move) return { kind: "DISPATCH", ...move };
   }
+  if (autoPatrolTownNeedsEquipmentRecommendation(ctx)) {
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home") return { kind: "DISPATCH", event: "INTERACT", reason: "town-home-equipment-recommendation-open" };
+    const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-home-equipment-recommendation-approach");
+    if (move) return { kind: "DISPATCH", ...move };
+  }
   if (autoPatrolTownNeedsHomeStorage(ctx)) {
     if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "home") return { kind: "DISPATCH", event: "INTERACT", reason: "town-home-storage-open" };
     const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.homePosition], "town-home-storage-approach");
+    if (move) return { kind: "DISPATCH", ...move };
+  }
+  if (autoPatrolTownNeedsDarkSmithProcessing(ctx)) {
+    if (ctx.tiles[`${ctx.player.x},${ctx.player.y}`] === "dark_smith") return { kind: "DISPATCH", event: "INTERACT", reason: "town-dark-smith-open" };
+    const move = autoPatrolMoveDecision(ctx, [AUTO_PATROL_TOWN_CONFIG.darkSmithPosition], "town-dark-smith-approach");
     if (move) return { kind: "DISPATCH", ...move };
   }
   if (autoPatrolTownInventoryNeedsCleanup(ctx)) {
@@ -9334,7 +10282,7 @@ function autoPatrolTownDecision(ctx, frontendState) {
 
 function autoPatrolSupportedFrontendState(state) {
   if (state === "FE_DEATH_SUMMARY") return AUTO_PATROL_CONFIG.continueAfterDeath;
-  return ["FE_PLAYER_TURN", "FE_INN_MENU", "FE_SAVE_RESULT", "FE_INVENTORY_MENU", "FE_WARP_MENU", "FE_BLACKSMITH_MENU", "FE_SHOP_MENU", "FE_HOME_PURCHASE_MENU", "FE_HOME_MENU"].includes(state);
+  return ["FE_PLAYER_TURN", "FE_INN_MENU", "FE_SAVE_RESULT", "FE_INVENTORY_MENU", "FE_WARP_MENU", "FE_BLACKSMITH_MENU", "FE_BLACKSMITH_KIND_MENU", "FE_BLACKSMITH_COMPARE", "FE_DARK_SMITH_MENU", "FE_SHOP_MENU", "FE_HOME_PURCHASE_MENU", "FE_HOME_MENU"].includes(state);
 }
 
 const AUTO_PATROL_ENGAGEMENT_CONFIG = Object.freeze({ progressTimeoutTurns: 8, rockBreachTurnCost: 8, ambushDistance: 3, detectedYieldClearTurns: 3 });
@@ -12488,6 +13436,8 @@ function autoPatrolTerminateObjectivesForStop(ctx, reason = "auto-patrol-stopped
   if (autoPatrolRuntime.activeObjective) autoPatrolFailObjective(ctx, reason);
   if (autoPatrolRuntime.activeTownObjective) autoPatrolFailTownObjective(ctx, reason);
   autoPatrolRuntime.townCombatPlan = null;
+  autoPatrolRuntime.townGoldWithdrawalRequest = 0;
+  autoPatrolRuntime.townGoldWithdrawalPurpose = null;
 }
 function autoPatrolResetTransientPlansAfterDeathReturn() {
   resetAutoPatrolProductionShadow("death-return");
@@ -12552,13 +13502,30 @@ function autoPatrolFinalizeFloorTransitionBoundary(ctx, pending) {
   autoPatrolRuntime.repeatCount = 0;
 }
 
+function autoPatrolDarkSmithProgressSignature(ctx) {
+  const selectedIndex = Math.max(0, Number.isInteger(ctx.darkSmithSelectedIndex) ? ctx.darkSmithSelectedIndex : 0);
+  const selectedEntry = ctx.darkSmithMenuEntries[selectedIndex];
+  const optionIndex = Math.max(0, Number.isInteger(ctx.darkSmithOptionIndex) ? ctx.darkSmithOptionIndex : 0);
+  const selectedOption = selectedEntry?.item?.options?.[optionIndex];
+  return [
+    "dark-smith",
+    selectedIndex,
+    ctx.darkSmithMenuEntries.length,
+    selectedEntry?.item?.instanceId || "none",
+    optionIndex,
+    runtimeEquipmentOptionId(selectedOption) || "none",
+    ctx.forgeShards || 0,
+    selectedOption?.enhancementSuccesses || 0,
+    selectedOption?.value || 0
+  ].join(":");
+}
 function autoPatrolUiProgressSignature(ctx) {
   switch (engine.currentState) {
     case "FE_HOME_MENU": return `home:${ctx.homeSelectedIndex}:${ctx.homeMenuEntries.length}`;
     case "FE_SHOP_MENU": return `shop:${ctx.shopSelectedIndex}:${ctx.shopInventory.length}`;
     case "FE_WARP_MENU": return `warp:${ctx.warpSelectedIndex}:${ctx.warpDestinations.length}`;
     case "FE_BLACKSMITH_MENU": return `smith:${ctx.blacksmithSelectedIndex}:${ctx.blacksmithEntries.length}`;
-    case "FE_DARK_SMITH_MENU": return `dark-smith:${ctx.darkSmithSelectedIndex}:${ctx.darkSmithMenuEntries.length}`;
+    case "FE_DARK_SMITH_MENU": return autoPatrolDarkSmithProgressSignature(ctx);
     case "FE_INVENTORY_MENU": return `inventory:${ctx.inventorySelectedIndex}:${ctx.equipmentInventory.length}`;
     default: return engine.currentState;
   }
@@ -13058,6 +14025,7 @@ function applyDebugSnapshot(snapshot, restoreMode = "floor-start") {
   const stagedAutoPatrol = structuredClone(restorePoint.autoPatrol);
   stopAutoPatrol("debug-snapshot-load");
   autoPatrolRestoreContext(context, stagedContext);
+  synchronizeInventoryCapacity(context);
   context.explosionCells = [];
   context.pendingMapTransition = null;
   applyTimelineSnapshot(context, restorePoint.timeline || createTimelineSnapshot(stagedContext));
@@ -13495,7 +14463,7 @@ function render(state, ctxGame) {
     const equipmentRows = ctxGame.equipmentInventory.length > 0
       ? ctxGame.equipmentInventory.map((item, idx) => {
           const stat = item.type === "weapon" ? `ATK ${item.atk}` : `DEF ${item.def}`;
-          return `<div class="inventory-item ${idx === ctxGame.inventorySelectedIndex ? 'selected' : ''} rarity-${(item.rarity || 'common').replace('_', '-')}">${escapeHtml(item.name)} [Equipment Lv.${item.equipmentLevel || 1} / ${stat}]<br><span style="font-size:9px;">Mastery ${item.masteryLevel || 0} EXP ${item.masteryExp || 0}/${equipmentMasteryExpToNextRank(item.masteryLevel || 0)} / ${equipmentOptionSummary(item)}</span></div>`;
+          return `<div class="inventory-item ${raritySelectionClasses(item.rarity, idx === ctxGame.inventorySelectedIndex, true)}">${escapeHtml(item.name)} [Equipment Lv.${item.equipmentLevel || 1} / ${stat}]<br><span style="font-size:9px;">Mastery ${item.masteryLevel || 0} EXP ${item.masteryExp || 0}/${equipmentMasteryExpToNextRank(item.masteryLevel || 0)} / ${coloredEquipmentOptionInlineSummary(item)}</span></div>`;
         }).join("")
       : `<div class="inventory-item" style="color:#777;">No stored equipment.</div>`;
     let comparison = "Select stored equipment to compare.";
@@ -13504,9 +14472,9 @@ function render(state, ctxGame) {
       const key = selected.type === "weapon" ? "atk" : "def";
       const diff = selected[key] - current[key];
       const diffClass = diff > 0 ? "inventory-positive" : (diff < 0 ? "inventory-negative" : "");
-      comparison = `${selected.type.toUpperCase()}: ${coloredEquipmentName(current)} ${current[key]} → ${coloredEquipmentName(selected)} ${selected[key]} <span class="${diffClass}">(${diff >= 0 ? '+' : ''}${diff})</span><br>Current option: ${equipmentOptionSummary(current)}<br>Candidate option: ${equipmentOptionSummary(selected)}`;
+      comparison = `${selected.type.toUpperCase()}: ${coloredEquipmentName(current)} ${current[key]} → ${coloredEquipmentName(selected)} ${selected[key]} <span class="${diffClass}">(${diff >= 0 ? '+' : ''}${diff})</span><br>Current option: ${coloredEquipmentOptionInlineSummary(current)}<br>Candidate option: ${coloredEquipmentOptionInlineSummary(selected)}`;
     }
-    overlay.innerHTML = `<div class="menu-title">EQUIPMENT & STATUS</div><div class="inventory-panel"><div class="inventory-equipped"><div>Weapon: ${coloredEquipmentName(ctxGame.player.weapon)} / Equipment Lv.${ctxGame.player.weapon.equipmentLevel || 1} / Mastery ${ctxGame.player.weapon.masteryLevel || 0} EXP ${ctxGame.player.weapon.masteryExp || 0}/${equipmentMasteryExpToNextRank(ctxGame.player.weapon.masteryLevel || 0)} / ATK ${ctxGame.player.weapon.atk} / ${equipmentOptionSummary(ctxGame.player.weapon)}</div><div>Armor: ${coloredEquipmentName(ctxGame.player.armor)} / Equipment Lv.${ctxGame.player.armor.equipmentLevel || 1} / Mastery ${ctxGame.player.armor.masteryLevel || 0} EXP ${ctxGame.player.armor.masteryExp || 0}/${equipmentMasteryExpToNextRank(ctxGame.player.armor.masteryLevel || 0)} / DEF ${ctxGame.player.armor.def} / ${equipmentOptionSummary(ctxGame.player.armor)}</div><div>HP ${Math.floor(ctxGame.player.hp)}/${Math.floor(ctxGame.player.maxHp)} | Hunger ${Math.min(100, Math.floor(ctxGame.player.hunger))} | Bomb SET ${ctxGame.player.bombCapacity} RNG ${ctxGame.player.bombRange}</div><div>Status: ${(ctxGame.player.statusEffects?.poisonTurns || 0) > 0 ? `Poison ${ctxGame.player.statusEffects.poisonTurns} turns` : 'Normal'}</div></div><div>Stored equipment ${ctxGame.equipmentInventory.length}/${ctxGame.inventoryCapacity}</div><div id="inventory-list" class="inventory-list">${equipmentRows}</div><div class="inventory-comparison">${comparison}</div></div><p style='font-size:10px; color:#888;'>[↑/↓]: Cursor | [Enter]: Equip | [S]: Sell | [Esc]: Close</p>`;
+    overlay.innerHTML = `<div class="menu-title">EQUIPMENT & STATUS</div><div class="inventory-panel"><div class="inventory-equipped"><div>Weapon: ${coloredEquipmentName(ctxGame.player.weapon)} / Equipment Lv.${ctxGame.player.weapon.equipmentLevel || 1} / Mastery ${ctxGame.player.weapon.masteryLevel || 0} EXP ${ctxGame.player.weapon.masteryExp || 0}/${equipmentMasteryExpToNextRank(ctxGame.player.weapon.masteryLevel || 0)} / ATK ${ctxGame.player.weapon.atk} / ${coloredEquipmentOptionInlineSummary(ctxGame.player.weapon)}</div><div>Armor: ${coloredEquipmentName(ctxGame.player.armor)} / Equipment Lv.${ctxGame.player.armor.equipmentLevel || 1} / Mastery ${ctxGame.player.armor.masteryLevel || 0} EXP ${ctxGame.player.armor.masteryExp || 0}/${equipmentMasteryExpToNextRank(ctxGame.player.armor.masteryLevel || 0)} / DEF ${ctxGame.player.armor.def} / ${coloredEquipmentOptionInlineSummary(ctxGame.player.armor)}</div><div>HP ${Math.floor(ctxGame.player.hp)}/${Math.floor(ctxGame.player.maxHp)} | Hunger ${Math.min(100, Math.floor(ctxGame.player.hunger))} | Bomb SET ${ctxGame.player.bombCapacity} RNG ${ctxGame.player.bombRange}</div><div>Status: ${(ctxGame.player.statusEffects?.poisonTurns || 0) > 0 ? `Poison ${ctxGame.player.statusEffects.poisonTurns} turns` : 'Normal'}</div></div><div>Stored equipment ${ctxGame.equipmentInventory.length}/${ctxGame.inventoryCapacity}</div><div id="inventory-list" class="inventory-list">${equipmentRows}</div><div class="inventory-comparison">${comparison}</div></div><p style='font-size:10px; color:#888;'>[↑/↓]: Cursor | [Enter]: Equip | [S]: Sell | [Esc]: Close</p>`;
     const inventoryList = document.getElementById('inventory-list');
     if (inventoryList && typeof inventoryList.querySelector === 'function') {
       const selectedRow = inventoryList.querySelector('.inventory-item.selected');
@@ -13516,7 +14484,7 @@ function render(state, ctxGame) {
     overlay.style.display = "flex";
     let menuItemsHtml = ctxGame.shopInventory.map((item, idx) => {
         const detail = item.type === 'return_scroll' ? ' — Carry it into a dungeon and press [R] to return safely.' : '';
-        return `<div class="menu-item ${idx === ctxGame.shopSelectedIndex ? 'selected' : ''}">${escapeHtml(item.name)} (${item.value}g / stock:${item.stock})${detail}</div>`;
+        return `<div class="menu-item ${raritySelectionClasses(item.rarity, idx === ctxGame.shopSelectedIndex, true)}">${escapeHtml(item.name)} (${item.value}g / stock:${item.stock})${detail}</div>`;
     }).join("");
     overlay.innerHTML = `<div class="menu-title">MERCHANT SHOP</div><div style='width:100%; margin-bottom:20px;'>${menuItemsHtml}</div><p style='font-size:10px; color:#888;'>[↑/↓]: Cursor | [Enter]: Purchase | [Esc]: Exit</p>`;
   } else if (overlayMode === "warp") {
@@ -13549,6 +14517,11 @@ function render(state, ctxGame) {
     const pageCount = Math.max(1, Math.ceil(storedCount / pageSize));
     const pageNumber = Math.min((ctxGame.homeStoredPage || 0) + 1, pageCount);
     const selectedEntry = ctxGame.homeMenuEntries[ctxGame.homeSelectedIndex];
+    const recommendations = equipmentRecommendations(ctxGame);
+    const nextRecommendation = recommendations[0] || null;
+    const recommendationPanel = nextRecommendation
+      ? `<div class="home-equipment-card"><div class="home-card-label">RECOMMENDED ${escapeHtml(nextRecommendation.candidate.type.toUpperCase())} UPGRADE · [E]</div><div>${coloredEquipmentName(nextRecommendation.candidate)}</div><div class="home-stat-line"><span>${coloredEquipmentOptionSummary(nextRecommendation.candidate)}</span><b>Cross Mastery ${nextRecommendation.projection.crossoverMastery}</b></div><div style="font-size:9px;color:#aaa;">Candidate now ${nextRecommendation.projection.candidateCurrentStat} · Mastery ${nextRecommendation.projection.equalMasteryLevel}: ${nextRecommendation.projection.equalMasteryStat} · Vital +${nextRecommendation.projection.recoveryBonus.toFixed(1)}x</div><div style="font-size:9px;color:#888;">Current: ${coloredEquipmentName(nextRecommendation.current)} · ${nextRecommendation.projection.currentStat} now / ${nextRecommendation.projection.currentEqualMasteryStat} at the same Mastery</div></div>`
+      : `<div class="home-equipment-card"><div class="home-card-label">EQUIPMENT RECOMMENDATION</div><div style="color:#77ff99;">Current weapon and armor remain the best progression choices.</div></div>`;
     let previousSection = null;
     const rows = ctxGame.homeMenuEntries.map((entry, idx) => {
       const section = entry.kind === 'carried' ? 'Carried equipment' : (entry.kind === 'stored' ? 'Stored equipment' : 'Gold actions');
@@ -13559,10 +14532,11 @@ function render(state, ctxGame) {
       else if (entry.kind === 'stored') label = `Take · ${coloredEquipmentName(entry.item)}`;
       else if (entry.kind === 'deposit_gold') label = `Deposit gold · ${entry.amount.toLocaleString()}g`;
       else label = `Withdraw gold · ${entry.amount.toLocaleString()}g`;
-      return `${sectionHeader}<div class="home-row ${idx === ctxGame.homeSelectedIndex ? 'selected' : ''}" data-home-index="${idx}">${label}</div>`;
+      const rowClasses = entry.item ? raritySelectionClasses(entry.item.rarity, idx === ctxGame.homeSelectedIndex) : (idx === ctxGame.homeSelectedIndex ? 'selected' : '');
+      return `${sectionHeader}<div class="home-row ${rowClasses}" data-home-index="${idx}">${label}</div>`;
     }).join('');
 
-    let detail = `<div class="home-detail-heading">Select an action</div><div style="color:#888;">Choose equipment or a Gold action from the list.</div>`;
+    let detail = `<div class="home-detail-heading">Select an action</div>${recommendationPanel}<div style="color:#888;">Choose equipment or a Gold action from the list.</div>`;
     if (selectedEntry?.item) {
       const candidate = selectedEntry.item;
       const current = candidate.type === 'weapon' ? ctxGame.player.weapon : ctxGame.player.armor;
@@ -13572,38 +14546,42 @@ function render(state, ctxGame) {
       const diffClass = diff > 0 ? 'inventory-positive' : diff < 0 ? 'inventory-negative' : '';
       const actionLabel = selectedEntry.kind === 'carried' ? 'Item to store' : 'Item to take';
       detail = `<div class="home-detail-heading">${selectedEntry.kind === 'carried' ? 'STORE EQUIPMENT' : 'TAKE EQUIPMENT'}</div>
-        <div class="home-equipment-card"><div class="home-card-label">${actionLabel}</div><div>${coloredEquipmentName(candidate)}</div><div class="home-stat-line"><span>${equipmentOptionSummary(candidate)}</span><b>${statLabel} ${candidate[key]}</b></div></div>
-        <div class="home-equipment-card"><div class="home-card-label">Currently equipped</div><div>${coloredEquipmentName(current)}</div><div class="home-stat-line"><span>${equipmentOptionSummary(current)}</span><b>${statLabel} ${current[key]}</b></div></div>
+        ${recommendationPanel}<div class="home-equipment-card"><div class="home-card-label">${actionLabel}</div><div>${coloredEquipmentName(candidate)}</div><div class="home-stat-line"><span>${coloredEquipmentOptionSummary(candidate)}</span><b>${statLabel} ${candidate[key]}</b></div></div>
+        <div class="home-equipment-card"><div class="home-card-label">Currently equipped</div><div>${coloredEquipmentName(current)}</div><div class="home-stat-line"><span>${coloredEquipmentOptionSummary(current)}</span><b>${statLabel} ${current[key]}</b></div></div>
         <div class="home-difference ${diffClass}">Difference: ${diff >= 0 ? '+' : ''}${diff} ${statLabel}</div>`;
     } else if (selectedEntry?.kind === 'deposit_gold') {
-      detail = `<div class="home-detail-heading">DEPOSIT GOLD</div><div class="home-equipment-card"><div class="home-card-label">Transfer amount</div><div style="font-size:18px;color:#ffdd66;">${selectedEntry.amount.toLocaleString()}g</div></div><div>Carried by character: <b>${ctxGame.player.gold.toLocaleString()}g</b></div><div style="margin-top:8px;color:#888;">Use ←/→ to change the amount. Enter deposits the displayed amount.</div>`;
+      detail = `<div class="home-detail-heading">DEPOSIT GOLD</div>${recommendationPanel}<div class="home-equipment-card"><div class="home-card-label">Transfer amount</div><div style="font-size:18px;color:#ffdd66;">${selectedEntry.amount.toLocaleString()}g</div></div><div>Carried by character: <b>${ctxGame.player.gold.toLocaleString()}g</b></div><div style="margin-top:8px;color:#888;">Use ←/→ to change the amount. Enter deposits the displayed amount.</div>`;
     } else if (selectedEntry?.kind === 'withdraw_gold') {
-      detail = `<div class="home-detail-heading">WITHDRAW GOLD</div><div class="home-equipment-card"><div class="home-card-label">Transfer amount</div><div style="font-size:18px;color:#ffdd66;">${selectedEntry.amount.toLocaleString()}g</div></div><div>Stored at home: <b>${ctxGame.homeStorage.gold.toLocaleString()}g</b></div><div style="margin-top:8px;color:#888;">Use ←/→ to change the amount. Enter withdraws the displayed amount.</div>`;
+      detail = `<div class="home-detail-heading">WITHDRAW GOLD</div>${recommendationPanel}<div class="home-equipment-card"><div class="home-card-label">Transfer amount</div><div style="font-size:18px;color:#ffdd66;">${selectedEntry.amount.toLocaleString()}g</div></div><div>Stored at home: <b>${ctxGame.homeStorage.gold.toLocaleString()}g</b></div><div style="margin-top:8px;color:#888;">Use ←/→ to change the amount. Enter withdraws the displayed amount.</div>`;
     }
 
-    overlay.innerHTML = `<div class="home-shell"><div class="menu-title">MY HOME</div><div class="home-summary"><span>Character: ${ctxGame.player.gold.toLocaleString()}g · Home: ${ctxGame.homeStorage.gold.toLocaleString()}g</span><span>Equipment: ${storedCount} · Page ${pageNumber}/${pageCount}</span></div><div class="home-main"><section class="home-list-panel"><div class="home-panel-title">ACTIONS</div><div id="home-list" class="home-list">${rows}</div></section><section class="home-detail-panel"><div class="home-panel-title">DETAIL / COMPARISON</div><div class="home-detail">${detail}</div></section></div><div class="home-help">[↑/↓] Select · [←/→] Amount / Storage page · [Enter] Store / Take / Transfer · [Esc] Exit</div></div>`;
+    overlay.innerHTML = `<div class="home-shell"><div class="menu-title">MY HOME</div><div class="home-summary"><span>Character: ${ctxGame.player.gold.toLocaleString()}g · Home: ${ctxGame.homeStorage.gold.toLocaleString()}g</span><span>Equipment: ${storedCount} · Page ${pageNumber}/${pageCount}</span></div><div class="home-main"><section class="home-list-panel"><div class="home-panel-title">ACTIONS</div><div id="home-list" class="home-list">${rows}</div></section><section class="home-detail-panel"><div class="home-panel-title">DETAIL / COMPARISON</div><div class="home-detail">${detail}</div></section></div><div class="home-help">[E] Equip recommended · [↑/↓] Select · [←/→] Amount / Storage page · [Enter] Store / Take / Transfer · [Esc] Exit</div></div>`;
     requestAnimationFrame(() => overlay.querySelector(`[data-home-index="${ctxGame.homeSelectedIndex}"]`)?.scrollIntoView({ block: 'nearest' }));
   } else if (overlayMode === "dark-smith") {
     overlay.style.display = "flex";
     const page = pagedSelectionWindow(ctxGame.darkSmithMenuEntries, ctxGame.darkSmithSelectedIndex, FACILITY_LIST_CONFIG.pageSize);
     const selectedEntry = ctxGame.darkSmithMenuEntries[page.selectedIndex];
     const selectedOption = selectedEntry?.item?.options?.[ctxGame.darkSmithOptionIndex || 0];
+    const cleanupCount = autoPatrolRecommendedDismantleCount(ctxGame);
+    const eliteUpgrade = autoPatrolEliteOptionUpgradeTarget(ctxGame);
     const chance = selectedOption ? Math.round(darkSmithSuccessRate(selectedOption) * 100) : 0;
     const cost = selectedOption ? darkSmithMaterialCost(selectedOption) : 0;
     const rows = page.entries.map(({ entry, globalIndex }) => {
       const stat = entry.item.type === 'weapon' ? `ATK ${entry.item.atk}` : `DEF ${entry.item.def}`;
-      return `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)} · ${stat}</div>`;
+      return `<div class="facility-row ${raritySelectionClasses(entry.item.rarity, globalIndex === page.selectedIndex)}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)} · ${stat}</div>`;
     }).join('') || '<div class="facility-row">No equipment with an option.</div>';
-    const optionList = selectedEntry?.item?.options?.map((option, index) => `<div class="smith-option-row ${index === (ctxGame.darkSmithOptionIndex || 0) ? 'selected' : ''}">${index + 1}. ${rarityLabel(option.rarity)} ${escapeHtml(option.name)} ${escapeHtml(formatEquipmentOptionValue(option))}</div>`).join('') || '<div style="color:#777;">No option.</div>';
-    const detail = selectedEntry ? `<div class="facility-detail-heading">${coloredEquipmentName(selectedEntry.item)}</div><div class="facility-card"><div class="facility-card-label">Options</div><div class="smith-option-list">${optionList}</div></div><div class="facility-card"><div class="facility-action" style="margin-top:0;padding-top:0;border-top:0;"><span>Selected slot</span><b>${(ctxGame.darkSmithOptionIndex || 0) + 1}/${selectedEntry.item.options.length}</b></div><div class="facility-action"><span>Forge chance / cost</span><b>${chance}% / ${cost} shard${cost === 1 ? '' : 's'}</b></div><div class="facility-action"><span>Forge</span><b>[Enter]</b></div><div class="facility-action"><span>Reroll · Exchange · Dismantle</span><b>[R] [C] [D]</b></div></div>` : '<div class="facility-detail-heading">No equipment</div>';
-    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">DARK SMITH</div><div class="facility-summary"><span>Forge Shards: ${ctxGame.forgeShards}</span><span>Equipment ${ctxGame.darkSmithMenuEntries.length} · Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">OPTION / ACTION</div><div class="facility-detail">${detail}</div></section></div><div class="facility-help">[↑/↓] Equipment · [PgUp/PgDn] Page · [←/→] Option · [Enter] Forge · [R] Reroll · [C] Exchange · [D] Dismantle · [Esc] Exit</div></div>`;
+    const optionList = selectedEntry?.item?.options?.map((option, index) => `<div class="smith-option-row ${optionSelectionClasses(option, index === (ctxGame.darkSmithOptionIndex || 0))}">${index + 1}. ${rarityLabel(option.rarity)} ${escapeHtml(option.name)} ${escapeHtml(formatEquipmentOptionValue(option))}</div>`).join('') || '<div style="color:#777;">No option.</div>';
+    const batchDetail = `<div class="facility-card"><div class="facility-card-label">Automatic cleanup</div><div class="facility-action" style="margin-top:0;padding-top:0;border-top:0;"><span>Dominated equipment in bag / home</span><b>${cleanupCount}</b></div><div class="facility-action ${cleanupCount ? '' : 'disabled'}"><span>Dismantle up to ${EQUIPMENT_SELECTION_CONFIG.dismantleBatchSize}</span><b>[B]</b></div><div style="font-size:9px;color:#aaa;">When Ultra Rare is equipped, lower equipment rarities are cleanup candidates. The recommended replacement is always protected.</div></div>`;
+    const eliteDetail = eliteUpgrade ? `<div class="facility-card"><div class="facility-card-label">Elite auto-forge eligible</div><div>${coloredEquipmentName(eliteUpgrade.entry.item)}</div><div>${coloredEquipmentOptionSummary(eliteUpgrade.entry.item)}</div><div style="font-size:9px;color:#aaa;">Only Ultra Rare equipment with three Ultra Rare options is forged automatically. Option types are prioritized for Abyss survival, and each option stops at Forge +${EQUIPMENT_SELECTION_CONFIG.autoForgeSuccessCap} while preserving ${EQUIPMENT_SELECTION_CONFIG.autoForgeShardReserve} shards.</div></div>` : '';
+    const detail = selectedEntry ? `<div class="facility-detail-heading">${coloredEquipmentName(selectedEntry.item)}</div><div class="facility-card"><div class="facility-card-label">Options</div><div class="smith-option-list">${optionList}</div></div><div class="facility-card"><div class="facility-action" style="margin-top:0;padding-top:0;border-top:0;"><span>Selected slot</span><b>${(ctxGame.darkSmithOptionIndex || 0) + 1}/${selectedEntry.item.options.length}</b></div><div class="facility-action"><span>Forge chance / cost</span><b>${chance}% / ${cost} shard${cost === 1 ? '' : 's'}</b></div><div class="facility-action"><span>Forge</span><b>[Enter]</b></div><div class="facility-action"><span>Reroll · Exchange · Dismantle</span><b>[R] [C] [D]</b></div></div>${batchDetail}${eliteDetail}` : `<div class="facility-detail-heading">No option equipment</div>${batchDetail}`;
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">DARK SMITH</div><div class="facility-summary"><span>Forge Shards: ${ctxGame.forgeShards} · Cleanup: ${cleanupCount}</span><span>Equipment ${ctxGame.darkSmithMenuEntries.length} · Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">OPTION / ACTION</div><div class="facility-detail">${detail}</div></section></div><div class="facility-help">[B] Recommended batch dismantle · [↑/↓] Equipment · [PgUp/PgDn] Page · [←/→] Option · [Enter] Forge · [R] Reroll · [C] Exchange · [D] Dismantle · [Esc] Exit</div></div>`;
   } else if (overlayMode === "dark-smith-reroll-target") {
     overlay.style.display = "flex";
     const flow = ctxGame.darkSmithReroll;
     const page = pagedSelectionWindow(flow.targetEntries, flow.targetIndex, FACILITY_LIST_CONFIG.pageSize);
     const selected = flow.targetEntries[page.selectedIndex];
-    const rows = page.entries.map(({ entry, globalIndex }) => `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)}</div>`).join('') || '<div class="facility-row">No equipment with options.</div>';
-    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">REROLL OPTION — SELECT EQUIPMENT</div><div class="facility-summary"><span>Cost: ${DARK_SMITH_CONFIG.optionRerollCost}g</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">CURRENT OPTIONS</div><div class="facility-detail"><div class="facility-detail-heading">${selected ? coloredEquipmentName(selected.item) : 'No equipment'}</div><div class="facility-card">${selected ? equipmentOptionSummary(selected.item) : 'No option.'}</div><div>Only the selected slot is regenerated. Other slots and the option count remain unchanged.</div></div></section></div><div class="facility-help">[↑/↓] Equipment · [PgUp/PgDn] Page · [Enter] Select option · [Esc] Back</div></div>`;
+    const rows = page.entries.map(({ entry, globalIndex }) => `<div class="facility-row ${raritySelectionClasses(entry.item.rarity, globalIndex === page.selectedIndex)}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)}</div>`).join('') || '<div class="facility-row">No equipment with options.</div>';
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">REROLL OPTION — SELECT EQUIPMENT</div><div class="facility-summary"><span>Cost: ${DARK_SMITH_CONFIG.optionRerollCost}g</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">CURRENT OPTIONS</div><div class="facility-detail"><div class="facility-detail-heading">${selected ? coloredEquipmentName(selected.item) : 'No equipment'}</div><div class="facility-card">${selected ? coloredEquipmentOptionSummary(selected.item) : 'No option.'}</div><div>Only the selected slot is regenerated. Other slots and the option count remain unchanged.</div></div></section></div><div class="facility-help">[↑/↓] Equipment · [PgUp/PgDn] Page · [Enter] Select option · [Esc] Back</div></div>`;
   } else if (overlayMode === "dark-smith-reroll-option") {
     overlay.style.display = "flex";
     const flow = ctxGame.darkSmithReroll;
@@ -13617,14 +14595,14 @@ function render(state, ctxGame) {
     const flow = ctxGame.darkSmithChange;
     const page = pagedSelectionWindow(flow.targetEntries, flow.targetIndex, FACILITY_LIST_CONFIG.pageSize);
     const selected = flow.targetEntries[page.selectedIndex];
-    const rows = page.entries.map(({ entry, globalIndex }) => `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)}</div>`).join('') || '<div class="facility-row">No equipment with options.</div>';
-    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">OPTION CHANGE — SELECT A</div><div class="facility-summary"><span>Keep this equipment visible as A</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT A</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">CURRENT OPTIONS</div><div class="facility-detail"><div class="facility-detail-heading">${selected ? coloredEquipmentName(selected.item) : 'No equipment'}</div><div class="facility-card">${selected ? equipmentOptionSummary(selected.item) : 'No option.'}</div></div></section></div><div class="facility-help">[↑/↓] Equipment A · [PgUp/PgDn] Page · [Enter] Fix A and select B · [Esc] Back</div></div>`;
+    const rows = page.entries.map(({ entry, globalIndex }) => `<div class="facility-row ${raritySelectionClasses(entry.item.rarity, globalIndex === page.selectedIndex)}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)}</div>`).join('') || '<div class="facility-row">No equipment with options.</div>';
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">OPTION CHANGE — SELECT A</div><div class="facility-summary"><span>Keep this equipment visible as A</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT A</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">CURRENT OPTIONS</div><div class="facility-detail"><div class="facility-detail-heading">${selected ? coloredEquipmentName(selected.item) : 'No equipment'}</div><div class="facility-card">${selected ? coloredEquipmentOptionSummary(selected.item) : 'No option.'}</div></div></section></div><div class="facility-help">[↑/↓] Equipment A · [PgUp/PgDn] Page · [Enter] Fix A and select B · [Esc] Back</div></div>`;
   } else if (overlayMode === "dark-smith-change-partner") {
     overlay.style.display = "flex";
     const flow = ctxGame.darkSmithChange;
     const page = pagedSelectionWindow(flow.partnerEntries, flow.partnerIndex, FACILITY_LIST_CONFIG.pageSize);
     const selected = flow.partnerEntries[page.selectedIndex];
-    const rows = page.entries.map(({ entry, globalIndex }) => `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)}</div>`).join('') || '<div class="facility-row">No compatible Equipment B.</div>';
+    const rows = page.entries.map(({ entry, globalIndex }) => `<div class="facility-row ${raritySelectionClasses(entry.item.rarity, globalIndex === page.selectedIndex)}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)}</div>`).join('') || '<div class="facility-row">No compatible Equipment B.</div>';
     overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">OPTION CHANGE — SELECT B</div><div class="facility-summary"><span>A: ${flow.target ? escapeHtml(flow.target.item.name) : 'None'}</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">COMPATIBLE EQUIPMENT B</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">COMPARISON</div><div class="facility-detail">${darkSmithEquipmentCard(flow.target, 'Equipment A')}<div style="height:8px;"></div>${selected ? darkSmithEquipmentCard(selected, 'Equipment B') : '<div>No compatible partner.</div>'}</div></section></div><div class="facility-help">[↑/↓] Equipment B · [PgUp/PgDn] Page · [Enter] Compare options · [Esc] Select A again</div></div>`;
   } else if (overlayMode === "dark-smith-change-options") {
     overlay.style.display = "flex";
@@ -13640,15 +14618,16 @@ function render(state, ctxGame) {
     const selected = ctxGame.darkSmithDismantleEntries[page.selectedIndex];
     const rows = page.entries.map(({ entry, globalIndex }) => {
       const stat = entry.item.type === 'weapon' ? `ATK ${entry.item.atk}` : `DEF ${entry.item.def}`;
-      return `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${coloredEquipmentName(entry.item)} · ${stat} · ${entry.yield} shard${entry.yield === 1 ? '' : 's'}</div>`;
-    }).join('') || '<div class="facility-row">No carried equipment with material value.</div>';
+      const source = entry.source === 'home' ? 'Home' : 'Bag';
+      return `<div class="facility-row ${raritySelectionClasses(entry.item.rarity, globalIndex === page.selectedIndex)}" data-facility-index="${globalIndex}">${source} · ${coloredEquipmentName(entry.item)} · ${stat} · ${entry.yield} shard${entry.yield === 1 ? '' : 's'}</div>`;
+    }).join('') || '<div class="facility-row">No equipment in the bag or home.</div>';
     const breakdown = selected ? `<div class="facility-detail-heading">${coloredEquipmentName(selected.item)}</div><div class="facility-card"><div class="facility-card-label">Material breakdown</div><div class="material-breakdown">${escapeHtml(dismantleYieldSummary(selected.item))}</div><div class="facility-action"><span>Total</span><b>${selected.yield} shard${selected.yield === 1 ? '' : 's'}</b></div></div><div class="facility-action"><span>Dismantle selected equipment</span><b>[Enter]</b></div>` : '<div class="facility-detail-heading">No dismantle candidate</div>';
-    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">DISMANTLE EQUIPMENT</div><div class="facility-summary"><span>Forge Shards: ${ctxGame.forgeShards}</span><span>Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">CARRIED EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">MATERIAL RESULT</div><div class="facility-detail">${breakdown}</div></section></div><div class="facility-help">Equipment and every option add material: Rare 1 · Very Rare 2 · Ultra Rare 4 · [↑/↓] Select · [PgUp/PgDn] Page · [Enter] Review · [Esc] Back</div></div>`;
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">DISMANTLE EQUIPMENT</div><div class="facility-summary"><span>Forge Shards: ${ctxGame.forgeShards}</span><span>Bag + Home ${ctxGame.darkSmithDismantleEntries.length} · Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">BAG / HOME EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">MATERIAL RESULT</div><div class="facility-detail">${breakdown}</div></section></div><div class="facility-help">Equipment and every option add material: Rare 1 · Very Rare 2 · Ultra Rare 4. Common-only equipment can be dismantled for 0 shards. [↑/↓] Select · [PgUp/PgDn] Page · [Enter] Review · [Esc] Back</div></div>`;
   } else if (overlayMode === "dark-smith-dismantle-confirm") {
     overlay.style.display = "flex";
     const entry = ctxGame.darkSmithDismantleEntries[ctxGame.darkSmithDismantleSelectedIndex];
     overlay.innerHTML = entry
-      ? `<div class="menu-title">CONFIRM DISMANTLE</div><p style="font-size:12px;line-height:1.7;">Destroy <span style="color:#ffe066;">${escapeHtml(entry.item.name)}</span><br>and receive ${entry.yield} Forge Shard${entry.yield === 1 ? '' : 's'}?</p><p style="font-size:10px;color:#888;">[Enter]: Confirm | [Esc]: Cancel</p>`
+      ? `<div class="menu-title">CONFIRM DISMANTLE</div><p style="font-size:12px;line-height:1.7;">Destroy ${coloredEquipmentName(entry.item)} from ${entry.source === 'home' ? 'home storage' : 'the bag'}<br>and receive ${entry.yield} Forge Shard${entry.yield === 1 ? '' : 's'}?</p><p style="font-size:10px;color:#888;">[Enter]: Confirm | [Esc]: Cancel</p>`
       : `<div class="menu-title">CONFIRM DISMANTLE</div><p style="color:#777;">The selected equipment is no longer available.</p><p style="font-size:10px;color:#888;">[Esc]: Back</p>`;
   } else if (overlayMode === "blacksmith") {
     overlay.style.display = "flex";
@@ -13656,12 +14635,12 @@ function render(state, ctxGame) {
     const selected = ctxGame.blacksmithEntries[page.selectedIndex];
     const rows = page.entries.map(({ entry, globalIndex }) => {
       const stat = entry.item.type === 'weapon' ? `ATK ${entry.item.atk}` : `DEF ${entry.item.def}`;
-      return `<div class="facility-row ${globalIndex === page.selectedIndex ? 'selected' : ''}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)} · ${stat}</div>`;
+      return `<div class="facility-row ${raritySelectionClasses(entry.item.rarity, globalIndex === page.selectedIndex)}" data-facility-index="${globalIndex}">${entry.label}: ${coloredEquipmentName(entry.item)} · ${stat}</div>`;
     }).join('') || '<div class="facility-row">No equipment.</div>';
     const sale = selected ? equipmentSaleValue(selected.item) : 0;
     const material = selected ? dismantleYield(selected.item) : 0;
     const canInventoryAction = selected?.source === 'inventory';
-    const detail = selected ? `<div class="facility-detail-heading">${coloredEquipmentName(selected.item)}</div><div class="facility-card"><div class="facility-card-label">Equipment</div><div>${rarityLabel(selected.item.rarity)} · Equipment Lv.${selected.item.equipmentLevel || 1}</div><div>${selected.item.type === 'weapon' ? `ATK ${selected.item.atk}` : `DEF ${selected.item.def}`}</div><div>${equipmentOptionSummary(selected.item)}</div></div><div class="facility-action"><span>Raise Equipment Lv +1 (${EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost}g)</span><b>[Enter]</b></div><div class="facility-action ${canInventoryAction ? '' : 'disabled'}"><span>Sell ${canInventoryAction ? `${sale}g` : '(equipped item)'}</span><b>[S]</b></div><div class="facility-action ${canInventoryAction && material > 0 ? '' : 'disabled'}"><span>Dismantle ${canInventoryAction ? `${material} shard${material === 1 ? '' : 's'}` : '(equipped item)'}</span><b>[D]</b></div>${canInventoryAction && material > 0 ? `<div class="material-breakdown">${escapeHtml(dismantleYieldSummary(selected.item))}</div>` : ''}` : '<div class="facility-detail-heading">No equipment</div>';
+    const detail = selected ? `<div class="facility-detail-heading">${coloredEquipmentName(selected.item)}</div><div class="facility-card"><div class="facility-card-label">Equipment</div><div>${rarityLabel(selected.item.rarity)} · Equipment Lv.${selected.item.equipmentLevel || 1}</div><div>${selected.item.type === 'weapon' ? `ATK ${selected.item.atk}` : `DEF ${selected.item.def}`}</div><div>${coloredEquipmentOptionSummary(selected.item)}</div></div><div class="facility-action ${equipmentEligibleForStrengthening(selected.item) ? '' : 'disabled'}"><span>Raise Equipment Lv +1 (${EQUIPMENT_GROWTH_CONFIG.levelUpgradeCost}g) · Cap Lv.${equipmentLevelCap(ctxGame)}</span><b>[Enter]</b></div><div style="font-size:9px;color:#aaa;">Level training is limited to Ultra Rare equipment with three Ultra Rare options.</div><div class="facility-action ${canInventoryAction ? '' : 'disabled'}"><span>Sell ${canInventoryAction ? `${sale}g` : '(equipped item)'}</span><b>[S]</b></div><div class="facility-action ${canInventoryAction && material > 0 ? '' : 'disabled'}"><span>Dismantle ${canInventoryAction ? `${material} shard${material === 1 ? '' : 's'}` : '(equipped item)'}</span><b>[D]</b></div>${canInventoryAction && material > 0 ? `<div class="material-breakdown">${escapeHtml(dismantleYieldSummary(selected.item))}</div>` : ''}` : '<div class="facility-detail-heading">No equipment</div>';
     overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">BLACKSMITH</div><div class="facility-summary"><span>Gold: ${ctxGame.player.gold.toLocaleString()}g · Shards: ${ctxGame.forgeShards}</span><span>Equipment ${ctxGame.blacksmithEntries.length} · Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">EQUIPMENT</div><div class="facility-list">${rows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">DETAIL / ACTION</div><div class="facility-detail">${detail}</div></section></div><div class="facility-help">[↑/↓] Equipment · [PgUp/PgDn] Page · [Enter] Raise Equipment Lv · [S] Sell · [D] Dismantle · [Esc] Leave</div></div>`;
   } else if (overlayMode === "blacksmith-kind") {
     overlay.style.display = "flex";
@@ -13675,7 +14654,7 @@ function render(state, ctxGame) {
     const original = proposal?.original; const candidate = proposal?.candidate;
     const stat = item => item?.type === 'weapon' ? `ATK ${item.atk}` : `DEF ${item?.def}`;
     const growth = item => `Equipment Lv.${item?.equipmentLevel || 1} / Mastery ${item?.masteryLevel || 0} EXP ${item?.masteryExp || 0}/${equipmentMasteryExpToNextRank(item?.masteryLevel || 0)}`;
-    overlay.innerHTML = proposal ? `<div class="menu-title">BLACKSMITH ALTERATION</div><div style="font-size:11px;line-height:1.8;text-align:left;"><b>Current</b>: ${rarityLabel(original.rarity)} ${coloredEquipmentName(original)} / ${stat(original)} / ${growth(original)} / ${equipmentOptionSummary(original)}<br><b>Candidate</b>: ${rarityLabel(candidate.rarity)} ${coloredEquipmentName(candidate)} / ${stat(candidate)} / ${growth(candidate)} / ${equipmentOptionSummary(candidate)}</div><p style="font-size:10px;color:#888;">[Enter]: Accept candidate | [Esc]: Keep current</p>` : `<div class="menu-title">BLACKSMITH ALTERATION</div><p>No candidate.</p>`;
+    overlay.innerHTML = proposal ? `<div class="menu-title">BLACKSMITH ALTERATION</div><div style="font-size:11px;line-height:1.8;text-align:left;"><b>Current</b>: ${rarityLabel(original.rarity)} ${coloredEquipmentName(original)} / ${stat(original)} / ${growth(original)} / ${coloredEquipmentOptionInlineSummary(original)}<br><b>Candidate</b>: ${rarityLabel(candidate.rarity)} ${coloredEquipmentName(candidate)} / ${stat(candidate)} / ${growth(candidate)} / ${coloredEquipmentOptionInlineSummary(candidate)}</div><p style="font-size:10px;color:#888;">[Enter]: Accept candidate | [Esc]: Keep current</p>` : `<div class="menu-title">BLACKSMITH ALTERATION</div><p>No candidate.</p>`;
   } else if (overlayMode === "death-summary") {
     overlay.style.display = "flex";
     const summary = ctxGame.deathSummary || { deathFloor: 0, goldLost: 0, divineGoldGranted: 0, goldAfterRescue: ctxGame.player.gold, expLost: 0, level: ctxGame.player.level, weaponName: ctxGame.player.weapon.name, armorName: ctxGame.player.armor.name, bombRange: ctxGame.player.bombRange, bombCapacity: ctxGame.player.bombCapacity, warpCount: ctxGame.discoveredWarpFloors.length };
