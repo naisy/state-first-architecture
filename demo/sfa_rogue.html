@@ -301,7 +301,7 @@
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage154i-dark-smith-auto-forge-progress-20260729";
+const SFA_ROGUE_BUILD_ID = "stage154j-perfect-equipment-lock-policy-20260729";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -2204,6 +2204,13 @@ function equipmentHasPerfectUltraOptions(item) {
     && options.length === EQUIPMENT_SELECTION_CONFIG.requiredPerfectOptionCount
     && options.every(option => option?.rarity === 'ultra_rare');
 }
+function equipmentIsEquivalentPerfectAutoUse(leftItem, rightItem) {
+  return Boolean(leftItem
+    && rightItem
+    && leftItem.type === rightItem.type
+    && equipmentHasPerfectUltraOptions(leftItem)
+    && equipmentHasPerfectUltraOptions(rightItem));
+}
 function equipmentUltraOptionCount(item) {
   return (item?.options || []).filter(option => option?.rarity === 'ultra_rare').length;
 }
@@ -2320,6 +2327,8 @@ function compareEquipmentRecommendationCandidates(left, right) {
 function equipmentUpgradeIsWorthwhile(candidate, current) {
   const projection = equipmentProgressionProjection(candidate, current);
   if (!projection) return false;
+  if (equipmentHasPerfectUltraOptions(current)) return false;
+  if (equipmentHasPerfectUltraOptions(candidate)) return true;
   const candidateRarity = RARITY_RANK[candidate.rarity] || 0;
   const currentRarity = RARITY_RANK[current.rarity] || 0;
   if (candidateRarity < currentRarity) return false;
@@ -2343,11 +2352,20 @@ function equipmentUpgradeIsWorthwhile(candidate, current) {
 function equipmentRecommendationForType(ctx, type) {
   const current = ctx?.player?.[type];
   if (!current) return null;
+  if (equipmentHasPerfectUltraOptions(current)) return null;
   let best = null;
   for (const entry of allOwnedEquipmentEntries(ctx)) {
     if (entry.item?.type !== type || entry.item === current || entry.item?.instanceId === current.instanceId) continue;
     if (!equipmentUpgradeIsWorthwhile(entry.item, current)) continue;
-    if (!best || compareEquipmentRecommendationCandidates(entry, best) > 0) best = entry;
+    if (!best) {
+      best = entry;
+      continue;
+    }
+    // All complete Ultra Rare combinations are equivalent for automatic use.
+    // Keep the first deterministic candidate instead of comparing power,
+    // Equipment Lv, Mastery, quality, Forge state, or option values.
+    if (equipmentIsEquivalentPerfectAutoUse(entry.item, best.item)) continue;
+    if (compareEquipmentRecommendationCandidates(entry, best) > 0) best = entry;
   }
   if (!best) return null;
   return { ...best, candidate: best.item, current, projection: equipmentProgressionProjection(best.item, current) };
@@ -2614,6 +2632,7 @@ function equipmentFutureDominatedBy(item, current) {
 
 function autoPatrolShouldDismantleEquipment(ctx, item, protectedIds = new Set()) {
   if (!item || protectedIds.has(item.instanceId)) return false;
+  if (equipmentHasPerfectUltraOptions(item)) return false;
   const current = ctx.player?.[item.type];
   if (!current || item.instanceId === current.instanceId) return false;
   if (current.rarity === 'ultra_rare' && item.rarity !== 'ultra_rare') return true;
@@ -3853,6 +3872,8 @@ function equipmentPrimaryStat(item) {
 
 function isClearlyBetterEquipment(candidate, current) {
   if (!candidate || !current || candidate.type !== current.type) return false;
+  if (equipmentHasPerfectUltraOptions(current)) return false;
+  if (equipmentHasPerfectUltraOptions(candidate)) return true;
   const currentStat = equipmentPrimaryStat(current);
   const candidateStat = equipmentPrimaryStat(candidate);
   const requiredGain = Math.max(
@@ -9988,10 +10009,10 @@ function autoPatrolHasRareEquipmentOption(item) {
 }
 function autoPatrolTownShouldStoreEquipment(ctx, item) {
   if (!item) return false;
+  if (equipmentHasPerfectUltraOptions(item)) return true;
   const protectedIds = new Set(equipmentRecommendations(ctx).map(recommendation => recommendation.candidate.instanceId));
   if (protectedIds.has(item.instanceId)) return true;
-  if (autoPatrolShouldDismantleEquipment(ctx, item, protectedIds)) return false;
-  return (RARITY_RANK[item.rarity] || 0) >= RARITY_RANK.rare || autoPatrolHasRareEquipmentOption(item);
+  return false;
 }
 function autoPatrolTownStorageCandidates(ctx) {
   if (!ctx.homePurchased) return [];
@@ -10001,14 +10022,15 @@ function autoPatrolTownStorageCandidates(ctx) {
 function autoPatrolHasUltraRareEquipmentOption(item) {
   return (item?.options || []).some(option => (RARITY_RANK[option?.rarity] || 0) >= RARITY_RANK.ultra_rare);
 }
-function autoPatrolTownShouldKeepWithoutHome(item) {
-  return Boolean(item) && (item.rarity === 'ultra_rare' || autoPatrolHasUltraRareEquipmentOption(item));
+function autoPatrolTownShouldKeepWithoutHome(ctx, item, protectedIds = new Set()) {
+  return Boolean(item) && (equipmentHasPerfectUltraOptions(item) || protectedIds.has(item.instanceId));
 }
 function autoPatrolTownDisposableEntries(ctx) {
+  const protectedIds = new Set(equipmentRecommendations(ctx).map(recommendation => recommendation.candidate.instanceId));
   return ctx.equipmentInventory.map((item, index) => ({ item, index }))
     .filter(({ item }) => ctx.homePurchased
       ? !autoPatrolTownShouldStoreEquipment(ctx, item)
-      : !autoPatrolTownShouldKeepWithoutHome(item))
+      : !autoPatrolTownShouldKeepWithoutHome(ctx, item, protectedIds))
     .sort(compareEquipmentForInventoryEviction);
 }
 function autoPatrolTownSaleCandidates(ctx) {
@@ -10054,15 +10076,14 @@ function autoPatrolTownNeedsRest(ctx) {
     || ctx.player.hunger < BALANCE_CONFIG.fullHunger * AUTO_PATROL_TOWN_CONFIG.restHungerRatio;
 }
 function autoPatrolTownInventoryNeedsCleanup(ctx) {
-  return (!hasClearedBlacksmithMilestone(ctx) && autoPatrolTownDisposableEntries(ctx).length > 0)
-    || Boolean(autoPatrolEliteLevelUpgradeTarget(ctx));
+  return autoPatrolTownDisposableEntries(ctx).length > 0;
 }
 function autoPatrolTownNeedsEquipmentRecommendation(ctx) {
   return Boolean(ctx.homePurchased && equipmentRecommendations(ctx).length > 0);
 }
 function autoPatrolTownNeedsDarkSmithProcessing(ctx) {
   return Boolean(hasClearedBlacksmithMilestone(ctx)
-    && (autoPatrolRecommendedDismantleCount(ctx) > 0 || autoPatrolEliteOptionUpgradeTarget(ctx)));
+    && autoPatrolEliteOptionUpgradeTarget(ctx));
 }
 function autoPatrolTownNeedsGoldDeposit(ctx) {
   const depositableGold = Math.max(0, ctx.player.gold - autoPatrolTownReservedGold());
@@ -10141,7 +10162,6 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
     return { kind: "DISPATCH", event: "SELECT", reason: `town-shop-buy-${target.reason}` };
   }
   if (frontendState === "FE_DARK_SMITH_MENU") {
-    if (autoPatrolRecommendedDismantleEntries(ctx).length > 0) return { kind: "DISPATCH", event: "DISMANTLE_RECOMMENDED_BATCH", reason: "town-dark-smith-dismantle-dominated-batch" };
     const upgrade = autoPatrolEliteOptionUpgradeTarget(ctx);
     if (!upgrade) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-dark-smith-finished" };
     const entryIndex = ctx.darkSmithMenuEntries.findIndex(entry => entry.source === upgrade.entry.source && entry.item?.instanceId === upgrade.entry.item.instanceId);
@@ -10154,14 +10174,6 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
   }
   if (frontendState === "FE_BLACKSMITH_MENU") {
     if (!autoPatrolTownInventoryNeedsCleanup(ctx)) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-smith-finished" };
-    const levelTarget = autoPatrolEliteLevelUpgradeTarget(ctx);
-    if (levelTarget) {
-      const entryIndex = ctx.blacksmithEntries.findIndex(entry => entry.source === levelTarget.source && entry.item?.instanceId === levelTarget.item.instanceId);
-      if (entryIndex < 0) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-smith-level-entry-missing" };
-      if (ctx.blacksmithSelectedIndex < entryIndex) return { kind: "DISPATCH", event: "MENU_DOWN", reason: "town-smith-select-level-target" };
-      if (ctx.blacksmithSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-smith-select-level-target" };
-      return { kind: "DISPATCH", event: "SELECT", reason: "town-smith-open-level-training" };
-    }
     const target = autoPatrolTownBlacksmithTarget(ctx);
     if (!target) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-smith-no-disposable-item" };
     const entryIndex = ctx.blacksmithEntries.findIndex(entry => entry.source === 'inventory' && entry.item.instanceId === target.item.instanceId);
@@ -10170,8 +10182,8 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
     if (ctx.blacksmithSelectedIndex > entryIndex) return { kind: "DISPATCH", event: "MENU_UP", reason: "town-smith-select" };
     return { kind: "DISPATCH", event: target.operation, reason: target.operation === 'DISMANTLE' ? "town-smith-dismantle-rare" : "town-smith-sell-for-gold" };
   }
-  if (frontendState === "FE_BLACKSMITH_KIND_MENU") return { kind: "DISPATCH", event: "SELECT", reason: "town-smith-level-train" };
-  if (frontendState === "FE_BLACKSMITH_COMPARE") return { kind: "DISPATCH", event: "SELECT", reason: "town-smith-level-accept" };
+  if (frontendState === "FE_BLACKSMITH_KIND_MENU") return { kind: "DISPATCH", event: "ESCAPE", reason: "town-smith-auto-level-disabled" };
+  if (frontendState === "FE_BLACKSMITH_COMPARE") return { kind: "DISPATCH", event: "ESCAPE", reason: "town-smith-auto-level-disabled" };
   return null;
 }
 function autoPatrolTownDecision(ctx, frontendState) {

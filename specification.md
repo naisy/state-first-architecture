@@ -190,6 +190,24 @@ The condition declared in `breaks_when` MUST actually be exercised as a negative
 
 > The judgment "this range is sufficient for the purpose of the decision" is itself capable of being wrong. If the approximation is not declared, that judgment is never reviewed by anyone. Once the breaking condition is written as a property of the subject, whether that condition actually holds can be checked against the subject's real data.
 
+### 3.7 Responsibility Boundaries (Judgements Not Owned)
+
+The responsibility of a State machine is not determined by enumerating **what it owns** alone. When it is part of the design that a given judgement is **not made by that machine**, that fact reaches the next implementer only if the definition states it.
+
+In a system where judgements are divided across several machines, the implementation SHOULD declare **the judgements that machine MUST NOT make** and **where each of those judgements is made**.
+
+The declaration contains at least:
+
+- **judgement**: the judgement that must not be made here (what is not decided)
+- **owned_by**: the machine that makes it, and the identifier of the invariant that grounds it
+- **rationale**: why it must not be made here
+
+When the same judgement is made in two or more places, **the definition no longer determines which one is authoritative**. Role ownership (Section 7) governs the ownership of State and does not express "the judgement this machine must not make". The two are separate declarations.
+
+A declaration of judgements not owned SHOULD be written in a form that can be checked statically: that the implementation of that machine does not reference the predicates or inputs corresponding to the declared judgement.
+
+> A judgement will be placed wherever there is a place to put it. The incentive — "it would be quicker to count it here", "it would be quicker to decide it here" — arises on every implementation. Declaring what is not owned gives the definition an answer to that incentive. Without the declaration, the same rule is copied into several places and diverges over time.
+
 ---
 
 ## 4. Engine Execution Semantics
@@ -223,6 +241,24 @@ When multiple Transitions exist for the same Event, they are evaluated in declar
 5. If no candidate succeeds, return `DISCARDED`, `REJECTED`, or `UNHANDLED` according to the outcome policy.
 
 Because Guard evaluation order is semantically significant, reordering definitions MUST be treated as a behavioral change.
+
+#### 4.2.1 Co-Satisfiable Candidates
+
+By step 4, candidates that were not selected are **neither evaluated nor observed**. When candidates are mutually exclusive, this is only a matter of efficiency. But when **two or more candidates for the same Event can hold at once**, only the selected candidate is recorded, and **the fact that another trigger also held leaves no trace**.
+
+When multiple candidates for the same Event can hold at once, those candidates MUST declare that they are co-satisfiable.
+
+The declaration contains at least:
+
+- **co_satisfiable_with**: the identifiers of the other candidates that can hold at the same time
+- **why_one_is_chosen**: why selecting a single candidate is nevertheless correct (identical effect, a precedence fixed by the domain, and so on)
+- **must_record**: those unselected candidates whose having held MUST be recorded
+
+For declared candidates, the engine or the Action MUST be able to retain **the set of candidates that held** in the outcome (Sections 6.1 and 12). Only the record is added; evaluation order and the meaning of selection are unchanged.
+
+Multiple triggers with the same effect MUST NOT be recorded under the name of the first matching candidate alone. When the record collapses to one, later analysis cannot distinguish "the other trigger did not hold" from "the other trigger held but was not recorded".
+
+> This gap is not a coding habit; it is a consequence of ordered evaluation. The specification elsewhere requires a **forensic minimum** (Section 10.2). Declaration and recording are required so that the execution semantics do not create a state that the specification demands be traceable. Where candidates cannot hold at once, no declaration is needed and this subsection imposes nothing.
 
 ### 4.3 Transition Execution Order
 
@@ -320,6 +356,17 @@ An Event that may indicate a missing definition SHOULD be `UNHANDLED` rather tha
 ### 6.3 Observability
 
 An Outcome SHOULD be associated with the current State, Event, selected Transition, Guard result, Action, target State, and reason.
+
+When co-satisfiable candidates are declared (Section 4.2.1), the outcome MUST be able to carry **the set of candidates that held in that cycle**. The standard outcomes describe the result of the single selected Transition; they **do not express how many triggers held**. The two MUST NOT be collapsed into the same field.
+
+### 6.4 Aggregation Keys and Their Meaning
+
+When outcomes or events are aggregated, the implementation SHOULD declare **what each aggregation key counts**.
+
+- A key's name may denote only a **subset** of what is actually being counted
+- Several events that increase for **different reasons** may be merged into a single key
+
+In either case, a reader of the key's value cannot determine what they are looking at. When a key is renamed or merged, the implementation SHOULD declare **its correspondence to the previous key**. Without that correspondence, a judgement that compares values across the change fails silently.
 
 ---
 
@@ -459,6 +506,84 @@ The same dependency on configuration also appears in a Guard's enforcement mode 
 
 > If the definition does not allow one to decide whether an invariant is broken or simply not claimed for the current configuration, an observed violation has no determinate meaning. A change that alters the meaning of a Context item also requires reviewing the invariants that reference it; recording the precondition makes those invariants traceable from the definition.
 
+### 10.4 Progress Invariants
+
+Every invariant listed in Section 10 states **something that must not happen**. A system can satisfy all of them and still **fail to move forward**. A state that holds only defined Transitions, and remains there because none of them fires, violates no invariant.
+
+Progress is not determined by the Transition graph of a single machine, because **the Event that leaves a state may be one that the machine cannot produce itself**. Progress therefore MUST be treated as a separate subject of declaration and verification.
+
+#### 10.4.1 Declaring Situations That Can Stall
+
+A **situation that can stall** is a state or condition which, once entered, cannot be left unless something external occurs.
+
+Such a situation MUST declare:
+
+- **exits**: the means of leaving it; at least one
+- **progress_measure**: the quantity that expresses whether progress is occurring (Section 10.4.3)
+- **if_no_exit**: what happens when none of the means takes effect
+
+The place of declaration is **not restricted to States**. In a design where a machine remains under the same condition without changing state, what creates the stall is **the Guard that keeps the Transition from succeeding**. In that case the declaration MUST be placed on the Guard. If States are fixed as the only place of declaration, this form of stall cannot be expressed.
+
+#### 10.4.2 Providers of Exits, and the Condition for Self-Help
+
+Each entry in `exits` MUST declare **the party that makes that means succeed**.
+
+- **provider**: `self` (it can be made to succeed by the machine itself), another Role, or **another instance of the same machine**
+- **waits_for**: when the provider is not `self`, the situation of the party being waited on
+- **requires_change_in**: the input that must change for the means to succeed, and the owner of that input
+
+Even when `provider` is `self`, if the owner named in `requires_change_in` is not the machine itself, the means is not self-help but **a dependency on another party**. **Repeating the same computation over the same inputs is not an exit.** When a retry is declared as an exit, the declaration MUST state **why the result will differ next time**.
+
+When a self-help means requires acquiring a resource, the implementation SHOULD declare **who can hold that resource**. If the resource can be held by a party in the dependency relation, that means does not succeed in that situation.
+
+#### 10.4.3 The Progress Measure
+
+A `progress_measure` MUST declare:
+
+- **quantity**: the quantity that expresses whether progress is occurring
+- **advances_when**: the condition under which the quantity advances
+- **resets_on**: the condition under which the quantity returns to its starting point
+
+`resets_on` MUST NOT include **operations the system itself performed in order to make progress**. In a design where the measure resets on each remedy or retry, **the more action is taken, the further away any mechanism triggered by that measure becomes**.
+
+A measure SHOULD be derived from **progress itself**. Deriving it from an internal classification or working state allows the measure to move while the externally observable situation does not change.
+
+#### 10.4.4 Cycles in the Dependency Graph
+
+The `waits_for` declarations form **a finite graph whose nodes are the situations that can stall**. This graph can be checked statically.
+
+- when the graph contains a cycle, that cycle MUST contain at least one self-help means **that can succeed within that cycle**
+- if every node of a cycle only waits on another party, the system **does not progress** once the cycle is entered
+- when a self-help means requires a resource that can be held by a node of the same cycle, that means MUST be counted as **not succeeding for that cycle**
+
+Cycles themselves are not prohibited. What is required is **the ability to distinguish a cycle that can be broken from one that cannot**.
+
+#### 10.4.5 Reachability of Exits
+
+The presence of an `exit` in a definition **does not mean the means is usable**. When another decision closes the entry to that means, a declared means never succeeds even once.
+
+Each entry in `exits` SHOULD carry **the declaration that makes it reachable** (an invariant or an equivalent identifier). When the referenced declaration does not exist, verification MUST treat that means as **one that does not succeed**.
+
+#### 10.4.6 Exits for Machines That Only Detect
+
+A machine that only **detects** an anomaly or a stall MUST declare **to whom the detected fact is handed**.
+
+A state in which detection occurs but no party owns the resolution is the archetypal form of a system that satisfies every invariant and still does not progress.
+
+#### 10.4.7 Attribution of Resolution
+
+When a situation that can stall is left, the implementation SHOULD record **by which means it was left**.
+
+Recording only that it was left makes it impossible to distinguish, after the fact, whether the mechanism took effect or an external circumstance happened to change. The breakdown of attributions is the only material with which the value of holding that mechanism can be measured.
+
+#### 10.4.8 Assumptions Behind Progress
+
+A claim of progress holds only under assumptions about the environment. Assumptions such as a periodic process continuing to run, or input continuing to arrive, SHOULD be declared as **the preconditions of progress**.
+
+When a precondition is written in absolute time, **its meaning changes in an environment whose execution rate differs from the time base of the subject system**. A precondition that involves time MUST state what that time is measured against.
+
+> Safety (what must not happen) is a property of the state space and can be checked on the Transition graph. Progress (that a state can eventually be left) depends on assumptions about the environment and is therefore not determined within a single machine. This section does not require a **proof** of progress. What it requires is that **no stall for which nobody holds the duty of exit exists in the definition**. That is a check over a finite graph and can be performed before implementation.
+
 ---
 
 ## 11. Verifiability
@@ -482,6 +607,33 @@ When definitions are structured, static analysis can detect:
 - a `cross_instance` invariant that lacks a participants, evaluator, or cadence declaration (Section 10.1)
 - a Guard that contains an approximation but lacks a `breaks_when` declaration (Section 3.6)
 - an invariant that references configuration-dependent Context items but lacks a validity precondition (Section 10.3)
+- multiple candidates for the same Event that can hold at once without a co-satisfiability declaration (Section 4.2.1)
+- a situation that can stall but lacks an `exits`, `progress_measure`, or `if_no_exit` declaration (Section 10.4.1)
+- an `exits` set whose only autonomous means is the passage of time (Section 10.4.2)
+- a `progress_measure` whose `resets_on` includes an operation of the system itself (Section 10.4.3)
+- a cycle in the dependency graph with no self-help means that can succeed within that cycle (Section 10.4.4)
+- a machine that only detects, without a declaration of where its findings are handed (Section 10.4.6)
+- an implementation that references a judgement its machine declared it does not own (Section 3.7)
+
+### 11.1.1 Conditions the Checks Themselves Must Meet
+
+Static analysis MUST NOT **silently drop its subject**.
+
+- it MUST report **the number of elements it examined** and **the forms it could not examine**
+- it MUST NOT return success when the subject set is empty; empty means "nothing has been checked yet", not "there is no problem"
+
+When definitions exist in more than one storage format or notation, a check MUST either handle all of them or **state explicitly which forms it did not handle**. A check that looks at only one form passes while overlooking the other.
+
+A check whose subject is the **structure** of an implementation — the position of a call, the number of branches, the order of statements — MUST declare in the check itself **what that structure protects**.
+
+A check that pins structure can fail on a refactoring that preserves intent. Without the declaration, the only remaining option is to weaken the failing check, and **the property that structure protected is lost silently**.
+
+A check that pins structure SHOULD carry controls in both directions:
+
+- **it does not fail on an implementation that changes the structure but preserves the intent**
+- **it does fail on an implementation that breaks the intent**
+
+One direction alone does not establish what the check protects.
 
 ### 11.2 What Static Analysis Alone Cannot Guarantee
 
@@ -640,6 +792,84 @@ Example of an ownership policy:
 }
 ```
 
+Example of judgements not owned (Section 3.7):
+
+```json
+{
+  "does_not_own": [
+    {
+      "judgement": "deciding whether a resource may be released",
+      "owned_by": "resource_registry.one_writer_per_resource",
+      "rationale": "the release decision is kept in one place on the resource side; re-deciding here puts the rule in two places"
+    },
+    {
+      "judgement": "measuring elapsed time",
+      "owned_by": "progress_watch.dwell_is_measured_by_position",
+      "rationale": "the definition of the measure is kept in one place; counting here creates a second measure"
+    }
+  ]
+}
+```
+
+Example of co-satisfiable candidates (Section 4.2.1):
+
+```json
+{
+  "event": "RETRY_WINDOW_ELAPSED",
+  "guard": "retry_budget_left",
+  "action": "discard_and_recompute",
+  "target_state": "FE_RECOMPUTING",
+  "co_satisfiable_with": ["escalation_selected"],
+  "why_one_is_chosen": "both perform the same operation (discard the current result), so one is sufficient",
+  "must_record": ["escalation_selected"]
+}
+```
+
+Example of a situation that can stall (Section 10.4):
+
+```json
+{
+  "situation": "FE_WAITING_BE",
+  "can_stall": true,
+  "progress_measure": {
+    "quantity": "number of confirmed chunks",
+    "advances_when": "a new chunk was confirmed",
+    "resets_on": ["session_restarted"]
+  },
+  "exits": [
+    {
+      "event": "CHUNK_CONFIRMED",
+      "provider": "other_role",
+      "of_role": "backend",
+      "waits_for": "BE_QUEUED.capacity_available"
+    },
+    {
+      "event": "DISCARD_AND_RECOMPUTE",
+      "provider": "self",
+      "requires_change_in": { "what": "the set of inputs", "owned_by": "self" },
+      "resource": { "what": "the scratch area used for recomputation", "held_by": [] },
+      "reachable_because": ["upload_policy.recompute_is_always_permitted"]
+    }
+  ],
+  "if_no_exit": "the session stays valid, makes no progress, and keeps holding its resource"
+}
+```
+
+Example of a check whose subject is structure (Section 11.1.1):
+
+```json
+{
+  "check": "resource_release_is_dominated_by_the_registry",
+  "target": "every place that calls release",
+  "protects": "that the decision to release is made in one place",
+  "pinned_structure": "a query to the registry appears before the release call",
+  "controls": {
+    "refactor_keeps_intent": "does not fail when the query is moved to the function entry",
+    "intent_broken": "fails when the query is removed"
+  }
+}
+```
+
 ---
 
 ## 14. Conformance Levels
@@ -658,6 +888,9 @@ An implementation conforms to Core SFA when it provides:
 - a declared validity range and breaking condition for every Guard that contains an approximation (Section 3.6)
 - a declared forensic minimum for every invariant it defines (Section 10.2)
 - a declared precondition wherever the validity of an invariant depends on configuration (Section 10.3)
+- a co-satisfiability declaration, and an outcome able to retain the candidates that held, wherever multiple candidates for the same Event can hold at once (Sections 4.2.1 and 6.3)
+- a declared `exits`, `progress_measure`, and `if_no_exit` for every situation that can stall (Section 10.4.1)
+- a declared provider for every entry in `exits`, and a declared `requires_change_in` wherever self-help is claimed (Section 10.4.2)
 
 ### 14.2 Distributed SFA
 
@@ -668,6 +901,10 @@ In addition to Core SFA, a Distributed SFA implementation provides:
 - inter-Role Events
 - request identity or an equivalent asynchronous consistency contract
 - a declared scope, participants, evaluator, and cadence for every `cross_instance` invariant (Section 10.1)
+- a declaration of the judgements not owned and where they are owned, wherever judgements are divided across machines (Section 3.7)
+- a declared `waits_for` for every stall whose exit provider is not the machine itself (Section 10.4.2)
+- a check that every cycle in the dependency graph can be broken (Section 10.4.4)
+- a declaration of where findings are handed, for every machine that only detects (Section 10.4.6)
 
 ### 14.3 Long-Running SFA
 
