@@ -301,7 +301,7 @@
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage154k-abyss-capacity-inventory-paging-20260730";
+const SFA_ROGUE_BUILD_ID = "stage154l-dark-smith-routing-boss-bag-threshold-20260730";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -579,6 +579,7 @@ const SFA_DEFINITIONS = {
       { event: "OPEN_OPTION_REROLL", guard: "has_dark_smith_reroll_candidates", action: "prepare_dark_smith_reroll_target", target_state: "FE_DARK_SMITH_REROLL_TARGET" },
       { event: "OPEN_OPTION_CHANGE", guard: "has_dark_smith_change_candidates", action: "prepare_dark_smith_change_target", target_state: "FE_DARK_SMITH_CHANGE_TARGET" },
       { event: "OPEN_DISMANTLE", action: "prepare_dark_smith_dismantle_menu", target_state: "FE_DARK_SMITH_DISMANTLE_MENU" },
+      { event: "DISMANTLE_TOWN_BATCH", guard: "has_town_dark_smith_dismantle_batch", action: "dismantle_town_dark_smith_batch", target_state: "FE_DARK_SMITH_MENU" },
       { event: "DISMANTLE_RECOMMENDED_BATCH", guard: "has_recommended_dark_smith_dismantle_batch", action: "dismantle_recommended_dark_smith_batch", target_state: "FE_DARK_SMITH_MENU" },
       { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
     ]
@@ -6349,6 +6350,7 @@ const guards = {
     const option = entry?.item?.options?.[ctx.darkSmithOptionIndex || 0];
     return Boolean(isCurrentEquipmentEntry(ctx, entry) && equipmentEligibleForStrengthening(entry.item) && option && ctx.forgeShards >= darkSmithMaterialCost(option));
   },
+  has_town_dark_smith_dismantle_batch: (ctx) => autoPatrolTownDismantleCandidates(ctx).length > 0,
   has_recommended_dark_smith_dismantle_batch: (ctx) => autoPatrolRecommendedDismantleEntries(ctx).length > 0,
   has_selected_dark_smith_dismantle_item: (ctx) => { const entry = ctx.darkSmithDismantleEntries[ctx.darkSmithDismantleSelectedIndex]; return Boolean(entry && isCurrentDarkSmithDismantleEntry(ctx, entry)); },
   has_selected_blacksmith_item: (ctx) => isCurrentEquipmentEntry(ctx, ctx.blacksmithEntries[ctx.blacksmithSelectedIndex]),
@@ -7070,6 +7072,24 @@ const actions = {
     collection.splice(stagedEntry.index, 1);
     staged.forgeShards += stagedEntry.yield;
     addLog(staged, `Dismantled ${stagedEntry.item.name} from ${stagedEntry.source === 'home' ? 'home storage' : 'the bag'} into ${stagedEntry.yield} Forge Shard${stagedEntry.yield === 1 ? '' : 's'}.`);
+    commitDarkSmithActionStagingContext(ctx, staged);
+  },
+  dismantle_town_dark_smith_batch: (ctx) => {
+    const recommendations = autoPatrolTownDismantleCandidates(ctx).slice(0, EQUIPMENT_SELECTION_CONFIG.dismantleBatchSize);
+    if (!recommendations.length) return;
+    const staged = createDarkSmithActionStagingContext(ctx);
+    const inventoryIds = new Set(recommendations.filter(entry => entry.source === 'inventory').map(entry => entry.item.instanceId));
+    const homeIds = new Set(recommendations.filter(entry => entry.source === 'home').map(entry => entry.item.instanceId));
+    const removed = [
+      ...staged.equipmentInventory.filter(item => inventoryIds.has(item.instanceId)),
+      ...staged.homeStorage.equipment.filter(item => homeIds.has(item.instanceId))
+    ];
+    if (!removed.length) return;
+    staged.equipmentInventory = staged.equipmentInventory.filter(item => !inventoryIds.has(item.instanceId));
+    staged.homeStorage.equipment = staged.homeStorage.equipment.filter(item => !homeIds.has(item.instanceId));
+    const shardYield = removed.reduce((sum, item) => sum + dismantleYield(item), 0);
+    staged.forgeShards += shardYield;
+    addLog(staged, `Dark Smith batch-dismantled ${removed.length} Rare-or-higher equipment item${removed.length === 1 ? '' : 's'} for ${shardYield} Forge Shard${shardYield === 1 ? '' : 's'}.`);
     commitDarkSmithActionStagingContext(ctx, staged);
   },
   dismantle_recommended_dark_smith_batch: (ctx) => {
@@ -10028,6 +10048,7 @@ function autoPatrolTownObjectiveDecision(ctx, frontendState) {
 
 const AUTO_PATROL_TOWN_CONFIG = Object.freeze({
   freeInventorySlots: 3,
+  bossReturnInventoryUsageRatio: 0.40,
   restHpRatio: 0.95,
   restHungerRatio: 0.80,
   requiredReturnScrollGold: 5000,
@@ -10042,11 +10063,17 @@ const AUTO_PATROL_TOWN_CONFIG = Object.freeze({
 function autoPatrolHasRareEquipmentOption(item) {
   return (item?.options || []).some(option => (RARITY_RANK[option?.rarity] || 0) >= RARITY_RANK.rare);
 }
+function autoPatrolEquipmentRequiresDarkSmithDismantle(item) {
+  return Boolean(item) && ((RARITY_RANK[item?.rarity] || 0) >= RARITY_RANK.rare || autoPatrolHasRareEquipmentOption(item));
+}
 function autoPatrolTownShouldStoreEquipment(ctx, item) {
   if (!item) return false;
   if (equipmentHasPerfectUltraOptions(item)) return true;
   const protectedIds = new Set(equipmentRecommendations(ctx).map(recommendation => recommendation.candidate.instanceId));
   if (protectedIds.has(item.instanceId)) return true;
+  // Before the Dark Smith is unlocked, preserve valuable material at home.
+  // Once unlocked, non-protected Rare-or-higher material is routed there for dismantling.
+  if (!hasClearedBlacksmithMilestone(ctx) && autoPatrolEquipmentRequiresDarkSmithDismantle(item)) return true;
   return false;
 }
 function autoPatrolTownStorageCandidates(ctx) {
@@ -10068,8 +10095,27 @@ function autoPatrolTownDisposableEntries(ctx) {
       : !autoPatrolTownShouldKeepWithoutHome(ctx, item, protectedIds))
     .sort(compareEquipmentForInventoryEviction);
 }
+function autoPatrolTownDismantleCandidates(ctx) {
+  if (!hasClearedBlacksmithMilestone(ctx)) return [];
+  const protectedIds = new Set(equipmentRecommendations(ctx).map(recommendation => recommendation.candidate.instanceId));
+  const bagEntries = autoPatrolTownDisposableEntries(ctx)
+    .filter(({ item }) => autoPatrolEquipmentRequiresDarkSmithDismantle(item))
+    .map(entry => ({ source: 'inventory', ...entry }));
+  const homeEntries = (ctx.homeStorage?.equipment || []).map((item, index) => ({ source: 'home', item, index }))
+    .filter(({ item }) => !equipmentHasPerfectUltraOptions(item)
+      && !protectedIds.has(item.instanceId)
+      && autoPatrolEquipmentRequiresDarkSmithDismantle(item));
+  return [...bagEntries, ...homeEntries].sort((left, right) => {
+    const rarityDifference = (RARITY_RANK[left.item?.rarity] || 0) - (RARITY_RANK[right.item?.rarity] || 0);
+    if (rarityDifference) return rarityDifference;
+    const optionDifference = equipmentOptionRarityScore(left.item) - equipmentOptionRarityScore(right.item);
+    if (optionDifference) return optionDifference;
+    return String(left.item?.instanceId || '').localeCompare(String(right.item?.instanceId || ''));
+  });
+}
 function autoPatrolTownSaleCandidates(ctx) {
-  return autoPatrolTownDisposableEntries(ctx);
+  return autoPatrolTownDisposableEntries(ctx)
+    .filter(({ item }) => !autoPatrolEquipmentRequiresDarkSmithDismantle(item));
 }
 function autoPatrolTownDesiredShopPurchase(ctx) {
   if (ctx.player.returnScrolls < 1) {
@@ -10111,14 +10157,14 @@ function autoPatrolTownNeedsRest(ctx) {
     || ctx.player.hunger < BALANCE_CONFIG.fullHunger * AUTO_PATROL_TOWN_CONFIG.restHungerRatio;
 }
 function autoPatrolTownInventoryNeedsCleanup(ctx) {
-  return autoPatrolTownDisposableEntries(ctx).length > 0;
+  return autoPatrolTownSaleCandidates(ctx).length > 0;
 }
 function autoPatrolTownNeedsEquipmentRecommendation(ctx) {
   return Boolean(ctx.homePurchased && equipmentRecommendations(ctx).length > 0);
 }
 function autoPatrolTownNeedsDarkSmithProcessing(ctx) {
   return Boolean(hasClearedBlacksmithMilestone(ctx)
-    && autoPatrolEliteOptionUpgradeTarget(ctx));
+    && (autoPatrolTownDismantleCandidates(ctx).length > 0 || autoPatrolEliteOptionUpgradeTarget(ctx)));
 }
 function autoPatrolTownNeedsGoldDeposit(ctx) {
   const depositableGold = Math.max(0, ctx.player.gold - autoPatrolTownReservedGold());
@@ -10197,6 +10243,9 @@ function autoPatrolTownMenuDecision(ctx, frontendState) {
     return { kind: "DISPATCH", event: "SELECT", reason: `town-shop-buy-${target.reason}` };
   }
   if (frontendState === "FE_DARK_SMITH_MENU") {
+    if (autoPatrolTownDismantleCandidates(ctx).length > 0) {
+      return { kind: "DISPATCH", event: "DISMANTLE_TOWN_BATCH", reason: "town-dark-smith-dismantle-rare-batch" };
+    }
     const upgrade = autoPatrolEliteOptionUpgradeTarget(ctx);
     if (!upgrade) return { kind: "DISPATCH", event: "ESCAPE", reason: "town-dark-smith-finished" };
     const entryIndex = ctx.darkSmithMenuEntries.findIndex(entry => entry.source === upgrade.entry.source && entry.item?.instanceId === upgrade.entry.item.instanceId);
@@ -11760,12 +11809,22 @@ async function autoPatrolCreateSafeFloorBombTrapPlan(ctx) {
   return candidates[0] ? { events:candidates[0].events.slice(), targetId:candidates[0].targetId, createdDepth:ctx.depth } : null;
 }
 function decideAutoPatrolAction(ctx, frontendState) { return decideAutoPatrolBaseAction(ctx, frontendState); }
+function autoPatrolInventoryUsageRatio(ctx) {
+  return (ctx?.equipmentInventory?.length || 0) / Math.max(1, Number(ctx?.inventoryCapacity) || 1);
+}
+function autoPatrolCurrentFloorIsBossFloor(ctx) {
+  if (ctx?.currentMapType !== 'dungeon') return false;
+  return ctx.dungeonMode === 'abyss'
+    ? ctx.depth > 0 && ctx.depth % ABYSS_CONFIG.bossInterval === 0
+    : ctx.depth > 0 && ctx.depth % 5 === 0;
+}
 function autoPatrolBossFloorShouldReturnToTown(ctx) {
-  return Boolean(ctx.currentMapType === "dungeon"
-    && ctx.dungeonMode === "standard"
-    && (ctx.pendingBossTownServiceFloors || []).includes(ctx.depth)
-    && ctx.enemies.length === 0
-    && ctx.equipmentInventory.length >= 3);
+  const hasReturnPortal = Object.values(ctx?.tiles || {}).includes('town_warp');
+  return Boolean(autoPatrolCurrentFloorIsBossFloor(ctx)
+    && hasReturnPortal
+    && (ctx.enemies || []).length === 0
+    && !autoPatrolHasPendingFloorCleanup(ctx)
+    && autoPatrolInventoryUsageRatio(ctx) > AUTO_PATROL_TOWN_CONFIG.bossReturnInventoryUsageRatio);
 }
 function autoPatrolBossReturnPortals(ctx) {
   if (!autoPatrolBossFloorShouldReturnToTown(ctx)) return [];
