@@ -301,7 +301,7 @@
     </div>
 
 <script>
-const SFA_ROGUE_BUILD_ID = "stage154j-perfect-equipment-lock-policy-20260729";
+const SFA_ROGUE_BUILD_ID = "stage154k-abyss-capacity-inventory-paging-20260730";
 const SFA_ROGUE_CACHE_POLICY = Object.freeze({
   cacheControl: "no-store, no-cache, must-revalidate, max-age=0",
   versionParameter: "sfa_build",
@@ -492,6 +492,10 @@ const SFA_DEFINITIONS = {
     next_transitions: [
       { event: "MENU_UP", action: "inventory_cursor_up", target_state: "FE_INVENTORY_MENU" },
       { event: "MENU_DOWN", action: "inventory_cursor_down", target_state: "FE_INVENTORY_MENU" },
+      { event: "PAGE_UP", action: "inventory_page_previous", target_state: "FE_INVENTORY_MENU" },
+      { event: "PAGE_DOWN", action: "inventory_page_next", target_state: "FE_INVENTORY_MENU" },
+      { event: "MOVE_LEFT", action: "inventory_page_previous", target_state: "FE_INVENTORY_MENU" },
+      { event: "MOVE_RIGHT", action: "inventory_page_next", target_state: "FE_INVENTORY_MENU" },
       { event: "SELECT", guard: "has_selected_inventory_equipment", action: "equip_selected_inventory", target_state: "FE_INVENTORY_MENU" },
       { event: "ESCAPE", target_state: "FE_PLAYER_TURN" }
     ]
@@ -766,7 +770,7 @@ const INPUT_EVENT_BY_MODE = {
     ArrowUp: "MOVE_UP", ArrowDown: "MOVE_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT",
     " ": "PLACE_BOMB", ".": "PASS", i: "OPEN_INVENTORY", I: "OPEN_INVENTORY", r: "USE_RETURN_SCROLL", R: "USE_RETURN_SCROLL", Enter: "INTERACT", Escape: "ESCAPE"
   },
-  "inventory-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
+  "inventory-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", PageUp: "PAGE_UP", PageDown: "PAGE_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
   "list-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
   "paged-list-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", PageUp: "PAGE_UP", PageDown: "PAGE_DOWN", Enter: "SELECT", Escape: "ESCAPE" },
   "portal-menu": { ArrowUp: "MENU_UP", ArrowDown: "MENU_DOWN", ArrowLeft: "MOVE_LEFT", ArrowRight: "MOVE_RIGHT", Enter: "SELECT", Escape: "ESCAPE" },
@@ -2418,6 +2422,8 @@ function autoPatrolEliteLevelUpgradeTarget(ctx) {
 const HOME_CONFIG = { purchasePrice: 10000, storagePageSize: 10, goldTransferPresets: [100, 1000, 10000, 100000, Infinity] };
 const PORTAL_MENU_CONFIG = Object.freeze({ pageSize: 8 });
 const FACILITY_LIST_CONFIG = Object.freeze({ pageSize: 5 });
+const INVENTORY_MENU_CONFIG = Object.freeze({ pageSize: 5 });
+const ABYSS_INVENTORY_REWARD_CONFIG = Object.freeze({ bossInterval: 10, capacityPerFirstBoss: 10 });
 
 function pagedSelectionWindow(entries, selectedIndex, pageSize) {
   const safeEntries = Array.isArray(entries) ? entries : [];
@@ -2482,8 +2488,19 @@ function equipmentLevelCap(ctx) {
 function inventoryCapacityForLevel(level) {
   return 8 + Math.floor(Math.max(1, Number(level) || 1) / 100);
 }
+function abyssInventoryCapacityRewardCount(defeatedAbyssBossFloors) {
+  return uniqueSortedPortalFloors(defeatedAbyssBossFloors)
+    .filter(floor => floor % ABYSS_INVENTORY_REWARD_CONFIG.bossInterval === 0)
+    .length;
+}
+function abyssInventoryCapacityBonus(defeatedAbyssBossFloors) {
+  return abyssInventoryCapacityRewardCount(defeatedAbyssBossFloors) * ABYSS_INVENTORY_REWARD_CONFIG.capacityPerFirstBoss;
+}
+function inventoryCapacityForProgress(level, defeatedAbyssBossFloors = []) {
+  return inventoryCapacityForLevel(level) + abyssInventoryCapacityBonus(defeatedAbyssBossFloors);
+}
 function synchronizeInventoryCapacity(ctx) {
-  ctx.inventoryCapacity = inventoryCapacityForLevel(ctx?.player?.level);
+  ctx.inventoryCapacity = inventoryCapacityForProgress(ctx?.player?.level, ctx?.defeatedAbyssBossFloors);
   return ctx.inventoryCapacity;
 }
 
@@ -4240,6 +4257,7 @@ function commitEnemyDefeatStagingContext(ctx, staged) {
   ctx.defeatedAbyssBossFloors = staged.defeatedAbyssBossFloors;
   ctx.discoveredWarpFloors = staged.discoveredWarpFloors;
   ctx.pendingBossTownServiceFloors = staged.pendingBossTownServiceFloors;
+  ctx.inventoryCapacity = staged.inventoryCapacity;
   ctx.equipmentInstanceSequence = staged.equipmentInstanceSequence;
   ctx.lastFloorExitLifecycleDecision = staged.lastFloorExitLifecycleDecision;
 }
@@ -4364,8 +4382,18 @@ function defeatEnemy(ctx, target, source = 'combat') {
     }
   }
   if (target.isAbyssBoss) {
-    if (!staged.defeatedAbyssBossFloors.includes(target.abyssBossFloor)) staged.defeatedAbyssBossFloors.push(target.abyssBossFloor);
-    addLog(staged, `Guardian of A${target.abyssBossFloor} defeated!`);
+    const firstAbyssBossDefeat = !staged.defeatedAbyssBossFloors.includes(target.abyssBossFloor);
+    let capacityGain = 0;
+    if (firstAbyssBossDefeat) {
+      staged.defeatedAbyssBossFloors.push(target.abyssBossFloor);
+      staged.defeatedAbyssBossFloors.sort((a, b) => a - b);
+      const previousCapacity = staged.inventoryCapacity;
+      synchronizeInventoryCapacity(staged);
+      capacityGain = staged.inventoryCapacity - previousCapacity;
+    }
+    addLog(staged, capacityGain > 0
+      ? `Guardian of A${target.abyssBossFloor} defeated for the first time! Bag capacity +${capacityGain} (${staged.inventoryCapacity} total).`
+      : `Guardian of A${target.abyssBossFloor} defeated!`);
   } else if (target.isBoss) {
     if (!staged.defeatedBossFloors.includes(target.bossFloor)) staged.defeatedBossFloors.push(target.bossFloor);
     addLog(staged, `Guardian of B${target.bossFloor} defeated!`);
@@ -6031,7 +6059,7 @@ function buildSaveSnapshot(ctx, savedAt = new Date().toISOString()) {
         weapon: serializeEquipment(ctx.player.weapon), armor: serializeEquipment(ctx.player.armor)
       },
       equipmentInventory: ctx.equipmentInventory.map(item => serializeEquipment(item)),
-      inventoryCapacity: inventoryCapacityForLevel(ctx.player.level), homePurchased: Boolean(ctx.homePurchased),
+      inventoryCapacity: inventoryCapacityForProgress(ctx.player.level, ctx.defeatedAbyssBossFloors), homePurchased: Boolean(ctx.homePurchased),
       homeStorage: { equipment: (ctx.homeStorage?.equipment || []).map(item => serializeEquipment(item)), gold: ctx.homeStorage?.gold || 0 },
       forgeShards: ctx.forgeShards || 0, maxReachedDepth: ctx.maxReachedDepth || 0,
       maxReachedAbyssDepth: ctx.maxReachedAbyssDepth || 0,
@@ -6107,7 +6135,7 @@ function validateSaveSnapshot(save) {
   validateEquipment(player?.weapon, "payload.player.weapon", errors);
   validateEquipment(player?.armor, "payload.player.armor", errors);
   if (!Array.isArray(payload?.equipmentInventory) || payload.equipmentInventory.length > SAVE_NUMERIC_LIMITS.maxEquipmentEntries) errors.push("payload.equipmentInventory"); else payload.equipmentInventory.forEach((item, index) => validateEquipment(item, `payload.equipmentInventory[${index}]`, errors));
-  const expectedInventoryCapacity = validateSafePositiveInteger(player?.level) ? inventoryCapacityForLevel(player.level) : null;
+  const expectedInventoryCapacity = validateSafePositiveInteger(player?.level) ? inventoryCapacityForProgress(player.level, payload?.defeatedAbyssBossFloors) : null;
   if (!validateSafePositiveInteger(payload?.inventoryCapacity) || payload.inventoryCapacity > SAVE_NUMERIC_LIMITS.maxEquipmentEntries || (payload.equipmentInventory?.length || 0) > expectedInventoryCapacity || (expectedInventoryCapacity != null && payload.inventoryCapacity > expectedInventoryCapacity)) errors.push("payload.inventoryCapacity");
   if (typeof payload?.homePurchased !== "boolean") errors.push("payload.homePurchased");
   if (!Array.isArray(payload?.homeStorage?.equipment) || payload.homeStorage.equipment.length > SAVE_NUMERIC_LIMITS.maxEquipmentEntries) errors.push("payload.homeStorage.equipment"); else payload.homeStorage.equipment.forEach((item, index) => validateEquipment(item, `payload.homeStorage.equipment[${index}]`, errors));
@@ -6198,10 +6226,11 @@ function applyPersistentPayload(ctx, payload) {
   ctx.player.hunger = BALANCE_CONFIG.fullHunger; ctx.player.weapon = deserializeEquipment(player.weapon); ctx.player.armor = deserializeEquipment(player.armor);
   ctx.player.bombCapacity = player.bombCapacity; ctx.player.bombRange = player.bombRange;
   ctx.player.bombRangeShopPurchases = player.bombRangeShopPurchases; ctx.player.bombCapacityShopPurchases = player.bombCapacityShopPurchases; ctx.player.returnScrolls = player.returnScrolls;
-  ctx.equipmentInventory = payload.equipmentInventory.map(deserializeEquipment); synchronizeInventoryCapacity(ctx);
+  ctx.equipmentInventory = payload.equipmentInventory.map(deserializeEquipment);
   ctx.homePurchased = payload.homePurchased; ctx.homeStorage = { equipment: payload.homeStorage.equipment.map(deserializeEquipment), gold: payload.homeStorage.gold };
   ctx.forgeShards = payload.forgeShards; ctx.maxReachedDepth = payload.maxReachedDepth; ctx.maxReachedAbyssDepth = payload.maxReachedAbyssDepth;
   ctx.defeatedBossFloors = [...payload.defeatedBossFloors]; ctx.defeatedAbyssBossFloors = [...payload.defeatedAbyssBossFloors];
+  synchronizeInventoryCapacity(ctx);
   ctx.discoveredWarpFloors = [...payload.discoveredWarpFloors];
   ctx.pendingBossTownServiceFloors = [...(payload.pendingBossTownServiceFloors || [])];
   ctx.warpDestinations = [1, ...ctx.discoveredWarpFloors];
@@ -6763,6 +6792,12 @@ const actions = {
   },
   inventory_cursor_down: (ctx) => {
     ctx.inventorySelectedIndex = Math.min(Math.max(0, ctx.equipmentInventory.length - 1), ctx.inventorySelectedIndex + 1);
+  },
+  inventory_page_previous: (ctx) => {
+    ctx.inventorySelectedIndex = movePagedSelection(ctx.inventorySelectedIndex, ctx.equipmentInventory.length, INVENTORY_MENU_CONFIG.pageSize, -1);
+  },
+  inventory_page_next: (ctx) => {
+    ctx.inventorySelectedIndex = movePagedSelection(ctx.inventorySelectedIndex, ctx.equipmentInventory.length, INVENTORY_MENU_CONFIG.pageSize, 1);
   },
   equip_selected_inventory: (ctx) => {
     const selected = ctx.equipmentInventory[ctx.inventorySelectedIndex];
@@ -14432,7 +14467,7 @@ function render(state, ctxGame) {
   // 3. メニューオーバレイ制御（projection policyに従って画面を完全ロック）
   const overlay = document.getElementById("overlay");
   const overlayMode = PROJECTION_POLICY[state] ? PROJECTION_POLICY[state].overlay : null;
-  const facilityOverlayModes = new Set(["warp", "blacksmith", "dark-smith", "dark-smith-reroll-target", "dark-smith-change-target", "dark-smith-change-partner", "dark-smith-dismantle"]);
+  const facilityOverlayModes = new Set(["inventory", "warp", "blacksmith", "dark-smith", "dark-smith-reroll-target", "dark-smith-change-target", "dark-smith-change-partner", "dark-smith-dismantle"]);
   overlay.className = overlayMode === "home" ? "home-overlay" : (facilityOverlayModes.has(overlayMode) ? "facility-overlay" : "");
   if (overlayMode === "boot") {
     overlay.style.display = "flex";
@@ -14471,27 +14506,27 @@ function render(state, ctxGame) {
     overlay.innerHTML = `<div class="menu-title">RETURN TO TITLE?</div><p style='font-size:12px;color:#ffcc88;'>Progress since the last successful inn save will be lost.</p><div style='line-height:2;text-align:left;'><div>${marker(0)}Continue playing</div><div>${marker(1)}Return without saving</div></div><p style='font-size:10px;color:#888;'>[Esc]: Continue playing</p>`;
   } else if (overlayMode === "inventory") {
     overlay.style.display = "flex";
-    const selected = ctxGame.equipmentInventory[ctxGame.inventorySelectedIndex] || null;
-    const equipmentRows = ctxGame.equipmentInventory.length > 0
-      ? ctxGame.equipmentInventory.map((item, idx) => {
-          const stat = item.type === "weapon" ? `ATK ${item.atk}` : `DEF ${item.def}`;
-          return `<div class="inventory-item ${raritySelectionClasses(item.rarity, idx === ctxGame.inventorySelectedIndex, true)}">${escapeHtml(item.name)} [Equipment Lv.${item.equipmentLevel || 1} / ${stat}]<br><span style="font-size:9px;">Mastery ${item.masteryLevel || 0} EXP ${item.masteryExp || 0}/${equipmentMasteryExpToNextRank(item.masteryLevel || 0)} / ${coloredEquipmentOptionInlineSummary(item)}</span></div>`;
-        }).join("")
-      : `<div class="inventory-item" style="color:#777;">No stored equipment.</div>`;
-    let comparison = "Select stored equipment to compare.";
+    const page = pagedSelectionWindow(ctxGame.equipmentInventory, ctxGame.inventorySelectedIndex, INVENTORY_MENU_CONFIG.pageSize);
+    const selected = ctxGame.equipmentInventory[page.selectedIndex] || null;
+    const equipmentRows = page.entries.map(({ entry: item, globalIndex }) => {
+      const stat = item.type === "weapon" ? `ATK ${item.atk}` : `DEF ${item.def}`;
+      return `<div class="facility-row ${raritySelectionClasses(item.rarity, globalIndex === page.selectedIndex)}" data-inventory-index="${globalIndex}">${coloredEquipmentName(item)} · Lv.${item.equipmentLevel || 1} · ${stat}</div>`;
+    }).join("") || `<div class="facility-row" style="color:#777;">No carried equipment.</div>`;
+    const baseCapacity = inventoryCapacityForLevel(ctxGame.player.level);
+    const abyssBonus = abyssInventoryCapacityBonus(ctxGame.defeatedAbyssBossFloors);
+    let detail = `<div class="facility-detail-heading">No carried equipment</div><div class="facility-card">Defeat an Abyss guardian for the first time at every 10th floor to gain +${ABYSS_INVENTORY_REWARD_CONFIG.capacityPerFirstBoss} bag capacity.</div>`;
     if (selected) {
       const current = selected.type === "weapon" ? ctxGame.player.weapon : ctxGame.player.armor;
       const key = selected.type === "weapon" ? "atk" : "def";
+      const statLabel = key.toUpperCase();
       const diff = selected[key] - current[key];
       const diffClass = diff > 0 ? "inventory-positive" : (diff < 0 ? "inventory-negative" : "");
-      comparison = `${selected.type.toUpperCase()}: ${coloredEquipmentName(current)} ${current[key]} → ${coloredEquipmentName(selected)} ${selected[key]} <span class="${diffClass}">(${diff >= 0 ? '+' : ''}${diff})</span><br>Current option: ${coloredEquipmentOptionInlineSummary(current)}<br>Candidate option: ${coloredEquipmentOptionInlineSummary(selected)}`;
+      detail = `<div class="facility-detail-heading">${selected.type.toUpperCase()} COMPARISON</div>
+        <div class="facility-card"><div class="facility-card-label">Selected bag item</div><div>${coloredEquipmentName(selected)}</div><div>${statLabel} ${selected[key]} · Equipment Lv.${selected.equipmentLevel || 1} · Mastery ${selected.masteryLevel || 0}</div><div class="smith-option-list">${coloredEquipmentOptionSummary(selected)}</div></div>
+        <div class="facility-card"><div class="facility-card-label">Currently equipped</div><div>${coloredEquipmentName(current)}</div><div>${statLabel} ${current[key]} · Equipment Lv.${current.equipmentLevel || 1} · Mastery ${current.masteryLevel || 0}</div><div class="smith-option-list">${coloredEquipmentOptionSummary(current)}</div></div>
+        <div class="facility-card"><div class="facility-action" style="margin-top:0;padding-top:0;border-top:0;"><span>${statLabel} difference</span><b class="${diffClass}">${diff >= 0 ? '+' : ''}${diff}</b></div><div class="facility-action"><span>Equip selected item</span><b>[Enter]</b></div></div>`;
     }
-    overlay.innerHTML = `<div class="menu-title">EQUIPMENT & STATUS</div><div class="inventory-panel"><div class="inventory-equipped"><div>Weapon: ${coloredEquipmentName(ctxGame.player.weapon)} / Equipment Lv.${ctxGame.player.weapon.equipmentLevel || 1} / Mastery ${ctxGame.player.weapon.masteryLevel || 0} EXP ${ctxGame.player.weapon.masteryExp || 0}/${equipmentMasteryExpToNextRank(ctxGame.player.weapon.masteryLevel || 0)} / ATK ${ctxGame.player.weapon.atk} / ${coloredEquipmentOptionInlineSummary(ctxGame.player.weapon)}</div><div>Armor: ${coloredEquipmentName(ctxGame.player.armor)} / Equipment Lv.${ctxGame.player.armor.equipmentLevel || 1} / Mastery ${ctxGame.player.armor.masteryLevel || 0} EXP ${ctxGame.player.armor.masteryExp || 0}/${equipmentMasteryExpToNextRank(ctxGame.player.armor.masteryLevel || 0)} / DEF ${ctxGame.player.armor.def} / ${coloredEquipmentOptionInlineSummary(ctxGame.player.armor)}</div><div>HP ${Math.floor(ctxGame.player.hp)}/${Math.floor(ctxGame.player.maxHp)} | Hunger ${Math.min(100, Math.floor(ctxGame.player.hunger))} | Bomb SET ${ctxGame.player.bombCapacity} RNG ${ctxGame.player.bombRange}</div><div>Status: ${(ctxGame.player.statusEffects?.poisonTurns || 0) > 0 ? `Poison ${ctxGame.player.statusEffects.poisonTurns} turns` : 'Normal'}</div></div><div>Stored equipment ${ctxGame.equipmentInventory.length}/${ctxGame.inventoryCapacity}</div><div id="inventory-list" class="inventory-list">${equipmentRows}</div><div class="inventory-comparison">${comparison}</div></div><p style='font-size:10px; color:#888;'>[↑/↓]: Cursor | [Enter]: Equip | [S]: Sell | [Esc]: Close</p>`;
-    const inventoryList = document.getElementById('inventory-list');
-    if (inventoryList && typeof inventoryList.querySelector === 'function') {
-      const selectedRow = inventoryList.querySelector('.inventory-item.selected');
-      if (selectedRow && typeof selectedRow.scrollIntoView === 'function') selectedRow.scrollIntoView({ block: 'nearest' });
-    }
+    overlay.innerHTML = `<div class="facility-shell"><div class="menu-title">EQUIPMENT & STATUS</div><div class="facility-summary"><span>HP ${Math.floor(ctxGame.player.hp)}/${Math.floor(ctxGame.player.maxHp)} · Hunger ${Math.min(100, Math.floor(ctxGame.player.hunger))} · Bag ${ctxGame.equipmentInventory.length}/${ctxGame.inventoryCapacity}</span><span>Base ${baseCapacity} + Abyss ${abyssBonus} · Page ${page.pageNumber}/${page.pageCount}</span></div><div class="facility-main"><section class="facility-list-panel"><div class="facility-panel-title">CARRIED EQUIPMENT</div><div class="facility-list">${equipmentRows}</div></section><section class="facility-detail-panel"><div class="facility-panel-title">DETAIL / COMPARISON</div><div class="facility-detail">${detail}</div></section></div><div class="facility-help">[↑/↓] Select · [←/→ or PgUp/PgDn] Page · [Enter] Equip · [Esc] Close</div></div>`;
   } else if (overlayMode === "shop") {
     overlay.style.display = "flex";
     let menuItemsHtml = ctxGame.shopInventory.map((item, idx) => {
