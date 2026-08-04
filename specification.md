@@ -582,6 +582,17 @@ A claim of progress holds only under assumptions about the environment. Assumpti
 
 When a precondition is written in absolute time, **its meaning changes in an environment whose execution rate differs from the time base of the subject system**. A precondition that involves time MUST state what that time is measured against.
 
+A mechanism triggered by the passage of time — a periodic sweep, the detection of quiescence, the expiry of a holding period — carries the assumption that **the clock measuring that passage advances**. This assumption SHOULD be declared as:
+
+- **which clock measures it** (the clock of the system, a clock provided by the execution environment, an external cadence)
+- **the conditions under which that clock advances**
+
+The execution environment can change how this clock advances. In an execution unit placed in the background, one whose resources are constrained, or one running under replay or acceleration, **the same definition does not necessarily advance at the same rate**.
+
+Therefore, when a mechanism triggered by the passage of time is observed in order to judge it, it SHOULD be confirmed **before the judgement** that the clock is advancing at the assumed rate.
+
+An observation that omits this confirmation cannot distinguish **that no progress occurred** from **that the condition for progress did not hold in the observing environment**. The error that appears in this case points in the direction of the mechanism not working, and therefore **creates a motive to change a correct implementation**. Unless the assumption is confirmed first, changing the implementation leaves the symptom unchanged, and whether the change was warranted cannot be judged either.
+
 > Safety (what must not happen) is a property of the state space and can be checked on the Transition graph. Progress (that a state can eventually be left) depends on assumptions about the environment and is therefore not determined within a single machine. This section does not require a **proof** of progress. What it requires is that **no stall for which nobody holds the duty of exit exists in the definition**. That is a check over a finite graph and can be performed before implementation.
 
 ---
@@ -613,7 +624,9 @@ When definitions are structured, static analysis can detect:
 - a `progress_measure` whose `resets_on` includes an operation of the system itself (Section 10.4.3)
 - a cycle in the dependency graph with no self-help means that can succeed within that cycle (Section 10.4.4)
 - a machine that only detects, without a declaration of where its findings are handed (Section 10.4.6)
+- a mechanism triggered by the passage of time, without a declaration of the clock that measures it and the conditions under which that clock advances (Section 10.4.8)
 - an implementation that references a judgement its machine declared it does not own (Section 3.7)
+- a control on the intent-breaking side that lacks a declaration of the diagnostic it expects (Section 11.1.1)
 
 ### 11.1.1 Conditions the Checks Themselves Must Meet
 
@@ -621,6 +634,11 @@ Static analysis MUST NOT **silently drop its subject**.
 
 - it MUST report **the number of elements it examined** and **the forms it could not examine**
 - it MUST NOT return success when the subject set is empty; empty means "nothing has been checked yet", not "there is no problem"
+- it MUST NOT collapse **the absence of a subject** and **the check's failure to reach its subject** into the same result. When the subject could not be reached, the check MUST report **unreachable**, which is neither success nor failure
+
+When the existence of the subject is determined outside the check — when the subject is a running system, an external surface, or a generated artifact — the check SHOULD declare **how it identified the subject** and **by what independent path it confirmed that the subject exists**.
+
+When absence and unreachability are collapsed, a report of "no subject" is read as **the subject being absent rather than the check being defective**. Such a report is not treated as a failure, and **subjects that were never examined pass alongside those that were**.
 
 When definitions exist in more than one storage format or notation, a check MUST either handle all of them or **state explicitly which forms it did not handle**. A check that looks at only one form passes while overlooking the other.
 
@@ -634,6 +652,12 @@ A check that pins structure SHOULD carry controls in both directions:
 - **it does fail on an implementation that breaks the intent**
 
 One direction alone does not establish what the check protects.
+
+The control on the intent-breaking side is **not satisfied by the mere fact that it failed**. Such a control MUST declare **the diagnostic that is expected to appear for that particular way of breaking the intent** — the name of the failing item, the identifier of the diagnostic, the kind of failure, or an equivalent. A control that fails for a reason other than the one declared MUST NOT be treated as passing.
+
+A control that does not examine the reason **is also satisfied by a defect in the check itself**. If the procedure that breaks the intent is itself wrong, or if it does not break the subject at all, the condition is still met as long as some failure occurs. The number of controls then grows while **the set of properties actually established does not**.
+
+When several controls **all fail for the same reason**, they do not break the intent independently. The number of controls MUST NOT be used as evidence for the breadth of what was established.
 
 ### 11.2 What Static Analysis Alone Cannot Guarantee
 
@@ -865,7 +889,12 @@ Example of a check whose subject is structure (Section 11.1.1):
   "pinned_structure": "a query to the registry appears before the release call",
   "controls": {
     "refactor_keeps_intent": "does not fail when the query is moved to the function entry",
-    "intent_broken": "fails when the query is removed"
+    "intent_broken": "fails when the query is removed",
+    "intent_broken_diagnostic": "release_without_registry_lookup"
+  },
+  "subject_reach": {
+    "identified_by": "enumeration of the places that call release",
+    "existence_confirmed_by": "the list of release entry points published by the registry"
   }
 }
 ```
