@@ -536,6 +536,22 @@ Even when `provider` is `self`, if the owner named in `requires_change_in` is no
 
 When a self-help means requires acquiring a resource, the implementation SHOULD declare **who can hold that resource**. If the resource can be held by a party in the dependency relation, that means does not succeed in that situation.
 
+When a means of exit depends on **the discretion of another party**, that discretion MUST be declared.
+
+- **may_be_refused**: whether the other party can decline to make the means succeed
+- **refused_when**: the conditions under which it declines (a decision the other party prioritises, an invariant the other party upholds)
+
+A means that can be refused MUST NOT be counted as **an exit on its own**. A situation whose `exits` hold only such a means satisfies the `exits` declaration, yet cannot be left as long as the other party keeps refusing.
+
+This form differs from Section 10.4.5. What Section 10.4.5 addresses is a means **whose entry is closed** — one that never succeeds even once. What is addressed here is a means that **succeeds, whose Event arrives, and after which progress still does not occur**. A declaration of reachability cannot exclude this form.
+
+When only means that can be refused are held, one of the following MUST be satisfied:
+
+- at least one means that cannot be refused is held
+- `if_no_exit` states what happens when refusal continues
+
+The other party's reason for refusing may be **correct on its own side**. In a design where an invariant the other party upholds takes precedence over this exit, refusal is not a fault but the declared behaviour. This form therefore **is not resolved by correcting the other party's implementation**. Resolving it requires either holding a separate means that cannot be refused, or accepting the consequence of refusal.
+
 #### 10.4.3 The Progress Measure
 
 A `progress_measure` MUST declare:
@@ -575,6 +591,8 @@ A state in which detection occurs but no party owns the resolution is the archet
 When a situation that can stall is left, the implementation SHOULD record **by which means it was left**.
 
 Recording only that it was left makes it impossible to distinguish, after the fact, whether the mechanism took effect or an external circumstance happened to change. The breakdown of attributions is the only material with which the value of holding that mechanism can be measured.
+
+A form that records only the occasions on which a situation was left **retains nothing about an exit that was never taken**. For a situation that holds a means which can be refused (Section 10.4.2), **the number of attempts at that means** SHOULD also be recorded. Without the number of attempts, the breakdown of attributions becomes **a proportion whose denominator counts only the occasions that were left**, and a means that has no effect survives as a means with a record of effect.
 
 #### 10.4.8 Assumptions Behind Progress
 
@@ -627,6 +645,9 @@ When definitions are structured, static analysis can detect:
 - a mechanism triggered by the passage of time, without a declaration of the clock that measures it and the conditions under which that clock advances (Section 10.4.8)
 - an implementation that references a judgement its machine declared it does not own (Section 3.7)
 - a control on the intent-breaking side that lacks a declaration of the diagnostic it expects (Section 11.1.1)
+- a record that names a machine for which no definition exists (Section 12.1)
+- a situation whose `exits` hold only means that can be refused, without a consequence for continued refusal (Section 10.4.2)
+- a claimed scope of conformance that lacks a declaration of the population of that scope (Section 14.4)
 
 ### 11.1.1 Conditions the Checks Themselves Must Meet
 
@@ -641,6 +662,26 @@ When the existence of the subject is determined outside the check — when the s
 When absence and unreachability are collapsed, a report of "no subject" is read as **the subject being absent rather than the check being defective**. Such a report is not treated as a failure, and **subjects that were never examined pass alongside those that were**.
 
 When definitions exist in more than one storage format or notation, a check MUST either handle all of them or **state explicitly which forms it did not handle**. A check that looks at only one form passes while overlooking the other.
+
+A check whose subject is a set of declarations MUST report **the total number of declarations** and **the number the check reached**. "No violations" does not distinguish the result of examining every declaration from the result of examining only some of them.
+
+When declarations with the same meaning are permitted in more than one place, the number reached is determined by **the number of places the check knows about**. A check that knows only one place treats declarations placed elsewhere as **declarations that do not exist**. What this produces is not a failure but a pass.
+
+The total number of declarations MUST be counted **by a path independent of the check** (Section 14.4). If the total is counted by the check's own way of searching, declarations it could not reach fall out of the total as well, and the reach ratio is always 100%.
+
+### 11.1.2 The Inventory of Checks
+
+For any given subject, the following three MUST be distinguishable:
+
+- **no check is applied** (no check exists yet, or the check is switched off)
+- **a check is applied and there is no violation**
+- **a check is applied but could not reach the subject** (Section 11.1.1)
+
+The third is addressed by Section 11.1.1 as a duty of the check itself. The first is **not a result of any individual check but a property of the set of checks**, and appears in no check's output.
+
+Therefore, when checks are introduced progressively, **which check is applied to which subject** MUST be declared outside the checks. Without this declaration, **a subject not yet checked has the same outward form as a subject with no violation**.
+
+In a design where checks can be switched off — where they are enabled or disabled per subject — **the fact of being switched off MUST itself be observable**. If a check that is switched off merely stays silent, being switched off and passing produce the same result.
 
 A check whose subject is the **structure** of an implementation — the position of a call, the number of branches, the order of statements — MUST declare in the check itself **what that structure protects**.
 
@@ -670,6 +711,7 @@ The following require runtime tests, contract tests, property tests, simulation,
 - physical calculations, numerical calculations, and AI search results
 - lifecycle defects that depend on real data
 - the soundness of an approximation contained in a Guard (whether its `breaks_when` condition actually holds is checked against the real data of the subject)
+- that a declared exit actually produces progress (a means that can be refused (Section 10.4.2) can satisfy both its declaration and its reachability and still never produce progress; the ratio of attempts to occasions left can only be obtained by observing execution)
 
 SFA does not claim that every bug can be guaranteed away through static analysis alone.
 
@@ -691,6 +733,8 @@ When no engine executes the definitions — that is, when the definitions are us
 - **that a `cross_instance` invariant violation record contains the Context of every participant**
 - **that a Guard's `breaks_when` condition is actually exercised** (create the condition under which the approximation fails and confirm that it fails in the declared `on_break` direction; if the condition cannot be created, the `breaks_when` declaration is wrong)
 - **that a violation in a configuration which does not satisfy an invariant's precondition is treated as out of scope rather than as a violation** (Section 10.3)
+- **that an exit which can be refused is actually refused** (create the situation in which the other party refuses under its `refused_when` condition and confirm that the declared `if_no_exit` consequence appears; Section 10.4.2)
+- **that a record naming a machine with no definition has its claim withheld without the record being dropped** (Section 12.1)
 
 ---
 
@@ -716,6 +760,28 @@ A Trace is not a substitute for the specification. It is an observability asset 
 An implementation that adopts a policy for reducing the volume of observation — which Events are aggregated instead of recorded individually, and what is not retained — declares that policy in the definitions. The policy MUST cover **only what may be dropped**. Observations listed in an invariant's forensic minimum (Section 10.2) are outside the scope of the policy, and a conflict between the policy and the minimum MUST be treated as an error in the definition.
 
 When Context used in a decision is included in a Trace, it is desirable that the **provenance** (Section 3.4.1) be traceable as well as the value. The value alone does not distinguish a wrong decision from a decision made on a wrongly produced value.
+
+### 12.1 Backing for a Record That Names a Machine
+
+When a record names the machine it belongs to, **that name MUST be the identifier of a definition**. A record that names a machine for which no definition exists MUST NOT have its claim **accepted**.
+
+When a claim is not accepted, **the record itself MUST NOT be dropped**. Dropping it makes it impossible to distinguish the mechanism not running from the claim having no backing. What is withheld is the claim alone; the record is retained, carrying a statement that its claim has no backing.
+
+Verification of backing MUST hold **two directions separately**.
+
+- **claim → definition**: that a definition exists for the name claimed. This is a static check over definitions and implementation, and can be performed without running the system
+- **definition → claim**: that a definition declares an observation for which no record ever appears (a corollary of Section 10.4.6). This requires observing execution
+
+The two MUST NOT be collapsed into a single check. Collapsing them gives the same treatment to **what can only be learned by running the system** and **what is knowable the moment it is written**, and defers an error detectable statically until execution.
+
+A claim without backing **produces no row in the table that reconciles definitions against records**. Seen from that table, the name is not "a machine with zero observations" but **a machine that does not exist**. That is, **a claim without backing has the same outward form as the absence of records**. This form stays silent until a check is added for it.
+
+When a claim without backing is found, there are **two remedies**.
+
+- **place a definition**: when the entity named is a party that holds states
+- **stop claiming**: when the entity named holds no states (the Context of another machine, a mark, a unit of aggregation)
+
+The criterion for the choice is **whether the entity is a party that holds states**. Placing a definition MUST NOT be treated as the only correct remedy. A change that gives states to an entity which holds none appears to satisfy the requirement of explicitness in Section 2.1, yet can create a form that an existing invariant has named and prohibited (Section 10.3). This judgement is made on the same material as Section 3.7 (judgements not owned).
 
 ---
 
@@ -865,7 +931,10 @@ Example of a situation that can stall (Section 10.4):
       "event": "CHUNK_CONFIRMED",
       "provider": "other_role",
       "of_role": "backend",
-      "waits_for": "BE_QUEUED.capacity_available"
+      "waits_for": "BE_QUEUED.capacity_available",
+      "may_be_refused": true,
+      "refused_when": "the backend prioritises the consistency invariant it upholds",
+      "attempts_recorded_as": "chunk_confirmation_requested"
     },
     {
       "event": "DISCARD_AND_RECOMPUTE",
@@ -876,6 +945,28 @@ Example of a situation that can stall (Section 10.4):
     }
   ],
   "if_no_exit": "the session stays valid, makes no progress, and keeps holding its resource"
+}
+```
+
+Example of a claimed scope of conformance (Sections 14.4 and 14.5):
+
+```json
+{
+  "claimed_level": "core_sfa",
+  "population": {
+    "machines": ["upload_session", "chunk_ledger", "upload_progress_watch"],
+    "enumerated_by": "the definition registry (the list of definitions enumerated at load time)",
+    "excluded": [
+      {
+        "machine": "legacy_transfer_queue",
+        "reason": "the definition was extracted from code and the SSOT remains on the code side (Section 3.5)"
+      }
+    ]
+  },
+  "enforced_requirements": ["explicit_state", "declared_transition", "observable_outcome"],
+  "declared_but_not_enforced": [
+    { "requirement": "context_provenance", "adoption": "2 / 3", "enforce_when": "3 / 3" }
+  ]
 }
 ```
 
@@ -945,6 +1036,41 @@ In addition to Core SFA, a Long-Running SFA implementation provides:
 - a consistency contract when checkpoints or resume are used
 
 Conformance levels do not indicate superiority. They describe the scope appropriate to the complexity of the system.
+
+### 14.4 The Claimed Scope of Conformance
+
+Conformance is **not claimed for a system as a whole**. A claim of conformance MUST declare **the scope over which it is claimed**.
+
+The scope MUST be **enumerable as a set of machines**. A claim that "this system conforms to Core SFA" cannot be checked unless how many machines the system holds is settled.
+
+A claimed scope therefore requires **a declaration of its population**.
+
+- **which machines fall within the scope**
+- **how that set was determined** (the basis of the enumeration)
+- **which machines were placed outside the scope, and why**
+
+The declaration of the population MUST be held **separately from the way the checks search** (Section 11.1.1). If the set of definitions a check happened to find is taken as the population, **definitions it could not find do not enter the population either**, and the adoption ratio is always 100%.
+
+Without a declared population, the denominator of the adoption ratio is undetermined. The number of declarations satisfied can still be counted, but **the number not satisfied cannot**. Because a claim of conformance includes the claim that nothing is left unsatisfied, a claim without a denominator cannot be checked.
+
+### 14.5 Progressive Adoption
+
+The requirements of a conformance level cannot always be applied to an existing system at once. When they cannot, the following two MUST be distinguished:
+
+- **the requirement is not satisfied**
+- **the requirement is not yet enforced** (declarations are still being collected)
+
+When adoption is progressive, the following SHOULD be declared:
+
+- **which requirements are currently enforced** (per machine, or per scope)
+- **the adoption ratio of the declarations for requirements not yet enforced**
+- **the condition for switching a requirement to enforced**
+
+This declaration MAY be the same one required by Section 11.1.2 (the inventory of checks). "Which requirements are enforced" and "which checks are applied" state the same fact from the requirement side and from the check side.
+
+A requirement MUST NOT be added while the adoption ratio goes unmeasured. The number of requirements **can grow independently of the number of declarations satisfied**. Without measuring adoption, each added requirement moves the system further from conformance, and **a state in which no requirement is satisfied has the same outward form as a state with few requirements**.
+
+The stage of adoption itself runs counter to the requirement of explicitness in Section 2.1. Section 2.1 works in the direction of adding declarations, whereas progressive adoption **permits a scope from which declarations are not yet required**. Without permitting this direction, an existing system is wholly non-conformant before its first declaration is written, and **the adoption ratio ceases to be a usable measure**.
 
 ---
 
