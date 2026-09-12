@@ -318,6 +318,55 @@ Action失敗時に、State更新やContext変更が部分適用されたまま�
 
 外部副作用を完全にrollbackできない場合、その事実と再試行規則を明示しなければならない。
 
+#### 4.4.1 外部副作用の再調停（External Side-Effect Reconciliation）
+
+外部Actionには、**結果が曖昧**になる場合がある。外部副作用がすでに発生していても、callerがその確認を受け取れなかった、または保持できなかった可能性がある。timeout、応答喪失、process crash、transport中断、または同等の観測喪失それ自体を、副作用が発生しなかった証拠として扱ってはならない。
+
+Actionが外部副作用を起こし得て、かつその副作用が発生したかどうかの確信を失う可能性がある場合、定義は**reconciliation contract（再調停契約）**を宣言しなければならない。このcontractには少なくとも次を含める。
+
+- **side_effect_subject**: 状態が変化した可能性のある、外部から観測可能な対象
+- **intended_state**: Actionが成立させようとした、外部から観測可能な条件
+- **observation_producer**: 結果の確信を失った後に対象の物理状態を判定するためのauthoritative observer
+- **observation_freshness**: その観測がどの時点を表すか
+- **reconciliation_owner**: 観測の意味を判定するRoleまたはlifecycle owner
+- **outcomes**: ドメイン上それらの意味が存在する場合に、*未適用*、*適用済み*、*競合*、*判定不能*を区別できる閉じた集合
+- **safe_retry_when**: 外部Actionの再実行が安全である条件
+- **already_applied_when**: Actionを再実行せずに進行してよいpostcondition
+- **conflict_policy**: 観測された状態が、期待していた事前状態とも意図した状態とも一致しない場合の扱い
+- **indeterminate_policy**: 利用可能な観測から、意図した副作用が発生したかどうかを確定できない場合の扱い
+- **required_observations**: 事後にreconciliation判断を説明するために保持しなければならない最小限の観測
+
+reconciliation outcomeの名前はドメイン固有であり、上記の意味に共通enum値を要求しない。実装は、確認を失ったという理由だけで**判定不能**を**未適用**へ畳んではならない。
+
+reconciliationに使用するすべての観測は、§3.4.1で定義したprovenanceを持たなければならない。観測は外部対象そのもの、またはその対象のauthoritative observerから得なければならず、失われたdispatch結果だけでは対象の状態を示す十分な証拠にならない。
+
+結果が曖昧になった後、同じ副作用を再dispatchする前にreconciliationを行わなければならない。副作用が適用済みであることが確認された場合、Actionを繰り返さず、必要なpostconditionが成立した後にのみ進行してよい。未適用であることが確認された場合、`safe_retry_when`が成立するときにだけ再試行を許可する。競合および判定不能のoutcomeは、それぞれ宣言済みのpolicyに従い、blind retryへ流してはならない。
+
+利用可能な観測から副作用が発生したかどうかを確定できない場合、reconciliation結果は未適用ではなく判定不能である。その結果は、intervention、compensation、または別の宣言済みTransitionによって解決してよいが、観測が与えていない確信を作ってはならない。
+
+#### 4.4.2 不可逆境界（Irreversibility Boundary）
+
+複数stepにまたがるlifecycleでは、ある外部副作用の成功により、その後に起きる失敗に対して有効なrecovery pathが変わる場合がある。このことが起こり得る場合、lifecycle定義は**irreversibility boundary（不可逆境界）**を宣言しなければならない。
+
+irreversibility-boundaryの宣言には少なくとも次を含める。
+
+- **boundary**: recovery guaranteeを変化させる副作用または観測済み条件
+- **crossed_when**: boundaryを越えたことを確定するauthoritative observation
+- **observation_producer**: その観測のproducerとprovenance
+- **recovery_before**: boundaryを越える前に成立するrecovery guarantee
+- **recovery_after**: boundaryを越えた後にも成立するrecovery guarantee
+- **invalidated_recovery_paths**: boundary後には成立すると仮定してはならないrecoveryまたはrollback path
+- **owner**: boundary後のrecovery判断を担当するRoleまたはlifecycle owner
+- **failure_policy_after**: boundaryを越えた後に後続失敗が発生した場合のpolicy
+
+irreversibility boundaryは、recoveryが一切不可能になることを意味しない。意味するのは、recovery guaranteeの集合が変化し、後続のfailure handlingがboundary前の仮定ではなくboundary後のcontractを使用しなければならないということである。
+
+boundaryを越えたかどうかは、その後の制御判断が依存する前に、StateまたはContextとして明示されなければならない。boundaryを成立させる外部副作用の結果が曖昧な場合は、boundaryを越えたかどうかを判断する前に§4.4.1を適用する。
+
+boundary前にだけ有効なcompensationまたはrollback pathを、そのpreconditionが独立に再成立していない限り、boundary後に実行してはならない。既存のStateまたはContextですでにこの区別を表現できる場合、irreversibility boundary自体を別のStateとして表現する必要はない。
+
+外部副作用の完了によって後続stepで利用可能なrecovery guaranteeが何も変わらない場合、irreversibility-boundaryの宣言は不要である。
+
 ### 4.5 AUTO Transition
 
 `AUTO`は外部入力を待たずに評価されるtransient Eventである。
@@ -757,6 +806,8 @@ Stateだけを宣言の場所に定めると、この形の留まりは表現で
 - 意図を壊した側の対照に、対応する診断の宣言が無いこと（§11.1.1）
 - 記録が名乗るmachine名に対応する定義が存在しないこと（§12.1）
 - 拒否され得る手段だけを`exits`に持つsituationに、拒否が続いた場合の帰結が無いこと（§10.4.2）
+- 結果の確信を失い得る外部副作用Actionとして宣言されているのに、reconciliation contract、判定不能を区別するpolicy、またはsafe-retry条件が無いこと（§4.4.1）
+- 完了済みの外部副作用によって後続のrecovery pathが無効になると宣言されているのに、irreversibility boundaryの宣言が無いlifecycle（§4.4.2）
 - 準拠を主張する範囲に、その範囲の母集団の宣言が無いこと（§14.4）
 
 ### 11.1.1 検査自身が満たすべき条件
@@ -851,6 +902,8 @@ Stateだけを宣言の場所に定めると、この形の留まりは表現で
 - 性能、メモリ、timeout
 - 物理計算、数値計算、AI探索結果
 - 実データに依存するlifecycle問題
+- reconciliationの観測が意図した外部対象を十分なfreshnessで実際に表していること、およびその観測から得たreconciliation outcomeが対象の物理状態と一致していること（§4.4.1）
+- irreversibility boundary後にも利用可能と宣言されたrecovery pathが、対象環境で実際に物理的に利用可能であること（§4.4.2）
 - Guardが含む近似の妥当性（`breaks_when`が実際の対象で成り立つかは、対象のデータに当てて確かめる）
 - 宣言した脱出が実際に進行を作っていること（拒否され得る手段（§10.4.2）は、
   宣言も到達可能性も満たしたまま一度も進行を作らないことがある。
@@ -883,6 +936,8 @@ Guard・invariant・機構との対応（宣言した判断がどこで行われ
 - **invariantの成立前提を満たさない構成で、違反ではなく「対象外」として扱われること**（§10.3）
 - **拒否され得る脱出を実際に拒否させること**（相手が`refused_when`の条件で拒否する状況を作り、
   宣言した`if_no_exit`の帰結が現れることを確かめる。§10.4.2）
+- **曖昧な外部副作用のoutcomeが、retry前にreconcileされること**（少なくとも「適用済みだが観測できなかった」場合と「未適用」の場合を作る。適用済みの副作用が繰り返されないこと、`safe_retry_when`が成立するときだけretryされること、競合または判定不能がblind retryへ変換されないことを確認する。§4.4.1）
+- **irreversibility boundaryによってrecovery policyが変わること**（boundary前とboundary後の両方で後続失敗を発生させ、boundaryによって無効になったrecovery pathが、そのpreconditionを独立に再成立させない限りboundary後に使用されないことを確認する。§4.4.2）
 - **定義の無い名前を名乗った記録が、落とされずに名乗りだけを取り上げられること**（§12.1）
 
 ---
@@ -1180,6 +1235,7 @@ Ownership policyの例:
 - 同じEventの複数候補が同時に成立し得る場合、その宣言と、成立した候補を残せるoutcome（§4.2.1 / §6.3）
 - 留まり得るsituationに対する`exits` / `progress_measure` / `if_no_exit`の宣言（§10.4.1）
 - `exits`に対するproviderと、自助を主張する場合の`requires_change_in`の宣言（§10.4.2）
+- 外部Actionのoutcomeが曖昧になり得る場合、そのreconciliation contractの宣言（§4.4.1）
 
 ### 14.2 Distributed SFA
 
@@ -1203,6 +1259,7 @@ Core SFAに加え、次を満たす。
 - completion / invalidation / preemption
 - lifecycle policy
 - checkpointまたはresumeを使用する場合の整合性contract
+- 完了済みの外部副作用によって後続lifecycle stepで利用可能なrecovery guaranteeが変わる場合、そのirreversibility boundaryの宣言（§4.4.2）
 
 準拠レベルは優劣ではなく、システムの複雑性に応じた適用範囲を示す。
 

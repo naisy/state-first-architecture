@@ -286,6 +286,55 @@ The implementation MUST explicitly use one of the following approaches:
 
 When an external side effect cannot be fully rolled back, that fact and the retry policy MUST be explicit.
 
+#### 4.4.1 External Side-Effect Reconciliation
+
+An external Action may have an **ambiguous outcome**: the external side effect may already have occurred even though the caller did not receive or retain confirmation of it. A timeout, lost response, process crash, transport interruption, or equivalent loss of observation MUST NOT by itself be treated as evidence that the side effect did not occur.
+
+When an Action can cause an external side effect and the implementation can lose certainty about whether that effect occurred, the definition MUST declare a **reconciliation contract**. The contract contains at least:
+
+- **side_effect_subject**: the externally observable subject whose state may have changed
+- **intended_state**: the externally observable condition the Action intended to establish
+- **observation_producer**: the authoritative observer used to determine the subject's physical state after outcome certainty is lost
+- **observation_freshness**: the point in time represented by that observation
+- **reconciliation_owner**: the Role or lifecycle owner that decides what the observation means
+- **outcomes**: a closed set that can distinguish the meanings *not applied*, *already applied*, *conflict*, and *indeterminate* when those meanings are possible in the domain
+- **safe_retry_when**: the condition under which repeating the external Action is safe
+- **already_applied_when**: the postcondition that permits progress without repeating the Action
+- **conflict_policy**: what happens when the observed state conflicts with both the expected pre-state and the intended state
+- **indeterminate_policy**: what happens when the available observation cannot establish whether the intended side effect occurred
+- **required_observations**: the minimum observations that must be retained to explain the reconciliation decision afterwards
+
+The names of reconciliation outcomes are domain-specific; the meanings above do not require common enum values. An implementation MUST NOT collapse an **indeterminate** result into **not applied** merely because confirmation was lost.
+
+Every observation used for reconciliation MUST have provenance as defined in Section 3.4.1. The observation MUST come from the external subject or an authoritative observer of that subject; the lost dispatch result alone is not sufficient evidence of the subject's state.
+
+After an ambiguous outcome, the implementation MUST reconcile before redispatching the same side effect. If the effect is established as already applied, the Action is not repeated and progress MAY continue only after its required postconditions are established. If the effect is established as not applied, retry is permitted only when `safe_retry_when` holds. Conflict and indeterminate outcomes follow their declared policies and MUST NOT fall through to blind retry.
+
+If no available observation can establish whether the side effect occurred, the reconciliation result is indeterminate rather than not applied. The definition MAY resolve such a result through intervention, compensation, or another declared Transition; it MUST NOT invent certainty that the observation does not provide.
+
+#### 4.4.2 Irreversibility Boundary
+
+A multi-step lifecycle may contain an external side effect whose successful completion changes which recovery paths remain valid for failures that occur later. When this can occur, the lifecycle definition MUST declare an **irreversibility boundary**.
+
+An irreversibility-boundary declaration contains at least:
+
+- **boundary**: the side effect or observed condition that changes the recovery guarantees
+- **crossed_when**: the authoritative observation that establishes that the boundary has been crossed
+- **observation_producer**: the producer of that observation and its provenance
+- **recovery_before**: the recovery guarantees that hold before the boundary
+- **recovery_after**: the recovery guarantees that still hold after the boundary
+- **invalidated_recovery_paths**: recovery or rollback paths that MUST NOT be assumed after the boundary
+- **owner**: the Role or lifecycle owner responsible for deciding recovery after the boundary
+- **failure_policy_after**: the policy used when a later failure occurs after the boundary has been crossed
+
+An irreversibility boundary does not mean that no recovery is possible. It means that the set of recovery guarantees has changed and that later failure handling MUST use the post-boundary contract rather than a pre-boundary assumption.
+
+Whether the boundary has been crossed MUST be represented explicitly as State or Context before later control decisions depend on it. When the external effect that establishes the boundary has an ambiguous outcome, Section 4.4.1 is applied before deciding whether the boundary was crossed.
+
+A compensation or rollback path that is valid only before the boundary MUST NOT be invoked after the boundary unless its own preconditions have been re-established. The irreversibility boundary itself does not need to be represented as a separate State when existing State or Context already expresses the distinction.
+
+No irreversibility-boundary declaration is required when completing the external side effect does not change any recovery guarantee available to later steps.
+
 ### 4.5 AUTO Transition
 
 `AUTO` is a transient Event evaluated without waiting for external input.
@@ -647,6 +696,8 @@ When definitions are structured, static analysis can detect:
 - a control on the intent-breaking side that lacks a declaration of the diagnostic it expects (Section 11.1.1)
 - a record that names a machine for which no definition exists (Section 12.1)
 - a situation whose `exits` hold only means that can be refused, without a consequence for continued refusal (Section 10.4.2)
+- an external side-effect Action declared as capable of losing outcome certainty but lacking a reconciliation contract, a distinct indeterminate policy, or a safe-retry condition (Section 4.4.1)
+- a lifecycle in which a completed external side effect is declared to invalidate a later recovery path but no irreversibility boundary is declared (Section 4.4.2)
 - a claimed scope of conformance that lacks a declaration of the population of that scope (Section 14.4)
 
 ### 11.1.1 Conditions the Checks Themselves Must Meet
@@ -710,6 +761,8 @@ The following require runtime tests, contract tests, property tests, simulation,
 - performance, memory, and timeouts
 - physical calculations, numerical calculations, and AI search results
 - lifecycle defects that depend on real data
+- whether a reconciliation observation actually describes the intended external subject with sufficient freshness, and whether the resulting reconciliation outcome matches the subject's physical state (Section 4.4.1)
+- whether a recovery path declared as available after an irreversibility boundary actually remains physically usable in the target environment (Section 4.4.2)
 - the soundness of an approximation contained in a Guard (whether its `breaks_when` condition actually holds is checked against the real data of the subject)
 - that a declared exit actually produces progress (a means that can be refused (Section 10.4.2) can satisfy both its declaration and its reachability and still never produce progress; the ratio of attempts to occasions left can only be obtained by observing execution)
 
@@ -734,6 +787,8 @@ When no engine executes the definitions — that is, when the definitions are us
 - **that a Guard's `breaks_when` condition is actually exercised** (create the condition under which the approximation fails and confirm that it fails in the declared `on_break` direction; if the condition cannot be created, the `breaks_when` declaration is wrong)
 - **that a violation in a configuration which does not satisfy an invariant's precondition is treated as out of scope rather than as a violation** (Section 10.3)
 - **that an exit which can be refused is actually refused** (create the situation in which the other party refuses under its `refused_when` condition and confirm that the declared `if_no_exit` consequence appears; Section 10.4.2)
+- **that an ambiguous external side-effect outcome is reconciled before retry** (exercise at least an applied-but-unobserved case and a not-applied case; confirm that an already-applied effect is not repeated, that retry occurs only under `safe_retry_when`, and that conflict or indeterminate outcomes do not become blind retry; Section 4.4.1)
+- **that an irreversibility boundary changes the recovery policy** (exercise a later failure both before and after the boundary; confirm that a recovery path invalidated by the boundary is not used after it unless its preconditions are independently re-established; Section 4.4.2)
 - **that a record naming a machine with no definition has its claim withheld without the record being dropped** (Section 12.1)
 
 ---
@@ -1011,6 +1066,7 @@ An implementation conforms to Core SFA when it provides:
 - a co-satisfiability declaration, and an outcome able to retain the candidates that held, wherever multiple candidates for the same Event can hold at once (Sections 4.2.1 and 6.3)
 - a declared `exits`, `progress_measure`, and `if_no_exit` for every situation that can stall (Section 10.4.1)
 - a declared provider for every entry in `exits`, and a declared `requires_change_in` wherever self-help is claimed (Section 10.4.2)
+- a reconciliation contract wherever an external Action can have an ambiguous outcome (Section 4.4.1)
 
 ### 14.2 Distributed SFA
 
@@ -1034,6 +1090,7 @@ In addition to Core SFA, a Long-Running SFA implementation provides:
 - completion, invalidation, and preemption rules
 - a lifecycle policy
 - a consistency contract when checkpoints or resume are used
+- an irreversibility boundary wherever a completed external side effect changes the recovery guarantees available to later lifecycle steps (Section 4.4.2)
 
 Conformance levels do not indicate superiority. They describe the scope appropriate to the complexity of the system.
 
